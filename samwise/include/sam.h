@@ -24,7 +24,7 @@
 
 
 #define SAM_VERSION_MAJOR 0
-#define SAM_VERSION_MINOR 0
+#define SAM_VERSION_MINOR 1
 #define SAM_VERSION_PATCH 0
 
 #define SAM_MAKE_VERSION(major, minor, patch) \
@@ -34,6 +34,14 @@
     SAM_MAKE_VERSION(SAM_VERSION_MAJOR, \
                      SAM_VERSION_MINOR, \
                      SAM_VERSION_PATCH)
+
+
+//  --------------------------------------------------------------------------
+/// @brief   This is just a test function.
+/// @param   x  It just takes one parameter
+/// @return  The return value is always x
+int
+sam_test (int x);
 
 
 #endif

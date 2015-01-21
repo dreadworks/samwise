@@ -20,3 +20,13 @@
 */
 
 #include "sam_prelude.h"
+
+
+//  --------------------------------------------------------------------------
+/// This is a test function.
+/// This is the detailed description of that test function.
+int
+sam_test (int x)
+{
+    return x;
+}

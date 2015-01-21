@@ -34,16 +34,55 @@ extern "C" {
 
 ### Additional Conventions ###
 
-As far as possible, code and documentation should never exceed 80 characters per line. The code documentation gets rendered by doxygen with the java style syntax using the `@` prefix. Doxygen and CLASS -style comments are getting mixed:
+As far as possible, code and documentation should never exceed 80 characters per line. The code documentation gets rendered by doxygen with the java style syntax using the `@` prefix. Doxygen and CLASS -style comments are getting mixed.
+
+Files should be documented like this:
+
+```C
+/*  =========================================================================
+
+    name - summary
+
+    copyright
+
+    license
+
+    =========================================================================
+*/
+/**
+
+   @brief brief description
+
+   thorough description
+
+*/
+
+// ...
+
+```
+
+The header file just contains a brief description of the function, the necessary parameters and the expected return value. A more thorough documentation of the specific implementation of that function can be found in the *.c file.
+
+For *.h files:
+
+```C
+//  --------------------------------------------------------------------------
+/// @brief   short description of the functions purpose
+/// @param   args some arguments
+/// @param   argc argc size of the argument vector
+/// @return  0 for success, -1 for error
+int
+sam_stuff (void *args, int argc);
+```
+
+For *.c files:
 
 ```C
 //  --------------------------------------------------------------------------
 /// Brief description ending with the full stop.
-/// Detailed description spanning multiple starts after the first sentence.
-///
-/// @param   args some arguments
-/// @param   argc argc size of the argument vector
-/// @return  0 for success, -1 for error
+/// Detailed description after the first sentence. Should be used to precisely
+/// describe how the function works. Inline comments should be avoided as much
+/// as possible - the code should be self-explanatory.
 int
 sam_stuff (void *args, int argc)
 {
@@ -51,4 +90,15 @@ sam_stuff (void *args, int argc)
 }
 ```
 
-The detailed documentation of public methods (described in an accompanying *.h file) can be found in the *.h file. The *.c file just contains a reference to to the documentation of that function in the header file.
+
+## Dependencies ##
+
+Samwise relies on some libraries:
+
+| Library name                    | Version |
+|---------------------------------|---------|
+| [ZeroMQ](http://zeromq.org/)    | 4.0.5   |
+| [CZMQ](http://czmq.zeromq.org/) | 2.2.0   |
+
+
+To render the documentation the program `doxygen` is used. The rendered documentation can be found in `/samwise/doc/*`.
