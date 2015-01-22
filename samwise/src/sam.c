@@ -19,7 +19,7 @@
 
 */
 
-#include "sam_prelude.h"
+#include "../include/sam_prelude.h"
 
 
 //  --------------------------------------------------------------------------
@@ -29,4 +29,15 @@ int
 sam_test (int x)
 {
     return x;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Main entry function.
+/// Does nothing so far. It's just greeting nicely.
+int
+main (void)
+{
+    printf ("Hi!\n");
+    return 0;
 }
