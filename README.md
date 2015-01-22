@@ -1,4 +1,57 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [SAMWISE](#samwise)
+  - [Dependencies](#dependencies)
+    - [Building samwise](#building-samwise)
+    - [Render documentation](#render-documentation)
+  - [Tools](#tools)
+    - [Description](#description)
+    - [Release a new version - release.fish](#release-a-new-version---releasefish)
+  - [Project Setup](#project-setup)
+    - [Code and Project Conventions](#code-and-project-conventions)
+    - [Constrictions of the CLASS spec](#constrictions-of-the-class-spec)
+    - [Additional Conventions](#additional-conventions)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # SAMWISE #
+
+## Dependencies ##
+
+### Building samwise ###
+
+Samwise relies on some libraries:
+
+| Library name                    | Version |
+|---------------------------------|---------|
+| [ZeroMQ](http://zeromq.org/)    | 4.0.5   |
+| [CZMQ](http://czmq.zeromq.org/) | 2.2.0   |
+
+
+### Render documentation ###
+
+To render the documentation the program `doxygen` is used. The rendered documentation can be found in `/samwise/doc/*`.
+
+
+## Tools ##
+
+### Description ###
+
+Currently there are a number of shell script files inside the `samwise/tools` directory. As their suffix hints, they are written for the [fish shell](fishshell.com). You can safely run them like `. tools/script.fish argument1`. Please see below for a documentation of the various scripts.
+
+
+### Release a new version - release.fish ###
+
+This script updates all places where version numbers are used. Currently the touched files are `include/sam.h`, `Doxyfile` and `configure.ac`. A new `configure.scan` is created for this purpose. It also creates a new `configure` script and runs `make` afterwards. You can call it like this:
+
+```bash
+. tools/release.fish major minor patch
+# where major, minor and patch are numbers
+```
+
+
 
 ## Project Setup ##
 
@@ -89,16 +142,3 @@ sam_stuff (void *args, int argc)
     // ...
 }
 ```
-
-
-## Dependencies ##
-
-Samwise relies on some libraries:
-
-| Library name                    | Version |
-|---------------------------------|---------|
-| [ZeroMQ](http://zeromq.org/)    | 4.0.5   |
-| [CZMQ](http://czmq.zeromq.org/) | 2.2.0   |
-
-
-To render the documentation the program `doxygen` is used. The rendered documentation can be found in `/samwise/doc/*`.
