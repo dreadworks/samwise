@@ -32,12 +32,18 @@ end
 
 
 function __build_pubconf
+  # clean
+  make clean
   rm -rf include lib
+
+  # setup
   mkdir lib
   mkdir include
 
+  # build deps
   __build_pubconf_lib_rabbit
 
+  # compile
   make
 end
 

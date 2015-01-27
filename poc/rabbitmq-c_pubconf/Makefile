@@ -1,5 +1,5 @@
 
-SRCS = rmq_pubconf-prod.c rmq_pubconf-cons.c util.c
+SRCS = rmq_pubconf-prod.c rmq_pubconf-cons.c
 
 OBJS = $(SRCS:.c=.o)
 PRGS = $(basename $(SRCS))

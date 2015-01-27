@@ -1,0 +1,4 @@
+include
+
+rmq_pubconf-cons
+rmq_pubconf-prod
