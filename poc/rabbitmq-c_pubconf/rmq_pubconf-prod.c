@@ -7,13 +7,21 @@
 void *
 send_messages (
     amqp_connection_state_t conn,
+    const int chan,
     const char *queue_name,
     int msg_c)
 {
+    char msg[256];
+
+    int i;
+    for (i = 0; i < msg_c; i++) {
+        msg[i] = i & 0xff;
+    }
+
     printf ("sending %d messages\n", msg_c);
     while (msg_c) {
-        
-
+        int rc = a_publish (conn, chan, queue_name, msg);
+        assert (!rc);
         msg_c -= 1;
     }
 }
@@ -55,7 +63,7 @@ main (int argc, char *argv [])
     amqp_channel_open (conn, chan);
     a_try ("opening channel", amqp_get_rpc_reply (conn));
 
-    send_messages (conn, queue_name, msg_c);
+    send_messages (conn, chan, queue_name, msg_c);
 
     printf ("closing connection...\n");
     a_try ("closing channel",

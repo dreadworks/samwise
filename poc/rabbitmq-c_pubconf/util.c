@@ -12,6 +12,24 @@ a_login (amqp_connection_state_t conn, const char *user, const char *pass)
 }
 
 
+int
+a_publish (
+    amqp_connection_state_t conn,
+    const int chan,
+    const char *queue,
+    char *msg)
+{
+    amqp_bytes_t msg_bytes;
+    msg_bytes.len = sizeof (msg);
+    msg_bytes.bytes = msg;
+
+    return amqp_basic_publish (
+        conn, chan,
+        amqp_cstring_bytes("amq.direct"),
+        amqp_cstring_bytes(queue),
+        0, 0, NULL, msg_bytes);
+}
+
 void *
 a_try (char const *ctx, amqp_rpc_reply_t x)
 {
