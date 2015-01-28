@@ -11,8 +11,7 @@ function __build_pubconf_lib_rabbit
   cd .tmp
 
   git clone https://github.com/alanxz/rabbitmq-c
-  and cmake rabbitmq-c
-  and cmake --build
+  and cmake -DCMAKE_BUILD_TYPE=Debug rabbitmq-c
 
   echo "compile source file"
   make
@@ -21,7 +20,7 @@ function __build_pubconf_lib_rabbit
   cp rabbitmq-c/librabbitmq/amqp*.h ../include
 
   echo "copying library files"
-  cp librabbitmq/*.so ../lib
+  cp librabbitmq/*.so* ../lib
 
   echo "moving up"
   cd ..
@@ -37,8 +36,9 @@ function __build_pubconf
   rm -rf include lib
 
   # setup
-  mkdir lib
   mkdir include
+  mkdir lib
+  set -gx LD_LIBRARY_PATH (pwd)"/lib/"
 
   # build deps
   __build_pubconf_lib_rabbit

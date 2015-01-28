@@ -1,7 +1,15 @@
 
+#define _GNU_SOURCE
+
+#include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
+
 #include <amqp.h>
 
 
-int
-a_try (char const *ctx, amqp_rpc_reply_t x);
+amqp_rpc_reply_t
+a_login (amqp_connection_state_t conn, const char *user, const char *pass);
+
+void *
+a_try (const char *ctx, amqp_rpc_reply_t x);

@@ -9,14 +9,15 @@ LINKS = -lrabbitmq
 
 .PHONY: run clean check-syntax
 
+
 all: $(PRGS)
 
 
 rmq_pubconf-prod: rmq_pubconf-prod.o util.o
-	$(CC) $(CFLAGS) $< $(LINKS) -o $@
+	$(CC) $(CFLAGS) util.o $< $(LINKS) -o $@
 
 rmq_pubconf-cons: rmq_pubconf-cons.o util.o
-	$(CC) $(CFLAGS) $< $(LINKS) -o $@
+	$(CC) $(CFLAGS) util.o $< $(LINKS) -o $@
 
 
 %.o: %.c
@@ -30,7 +31,7 @@ run: $(PRGS)
 	echo "run not yet implemented"
 
 clean:
-	rm -f  $(PRGS) $(OBJS)
+	rm -f  $(PRGS) $(OBJS) util.o
 
 check-syntax:
 	$(CC) $(CFLAGS) -fsyntax-only $(SRCS)
