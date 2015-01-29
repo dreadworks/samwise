@@ -69,6 +69,7 @@ main (int argc, char *argv [])
 
     a_login (conn, user, pass, PC_CHAN);
     a_declare_and_bind (conn, PC_CHAN, PC_QUEUE, PC_EXCHANGE, PC_BINDING);
+    a_enable_pubconf (conn, PC_CHAN);
 
     get_messages(conn);
 

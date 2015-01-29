@@ -77,6 +77,19 @@ a_enable_pubconf (
     const int chan)
 {
     printf ("enabling publisher confirms\n");
+
+    amqp_confirm_select_t req;
+    req.nowait = 0;
+
+    amqp_simple_rpc_decoded(
+        conn,
+        chan,
+        AMQP_CONFIRM_SELECT_METHOD,
+        AMQP_CONFIRM_SELECT_OK_METHOD,
+        &req);
+
+    a_try ("enable publisher confirms", amqp_get_rpc_reply(conn));
+
 }
 
 
