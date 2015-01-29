@@ -2,21 +2,79 @@
 #include "util.h"
 
 
-amqp_rpc_reply_t
-a_login (amqp_connection_state_t conn, const char *user, const char *pass)
+void
+a_login (
+    amqp_connection_state_t conn,
+    const char *user,
+    const char *pass,
+    const int chan)
 {
-    return amqp_login(
+    a_try("logging in", amqp_login(
         conn, "/", 0, 131072, 0,
         AMQP_SASL_METHOD_PLAIN,
-        user, pass);
+        user, pass));
+
+    amqp_channel_open (conn, chan);
+    a_try ("opening channel", amqp_get_rpc_reply (conn));
 }
 
+
+void
+a_logout (amqp_connection_state_t conn, const int chan)
+{
+    a_try ("closing channel",
+           amqp_channel_close (conn, chan, AMQP_REPLY_SUCCESS));
+
+    a_try ("closing connection",
+           amqp_connection_close (conn, AMQP_REPLY_SUCCESS));
+
+    int rc = amqp_destroy_connection (conn);
+    assert (rc >= 0);
+}
+
+
+void
+a_declare_and_bind (
+    amqp_connection_state_t conn,
+    const int chan,
+    const char *queue,
+    const char *exchange,
+    const char *binding)
+{
+    amqp_queue_declare_ok_t *r = amqp_queue_declare (
+        conn, chan, amqp_cstring_bytes (queue), 0, 0, 0, 1, amqp_empty_table);
+
+    a_try ("declaring queue", amqp_get_rpc_reply (conn));
+
+    printf ("declared new queue: %.*s\n", (int) r->queue.len, (char *) r->queue.bytes);
+    amqp_bytes_t queue_name = amqp_bytes_malloc_dup (r->queue);
+    // TODO this must be free'd? nothing to see in the examples...
+
+    if (queue_name.bytes == NULL) {
+        fprintf (stderr, "ran out of memory while copying queue name\n");
+        assert (0);
+    }
+
+    printf ("binding queue to '%s' with key '%s'\n", PC_EXCHANGE, PC_BINDING);
+    // bind the queue
+    amqp_queue_bind (
+        conn, 1, queue_name,
+        amqp_cstring_bytes (exchange),
+        amqp_cstring_bytes (queue),
+        amqp_empty_table);
+    a_try ("binding queue", amqp_get_rpc_reply (conn));
+
+    amqp_basic_consume (
+        conn, 1, queue_name, amqp_empty_bytes, 0, 1, 0, amqp_empty_table);
+    a_try ("consuming", amqp_get_rpc_reply (conn));
+}
 
 int
 a_publish (
     amqp_connection_state_t conn,
     const int chan,
-    const char *queue,
+    const char *exch,
+    const char *routing_key,
     char *msg)
 {
     amqp_bytes_t msg_bytes;
@@ -25,8 +83,8 @@ a_publish (
 
     return amqp_basic_publish (
         conn, chan,
-        amqp_cstring_bytes("amq.direct"),
-        amqp_cstring_bytes(queue),
+        amqp_cstring_bytes(exch),
+        amqp_cstring_bytes(routing_key),
         0, 0, NULL, msg_bytes);
 }
 
