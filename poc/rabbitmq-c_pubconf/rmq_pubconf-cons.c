@@ -34,8 +34,7 @@ get_messages (amqp_connection_state_t conn)
 
         amqp_envelope_t envelope;
         amqp_maybe_release_buffers (conn);
-        
-        printf ("released buffers\n");
+
         handle_message (
             amqp_consume_message (conn, &envelope, NULL, 0),
             &envelope);

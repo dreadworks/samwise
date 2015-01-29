@@ -44,6 +44,12 @@ a_declare_and_bind (
     const char *binding);
 
 
+void
+a_enable_pubconf (
+    amqp_connection_state_t conn,
+    const int chan);
+
+
 int
 a_publish (
     amqp_connection_state_t conn,

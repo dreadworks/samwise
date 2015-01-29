@@ -10,7 +10,7 @@ a_login (
     const int chan)
 {
     a_try("logging in", amqp_login(
-        conn, "/", 0, 131072, 0,
+        conn, "/", 0, AMQP_DEFAULT_FRAME_SIZE, 0,
         AMQP_SASL_METHOD_PLAIN,
         user, pass));
 
@@ -48,26 +48,38 @@ a_declare_and_bind (
 
     printf ("declared new queue: %.*s\n", (int) r->queue.len, (char *) r->queue.bytes);
     amqp_bytes_t queue_name = amqp_bytes_malloc_dup (r->queue);
-    // TODO this must be free'd? nothing to see in the examples...
 
     if (queue_name.bytes == NULL) {
         fprintf (stderr, "ran out of memory while copying queue name\n");
         assert (0);
     }
 
-    printf ("binding queue to '%s' with key '%s'\n", PC_EXCHANGE, PC_BINDING);
-    // bind the queue
+    printf ("binding queue to '%s' with key '%s'\n", exchange, binding);
     amqp_queue_bind (
         conn, 1, queue_name,
         amqp_cstring_bytes (exchange),
-        amqp_cstring_bytes (queue),
+        amqp_cstring_bytes (binding),
         amqp_empty_table);
     a_try ("binding queue", amqp_get_rpc_reply (conn));
 
+    // TODO why consuming? Should look this up in the spec.
     amqp_basic_consume (
         conn, 1, queue_name, amqp_empty_bytes, 0, 1, 0, amqp_empty_table);
     a_try ("consuming", amqp_get_rpc_reply (conn));
+
+    amqp_bytes_free (queue_name);
 }
+
+
+void
+a_enable_pubconf (
+    amqp_connection_state_t conn,
+    const int chan)
+{
+    printf ("enabling publisher confirms\n");
+}
+
+
 
 int
 a_publish (

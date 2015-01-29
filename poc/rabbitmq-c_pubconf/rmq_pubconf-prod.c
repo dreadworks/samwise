@@ -18,7 +18,7 @@ send_messages (
     }
 
     printf (
-        "sending %d messages to '%s' - routing key '%s'\n",
+        "sending %d messages to '%s', routing key '%s'\n",
         msg_c, exch, routing_key);
 
     while (msg_c) {
@@ -26,6 +26,7 @@ send_messages (
         assert (!rc);
         msg_c -= 1;
     }
+
 }
 
 
@@ -54,7 +55,12 @@ main (int argc, char *argv [])
     assert (!rc);
 
     a_login (conn, user, pass, PC_CHAN);
+    a_enable_pubconf (conn, PC_CHAN);
+
     send_messages (conn, PC_CHAN, PC_EXCHANGE, PC_ROUTING_KEY, msg_c);
+
+    printf ("press key to close connection\n");
+    getchar ();
 
     printf ("closing connection...\n");
     a_logout (conn, PC_CHAN);
