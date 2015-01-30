@@ -9,6 +9,7 @@
   - [Tools](#tools)
     - [Description](#description)
     - [Release a new version - release.fish](#release-a-new-version---releasefish)
+    - [Create a TAGS file - tags.fish](#create-a-tags-file---tagsfish)
   - [Project Setup](#project-setup)
     - [Code and Project Conventions](#code-and-project-conventions)
     - [Constrictions of the CLASS spec](#constrictions-of-the-class-spec)
@@ -24,10 +25,11 @@
 
 Samwise relies on some libraries:
 
-| Library name                    | Version |
-|---------------------------------|---------|
-| [ZeroMQ](http://zeromq.org/)    | 4.0.5   |
-| [CZMQ](http://czmq.zeromq.org/) | 2.2.0   |
+| Library name                                       | Version |
+|----------------------------------------------------|---------|
+| [ZeroMQ](http://zeromq.org/)                       | 4.0.5   |
+| [CZMQ](http://czmq.zeromq.org/)                    | 2.2.0   |
+| [RabbitMQ-C](https://github.com/alanxz/rabbitmq-c) | 0.5.2   |
 
 
 ### Render documentation ###
@@ -51,6 +53,10 @@ This script updates all places where version numbers are used. Currently the tou
 # where major, minor and patch are numbers
 ```
 
+
+### Create a TAGS file - tags.fish ###
+
+To efficiently jump to function definitions with emacs using `find-tag` and it's friends, a TAGS file must be generated using the `etags` program. To build the symbol table and access the files containing the definitions and declarations, `tags.fish` clones all dependencies into `samwise/.lib` and creates `samwise/TAGS`.
 
 
 ## Project Setup ##
