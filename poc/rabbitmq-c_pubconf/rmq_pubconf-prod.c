@@ -2,7 +2,49 @@
 #include "util.h"
 
 
-void *
+static void *
+handle_message (
+    amqp_connection_state_t conn,
+    amqp_rpc_reply_t repl,
+    amqp_envelope_t *envelope)
+{
+    printf ("handling message\n");
+    amqp_frame_t frame;
+
+    if (repl.reply_type != AMQP_RESPONSE_NORMAL) {
+
+        if (repl.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION
+            && repl.library_error == AMQP_STATUS_UNEXPECTED_STATE) {
+
+            if (amqp_simple_wait_frame (conn, &frame) != AMQP_STATUS_OK) {
+                fprintf (stderr, "unexpected server response\n");
+                assert (0);
+            } else {
+
+                if (frame.payload.method.id == AMQP_BASIC_ACK_METHOD) {
+                    printf ("received ACK!\n");
+                } else {
+                    printf ("received other method: %d\n",
+                            frame.payload.method.id);
+                }
+            }
+
+        } else {
+            fprintf (stderr, "unexcepted reply %d\n", repl.reply_type);
+            assert(0);
+        }
+
+    } else {
+        // since there is no subscription to a
+        // specific queue this should never be called
+        assert (0);
+    }
+
+    return NULL;
+}
+
+
+static void *
 send_messages (
     amqp_connection_state_t conn,
     const int chan,
@@ -22,8 +64,16 @@ send_messages (
         msg_c, exch, routing_key);
 
     while (msg_c) {
+        printf ("  | publish\n");
         int rc = a_publish (conn, chan, exch, routing_key, msg);
         assert (!rc);
+
+        amqp_envelope_t envl;
+        amqp_maybe_release_buffers (conn);
+
+        printf ("  | consume\n");
+        amqp_rpc_reply_t repl = amqp_consume_message (conn, &envl, NULL, 0);
+        handle_message (conn, repl, &envl);
         msg_c -= 1;
     }
 

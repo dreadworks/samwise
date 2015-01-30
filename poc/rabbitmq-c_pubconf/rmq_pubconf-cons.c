@@ -2,7 +2,7 @@
 #include "util.h"
 
 
-void *
+static void *
 handle_other (amqp_rpc_reply_t repl)
 {
     printf ("handling other\n");
@@ -10,7 +10,7 @@ handle_other (amqp_rpc_reply_t repl)
 }
 
 
-void *
+static void *
 handle_message (amqp_rpc_reply_t repl, amqp_envelope_t *envelope)
 {
     printf ("handling message\n");
@@ -26,7 +26,7 @@ handle_message (amqp_rpc_reply_t repl, amqp_envelope_t *envelope)
 }
 
 
-void *
+static void *
 get_messages (amqp_connection_state_t conn)
 {
     while (1) {
@@ -69,7 +69,6 @@ main (int argc, char *argv [])
 
     a_login (conn, user, pass, PC_CHAN);
     a_declare_and_bind (conn, PC_CHAN, PC_QUEUE, PC_EXCHANGE, PC_BINDING);
-    a_enable_pubconf (conn, PC_CHAN);
 
     get_messages(conn);
 
