@@ -55,6 +55,7 @@ function __deps_librabbitmq \
   and cd build
   and cmake "-DCMAKE_INSTALL_PREFIX=$dir" ..
   and cmake --build . --target install
+  and find "$dir" -name "librabbitmq.so*" -exec cp -p -d "{}" "$dir/lib/" \;
 
   popd
   rm -rf .tmp
