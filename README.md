@@ -9,6 +9,7 @@
   - [Tools](#tools)
     - [Description](#description)
     - [Release a new version - release.fish](#release-a-new-version---releasefish)
+    - [Install dependencies locally - deps.fish](#install-dependencies-locally---depsfish)
     - [Create a TAGS file - tags.fish](#create-a-tags-file---tagsfish)
   - [Project Setup](#project-setup)
     - [Code and Project Conventions](#code-and-project-conventions)
@@ -49,14 +50,36 @@ Currently there are a number of shell script files inside the `samwise/tools` di
 This script updates all places where version numbers are used. Currently the touched files are `include/sam.h`, `Doxyfile` and `configure.ac`. A new `configure.scan` is created for this purpose. It also creates a new `configure` script and runs `make` afterwards. You can call it like this:
 
 ```bash
-. tools/release.fish major minor patch
+. tools/release.fish major minor patch [cflags]
 # where major, minor and patch are numbers
+# optional: cflags - additional compile flags
+
+# for example
+. tools/release.fish 1 0 3 "-g"
+
+```
+
+
+### Install dependencies locally - deps.fish ###
+
+This script automatically downloads all libraries samwise depends on and installs them into the projects root directory. It creates a folder `usr` used as the prefix to build all dependencies. Afterwards, it invokes `./configure` and passes the appropriate `CFLAGS` to include the `lib/` and `include/` directories of the local installation.
+
+```bash
+. tools/deps.fish [cflags]
+# optionally pass in additional compile flags
+# for example
+. tools/deps.fish "-g"
 ```
 
 
 ### Create a TAGS file - tags.fish ###
 
-To efficiently jump to function definitions with emacs using `find-tag` and it's friends, a TAGS file must be generated using the `etags` program. To build the symbol table and access the files containing the definitions and declarations, `tags.fish` clones all dependencies into `samwise/.lib` and creates `samwise/TAGS`.
+To efficiently jump to function definitions with emacs using `find-tag` and it's friends, a TAGS file must be generated using the `etags` program. To build the symbol table and access the files containing the definitions and declarations, `tags.fish` clones all dependencies into `.tags` and creates `samwise/TAGS`.
+
+```bash
+. tools/tags.fish
+```
+
 
 
 ## Project Setup ##
