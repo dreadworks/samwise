@@ -20,7 +20,7 @@ function __deps_libzmq \
 end
 
 
-function __deps_czmq \
+function __deps_libczmq \
   -a dir
 
   echo "building czmq"
@@ -82,14 +82,8 @@ function __deps \
 
   mkdir "$dir"
   __deps_libzmq "$dir"
-  __deps_czmq "$dir"
+  __deps_libczmq "$dir"
   __deps_librabbitmq "$dir"
-
-  set -l opts "-Wextra -pedantic -std=c99"
-  set -l inc  "-I../usr/include"
-  set -l ld   "-L../usr/lib"
-
-  ./configure CFLAGS="$cflags $opts $inc $ld"
 
 end
 
