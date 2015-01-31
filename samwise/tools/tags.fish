@@ -15,7 +15,7 @@ function __tags
   end
 
   pushd ../
-  set -l dir (pwd)"/.lib"
+  set -l dir (pwd)"/.tags"
   popd
   
   rm -rf TAGS
@@ -24,21 +24,25 @@ function __tags
     mkdir "$dir"
   end
 
-  for gh in \
-    "zeromq/libzmq"     \
-    "zeromq/czmq"       \
-    "alanxz/rabbitmq-c"
+  for dep in \
+    "zeromq/libzmq"           \
+    "zeromq/czmq v3.0.0"      \
+    "alanxz/rabbitmq-c v0.5.2"
 
-    set -l base (basename "$gh")
-    set -l target "$dir/$base"
-    echo "handling $base"
+    echo $dep | read location tag
 
-    if [ -d "$target" ]
+    set -l name (basename "$location")
+    set -l target "$dir/$name"
+    echo "handling $name"
+
+    if [ ! -d "$target" ]
+      git clone "https://github.com/$name" "$target"
+    end
+
+    if [ -n $tag ]
       pushd "$target"
-      git pull
+      git checkout "$tag"
       popd
-    else
-      git clone "https://github.com/$gh" "$target"
     end
 
     echo
