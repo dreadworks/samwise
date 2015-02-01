@@ -40,7 +40,7 @@ end
 
 function __release \
   -d "release a new version" \
-  -a major minor patch
+  -a major minor patch cflags
 
   if begin;             \
        [ -z "$major" ]; \
@@ -92,13 +92,7 @@ function __release \
   echo "cleaning up"
   rm AUTHORS NEWS README ChangeLog COPYING
 
-  echo "configuring and making"
-  ./configure
-  make
-
-  
-
-
 end
+
 
 __release $argv

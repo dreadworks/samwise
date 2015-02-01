@@ -111,3 +111,6 @@ tramp
 /samwise/install-sh
 /samwise/missing
 /samwise/stamp-h1
+/samwise/TAGS
+/usr/
+/.tags/
