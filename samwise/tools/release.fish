@@ -84,13 +84,7 @@ function __release \
   __release_change_configure $vers
 
   echo "creating Makefile"
-  cp ../AUTHORS ./
-  cp ../README.md ./README
-  touch NEWS ChangeLog
   autoreconf -iv
-
-  echo "cleaning up"
-  rm AUTHORS NEWS README ChangeLog COPYING
 
 end
 
