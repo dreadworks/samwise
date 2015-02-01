@@ -36,7 +36,7 @@ function __tags
     echo "handling $name"
 
     if [ ! -d "$target" ]
-      git clone "https://github.com/$name" "$target"
+      git clone "https://github.com/$location" "$target"
     end
 
     if [ -n $tag ]
