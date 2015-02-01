@@ -30,4 +30,7 @@
 #endif
 
 
+#include "sam_log.h"
+
+
 #endif
