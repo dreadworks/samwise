@@ -24,8 +24,8 @@
 
 
 #define SAM_VERSION_MAJOR 0
-#define SAM_VERSION_MINOR 1
-#define SAM_VERSION_PATCH 0
+#define SAM_VERSION_MINOR 0
+#define SAM_VERSION_PATCH 1
 
 #define SAM_MAKE_VERSION(major, minor, patch) \
     ((major) *10000 + (minor) * 100 + (patch))

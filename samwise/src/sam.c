@@ -22,22 +22,14 @@
 #include "../include/sam_prelude.h"
 
 
-//  --------------------------------------------------------------------------
-/// This is a test function.
-/// This is the detailed description of that test function.
-int
-sam_test (int x)
-{
-    return x;
-}
-
 
 //  --------------------------------------------------------------------------
 /// Main entry function.
-/// Does nothing so far. It's just greeting nicely.
+/// Runs the test, currently.
 int
 main (void)
 {
-    printf ("Hi!\n");
+    printf ("running tests\n");
+    sam_log_test ();
     return 0;
 }
