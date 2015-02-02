@@ -125,8 +125,6 @@ Files should be documented like this:
 
     name - summary
 
-    copyright
-
     license
 
     =========================================================================
