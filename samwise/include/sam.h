@@ -33,13 +33,4 @@
                      SAM_VERSION_MINOR, \
                      SAM_VERSION_PATCH)
 
-
-//  --------------------------------------------------------------------------
-/// @brief   This is just a test function.
-/// @param   x  It just takes one parameter
-/// @return  The return value is always x
-int
-sam_test (int x);
-
-
 #endif

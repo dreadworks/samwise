@@ -18,11 +18,29 @@
    to define multiple or no output sources per log
    level. Logging is implemented asynchronously.
 
+
+   connections:
+       "[<>^v]" : connect
+            "o" : bind
+
+
+     controller
+       |   \
+       |   PIPE
+       |     \        PULL   PUSH
+      PIPE   actor[0] o------< sam_logger[0]
+       |               \
+    actor[i]            \
+       o PULL           ^ PUSH
+                      sam_logger[i]
+
 */
 
 #include "../include/sam_prelude.h"
 
 
+//  --------------------------------------------------------------------------
+/// Function that decides which log handler to call.
 static void
 multiplex (
     sam_log_handler_t handler,
@@ -39,6 +57,8 @@ multiplex (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Returns the handler list belonging to a specific log level.
 static zlist_t *
 get_handler_list (
     sam_log_inner_t *state,
@@ -57,6 +77,8 @@ get_handler_list (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Returns the string representation of a specific log level.
 const char *
 get_lvl_repr (sam_log_lvl_t lvl)
 {
@@ -73,6 +95,12 @@ get_lvl_repr (sam_log_lvl_t lvl)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Handle commands arriving on the PULL socket.
+/// Currently there is only one command implemented: log.
+/// The log command takes the log line, formats it according to
+/// the formatting defined in the inner state. Log lines exceeding
+/// SAM_LOG_LINE_MAX_SIZE are truncated.
 static void
 pll_handle_cmd (
     sam_log_inner_t *state,
@@ -122,6 +150,10 @@ pll_handle_cmd (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Callback function for requests arriving on the PULL socket.
+/// Expects a message with at least 3 frames:
+/// | char *cmd | byte[] lvl | void *payload | [...]
 static int
 pll_callback (zloop_t *loop, zsock_t *pll, void *args)
 {
@@ -142,6 +174,10 @@ pll_callback (zloop_t *loop, zsock_t *pll, void *args)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Callback function for requests arriving on the actor's PIPE.
+/// Expects at least 1 frame:
+/// | char *cmd | [...]
 static int
 pipe_callback (zloop_t *loop, zsock_t *pipe, void *args)
 {
@@ -206,7 +242,9 @@ pipe_callback (zloop_t *loop, zsock_t *pipe, void *args)
 }
 
 
-
+//  --------------------------------------------------------------------------
+/// Actor thread for the log facility.
+/// A loop gets started that polls on the PULL socket and the actor's PIPE.
 static void
 actor (zsock_t *pipe, void *args)
 {
@@ -239,6 +277,10 @@ actor (zsock_t *pipe, void *args)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Create a new log facility.
+/// This function starts a new thread as a zactor. It also generates a
+/// unique socket endpoint for sam_logger instances to connect to.
 sam_log_t *
 sam_log_new ()
 {
@@ -260,6 +302,10 @@ sam_log_new ()
 }
 
 
+//  --------------------------------------------------------------------------
+/// Destroy a logger facility.
+/// Please note that log messages not already handled may get lost.
+/// TODO: optional synchronisation method
 void
 sam_log_destroy (sam_log_t **log)
 {
@@ -273,6 +319,9 @@ sam_log_destroy (sam_log_t **log)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Send the log facility a log line.
+/// This function is just a convenience function for sam_logger_send.
 void
 sam_log (
     sam_logger_t *logger,
@@ -283,6 +332,10 @@ sam_log (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Send a command to the log facility.
+/// This function builds the typical three-framed request for the internal
+/// PIPE: | char *cmd | byte[] lvl | void *payload |
 static void
 send_cmd (
     sam_log_t *log,
@@ -301,6 +354,12 @@ send_cmd (
     zframe_destroy (&pay_f);
 }
 
+
+//  --------------------------------------------------------------------------
+/// Add a handler method up to a specific log level.
+/// This function sends a three-framed request via the internal PIPE to
+/// the log facility. This, in turn, registers the handler for all log
+/// levels up to and including the provided one.
 void
 sam_log_add_handler (
     sam_log_t *log,
@@ -312,6 +371,11 @@ sam_log_add_handler (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Removes a handler method up to a specific log level.
+/// This function sends a three-framed request via the internal PIPE to
+/// the log facility. This, in turn, removes all handlers for all
+/// log levels up to and including the provided one.
 void
 sam_log_remove_handler (
     sam_log_t *log,
@@ -322,6 +386,10 @@ sam_log_remove_handler (
     send_cmd (log, "rem_handler", lvl, &handler, sizeof (sam_log_handler_t));
 }
 
+
+//  --------------------------------------------------------------------------
+/// Log handler that prints messages to std*.
+/// TRACE and INFO messages are printed to stdout, ERROR to stderr.
 void
 sam_log_handler_std (sam_log_lvl_t lvl, const char *msg)
 {
@@ -341,6 +409,8 @@ sam_log_handler_std (sam_log_lvl_t lvl, const char *msg)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Accessor method to retrieve the log facilities socket endpoint.
 char *
 sam_log_endpoint (sam_log_t *log)
 {
@@ -349,6 +419,8 @@ sam_log_endpoint (sam_log_t *log)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Self test this class.
 void
 sam_log_test (void)
 {
@@ -359,8 +431,8 @@ sam_log_test (void)
     printf ("[log] appending log handler\n");
     sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
 
+    printf ("[log] creating logger\n");
     char *endpoint = sam_log_endpoint (log);
-    printf ("[log] creating logger for %s\n", endpoint);
     sam_logger_t *logger = sam_logger_new (endpoint);
 
     printf ("[log] sending log request\n");

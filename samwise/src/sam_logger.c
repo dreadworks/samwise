@@ -13,13 +13,33 @@
    @brief distributed logger instances
    @file sam_logger.c
    
-   TODO: doc
+   Instances of this class communicate with a specific log
+   facility. They must not be shared between threads, but
+   arbitrary many instances of this class (one per thread)
+   may communicate with one log facility.
+
+
+   connections:
+       "[<>^v]" : connect
+            "o" : bind
+
+
+               PUSH   PULL
+   sam_logger[0] >-----o sam_log
+                      /
+      sam_logger[i] >/
+                   PUSH
 
 */
 
 #include "../include/sam_prelude.h"
 
 
+
+//  --------------------------------------------------------------------------
+/// Create a new logger instance.
+/// Most of the time you need to provide the return value of
+/// sam_log_endpoint (...)
 sam_logger_t *
 sam_logger_new (char *endpoint)
 {
@@ -29,6 +49,9 @@ sam_logger_new (char *endpoint)
     
 }
 
+
+//  --------------------------------------------------------------------------
+/// Destroy a logger instance.
 void
 sam_logger_destroy (sam_logger_t **logger)
 {
@@ -39,6 +62,9 @@ sam_logger_destroy (sam_logger_t **logger)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Send a log line to the log facility.
+/// The timestamp appearing in the log is created in this function.
 void
 sam_logger_send (
     sam_logger_t *logger,

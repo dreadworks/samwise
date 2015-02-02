@@ -13,8 +13,10 @@
    \brief sam_log - logger facility for samwise
 
     This is the interface for a logging facility that
-    should handle different log levels and different
+    handles different log levels and different
     output channels.
+
+    
 
 */
 
