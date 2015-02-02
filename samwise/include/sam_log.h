@@ -33,9 +33,9 @@ typedef enum {
 } sam_log_lvl_t;
 
 
-#define SAM_LOG_LVL_TRACE_REPR  "trc"
-#define SAM_LOG_LVL_INFO_REPR   "inf"
-#define SAM_LOG_LVL_ERROR_REPR  "err"
+#define SAM_LOG_LVL_TRACE_REPR  "trace"
+#define SAM_LOG_LVL_INFO_REPR   "info"
+#define SAM_LOG_LVL_ERROR_REPR  "error"
 
 
 /// The different handler options
@@ -109,6 +109,18 @@ sam_log (
 /// @param   handler The callback function
 CZMQ_EXPORT void
 sam_log_add_handler (
+    sam_log_t *log,
+    sam_log_lvl_t lvl,
+    sam_log_handler_t handler);
+
+
+//  --------------------------------------------------------------------------
+/// @brief   Remove a function registered for the lvl and lower
+/// @param   logger Log facility
+/// @param   lvl Call handler for all severities down to <lvl>
+/// @param   handler The callback function
+CZMQ_EXPORT void
+sam_log_remove_handler (
     sam_log_t *log,
     sam_log_lvl_t lvl,
     sam_log_handler_t handler);
