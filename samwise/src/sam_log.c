@@ -26,7 +26,7 @@
 
 
 static void
-log_thread_log (
+multiplex (
     sam_log_handler_t handler,
     sam_log_lvl_t lvl,
     const char *line)
@@ -76,41 +76,27 @@ get_lvl_repr (sam_log_lvl_t lvl)
 
 
 static void
-log_thread_handle_cmd (
+pll_handle_cmd (
     sam_log_inner_t *state,
     const char *cmd,
+    sam_log_lvl_t lvl,
     zmsg_t *msg)
 {
 
-    zframe_t *payload   = zmsg_pop (msg);
-    sam_log_lvl_t lvl = *(sam_log_lvl_t *) zframe_data (payload);
-    zframe_destroy (&payload);
-    payload = zmsg_pop (msg);
-
-    if (!strcmp (cmd, "add_handler")) {
-        assert (zmsg_size (msg) == 0);
-
-        sam_log_handler_t handler = *(sam_log_handler_t *)
-            zframe_data (payload);
-
-        sam_log_lvl_t lvl_c = 0;
-        for (; lvl_c <= lvl; lvl_c++) {
-            zlist_t *handler_list = get_handler_list (state, lvl_c);
-            zlist_push (handler_list, &handler);   // TODO &handler okay?
-        }
-
-    }
-    else if (!strcmp (cmd, "log")) {
-        zframe_t *time_frame = zmsg_pop (msg);
-        assert (zmsg_size (msg) == 0);
-
+    if (!strcmp (cmd, "log")) {
         char
             line_buf[SAM_LOG_LINE_MAXSIZE + 64],
             date_buf[SAM_LOG_DATE_MAXSIZE];
 
+        // read log line
+        zframe_t *payload = zmsg_pop (msg);
         char *raw  = zframe_strdup (payload);
+        zframe_destroy (&payload);
 
-        // create timestamp
+        // read and convert timestamp
+        zframe_t *time_frame = zmsg_pop (msg);
+        assert (zmsg_size (msg) == 0);
+
         time_t time_curr = *(time_t *) zframe_data (time_frame);
         zframe_destroy (&time_frame);
         struct tm *time_loc = localtime (&time_curr);
@@ -130,20 +116,90 @@ log_thread_handle_cmd (
         while (zlist_item (handler_list) != NULL) {
             sam_log_handler_t handler =
                 (sam_log_handler_t) zlist_next (handler_list);
-            log_thread_log (handler, lvl, line_buf);
+            multiplex (handler, lvl, line_buf);
         }
 
         free (raw);
     }
-
-    zframe_destroy (&payload);
 }
 
 
+static int
+pll_callback (zloop_t *loop, zsock_t *pll, void *args)
+{
+    char *cmd;
+    sam_log_lvl_t *lvl;
+    size_t *size;
+    zmsg_t *msg = zmsg_new ();
+    sam_log_inner_t *state = (sam_log_inner_t *) args;
+
+    zsock_recv (pll, "sbm", &cmd, &lvl, &size, &msg);
+    pll_handle_cmd (state, cmd, *lvl, msg);
+
+    free (cmd);
+    free (lvl);
+    zmsg_destroy (&msg);
+
+    return 0;
+}
+
+
+static int
+pipe_callback (zloop_t *loop, zsock_t *pipe, void *args)
+{
+    zmsg_t *msg = zmsg_recv (pipe);
+    bool term = false;
+
+    if (!msg) {
+        assert (false);
+    }
+
+    char *cmd = zmsg_popstr (msg);
+    sam_log_inner_t *state = (sam_log_inner_t *) args;
+
+    if (!strcmp (cmd, "$TERM")) {
+        term = true;
+    }
+
+    // add handler command
+    // read severity and handler reference and register the handler
+    // to all severities up to the provided level.
+    else if (!strcmp (cmd, "add_handler")) {
+        zframe_t *payload = zmsg_pop (msg);
+        sam_log_lvl_t lvl = *(sam_log_lvl_t *) zframe_data (payload);
+        zframe_destroy (&payload);
+
+        payload = zmsg_pop (msg);
+        assert (zmsg_size (msg) == 0);
+        sam_log_handler_t handler = *(sam_log_handler_t *)
+            zframe_data (payload);
+
+        sam_log_lvl_t lvl_c = 0;
+        for (; lvl_c <= lvl; lvl_c++) {
+            zlist_t *handler_list = get_handler_list (state, lvl_c);
+            zlist_push (handler_list, &handler);   // TODO &handler okay?
+        }
+
+        zframe_destroy (&payload);
+    }
+
+    free (cmd);
+    zmsg_destroy (&msg);
+
+    if (term) {
+        return -1;
+    }
+
+    return 0;
+}
+
+
+
 static void
-log_thread (zsock_t *pipe, void *args)
+actor (zsock_t *pipe, void *args)
 {
     sam_log_inner_t state;
+    char *endpoint = (char *) args;
 
     state.line_fmt = "[%s] %s | %.*s\n";
     state.date_fmt = "%T";
@@ -152,99 +208,93 @@ log_thread (zsock_t *pipe, void *args)
     state.handler.info  = zlist_new ();
     state.handler.error = zlist_new ();
 
+    zsock_t *pll = zsock_new_pull (endpoint);
+
+    zloop_t *loop = zloop_new ();
+    zloop_reader (loop, pll, pll_callback, &state);
+    zloop_reader (loop, pipe, pipe_callback, &state);
+
+    // initialization done
     zsock_signal (pipe, 0);
+    zloop_start (loop);
 
-    bool terminated = false;
-    while (!terminated) {
-        zmsg_t *msg = zmsg_recv (pipe);
+    zloop_destroy (&loop);
+    zsock_destroy (&pll);
 
-        if (!msg) {
-            break; // interrupted
-        }
-
-        char *cmd = zmsg_popstr (msg);
-
-        if (!strcmp (cmd, "$TERM")) {
-            zlist_destroy (&state.handler.trace);
-            zlist_destroy (&state.handler.info);
-            zlist_destroy (&state.handler.error);
-            terminated = true;
-        }
-        else {
-            log_thread_handle_cmd (&state, cmd, msg);
-        }
-
-        zmsg_destroy (&msg);
-        free (cmd);
-    }
+    zlist_destroy (&state.handler.trace);
+    zlist_destroy (&state.handler.info);
+    zlist_destroy (&state.handler.error);
 }
 
 
 sam_log_t *
 sam_log_new ()
 {
-    sam_log_t *logger = malloc (sizeof (sam_log_t));
-    logger->log_thread = zactor_new (log_thread, NULL);
-    return logger;
+    zuuid_t *id = zuuid_new ();
+    char *id_str = zuuid_str (id);
+
+    sam_log_t *log = malloc (sizeof (sam_log_t));
+    assert (log);
+
+    char *endpoint = malloc (14 + strlen (id_str));
+    assert (endpoint);
+    sprintf (endpoint, "inproc://log-%s", id_str);
+
+    log->endpoint = endpoint;
+    log->actor = zactor_new (actor, endpoint);
+
+    zuuid_destroy (&id);
+    return log;
 }
 
 
 void
-sam_log_destroy (sam_log_t **logger)
+sam_log_destroy (sam_log_t **log)
 {
-    zactor_destroy (&(*logger)->log_thread);
-    free (*logger);
-    *logger = NULL;
-}
+    assert (log);
 
+    free ((*log)->endpoint);
+    zactor_destroy (&(*log)->actor);
 
-static zmsg_t *
-prepare_cmd_msg (
-    const char *cmd,
-    sam_log_lvl_t lvl,
-    void *payload,
-    const int len)
-{
-    zmsg_t *msg = zmsg_new ();
-    zframe_t *frame = zframe_new (cmd, strlen(cmd));
-    zmsg_append (msg, &frame);
-
-    frame = zframe_new (&lvl, sizeof (sam_log_lvl_t));
-    zmsg_append (msg, &frame);
-
-    frame = zframe_new (payload, len);
-    zmsg_append (msg, &frame);
-
-    return msg;
-
+    free (*log);
+    *log = NULL;
 }
 
 
 void
 sam_log (
-    sam_log_t *logger,
+    sam_logger_t *logger,
     sam_log_lvl_t lvl,
-    char *line)
+    const char *line)
 {
-    zmsg_t *msg = prepare_cmd_msg("log", lvl, line, strlen (line));
-
-    time_t time_curr = time (NULL);
-    zframe_t *timestamp = zframe_new (&time_curr, sizeof (time_t));
-    zmsg_append (msg, &timestamp);
-
-    zactor_send (logger->log_thread, &msg);
+    sam_logger_send (logger, lvl, line);
 }
 
 
 void
 sam_log_add_handler (
-    sam_log_t *logger,
+    sam_log_t *log,
     sam_log_lvl_t lvl,
     sam_log_handler_t handler)
 {
-    int len = sizeof (sam_log_handler_t);
-    zmsg_t *msg = prepare_cmd_msg("add_handler", lvl, &handler, len);
-    zactor_send (logger->log_thread, &msg);
+    assert (log);
+
+    zframe_t *lvl_frame =
+        zframe_new (&lvl, sizeof (sam_log_lvl_t));
+
+    zframe_t *handler_frame =
+        zframe_new (&handler, sizeof (sam_log_handler_t));
+
+    int rc = zsock_send (
+        log->actor,
+        "sff",
+        "add_handler",
+        lvl_frame,
+        handler_frame);
+
+    assert (rc == 0);
+    zframe_destroy (&lvl_frame);
+    zframe_destroy (&handler_frame);
 }
 
 
@@ -267,24 +317,38 @@ sam_log_handler_std (sam_log_lvl_t lvl, const char *msg)
 }
 
 
+char *
+sam_log_endpoint (sam_log_t *log)
+{
+    assert (log);
+    return log->endpoint;
+}
+
+
 void
 sam_log_test (void)
 {
     printf ("\n** SAM_LOG **\n");
     printf ("[main] creating logger\n");
-    sam_log_t *logger = sam_log_new ();
+    sam_log_t *log = sam_log_new ();
 
     printf ("[main] appending log handler\n");
-    sam_log_add_handler (
-        logger, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
+    sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
+
+    char *endpoint = sam_log_endpoint (log);
+    printf ("[main] creating logger for %s\n", endpoint);
+    sam_logger_t *logger = sam_logger_new (endpoint);
 
     printf ("[main] sending log request\n");
     sam_log (logger, SAM_LOG_LVL_TRACE, "trace test");
     sam_log (logger, SAM_LOG_LVL_INFO, "info test");
     sam_log (logger, SAM_LOG_LVL_ERROR, "error test");
 
-    printf ("[main] destroying logger\n");
-    sam_log_destroy (&logger);
+    printf ("[main] destroying the logger\n");
+    sam_logger_destroy (&logger);
+
+    printf ("[main] destroying log facility\n");
+    sam_log_destroy (&log);
 
     printf ("[main] exiting\n");
 }

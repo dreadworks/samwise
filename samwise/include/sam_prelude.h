@@ -31,6 +31,6 @@
 
 
 #include "sam_log.h"
-
+#include "sam_logger.h"
 
 #endif
