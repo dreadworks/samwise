@@ -1,0 +1,3 @@
+
+set -Ux C_INCLUDE_PATH /home/vagrant/complex/samwise/usr/include
+set -Ux LD_LIBRARY_PATH /home/vagrant/complex/samwise/usr/lib
