@@ -22,6 +22,9 @@
 #define __SAM_PRELUDE_H__
 
 
+#define UU __attribute__((unused))
+
+
 #include <czmq.h>
 #if CZMQ_VERSION < 20200
 #  error "sam needs at least CZMQ 2.2.0"
