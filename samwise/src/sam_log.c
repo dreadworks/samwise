@@ -443,6 +443,10 @@ sam_log_test (void)
     sam_log_error (logger, "error test");
     sleep (1);
 
+    printf ("[log] formatted output\n");
+    sam_log_infof (logger, "trace %d %c %s", 1, '2', "3");
+    sleep (1);
+
     printf ("[log] destroying the logger\n");
     sam_logger_destroy (&logger);
 

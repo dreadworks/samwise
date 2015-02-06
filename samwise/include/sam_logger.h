@@ -37,17 +37,30 @@ CZMQ_EXPORT void
 sam_logger_destroy (sam_logger_t **logger);
 
 
-
 //  --------------------------------------------------------------------------
 /// @brief   Send a log line
 /// @param   logger Logger instance
 /// @param   lvl Severity of the log message
-/// @param   line A zero-terminated string
+/// @param   fmt A zero-terminated string
 CZMQ_EXPORT void
 sam_logger_send (
     sam_logger_t *logger,
     sam_log_lvl_t lvl,
     const char *line);
+
+
+//  --------------------------------------------------------------------------
+/// @brief   Send a formatted log line
+/// @param   logger Logger instance
+/// @param   lvl Severity of the log message
+/// @param   fmt A zero-terminated format string
+/// @param   ... Format parameters
+CZMQ_EXPORT void
+sam_logger_sendf (
+    sam_logger_t *logger,
+    sam_log_lvl_t lvl,
+    const char *fmt,
+    ...);
 
 
 #endif

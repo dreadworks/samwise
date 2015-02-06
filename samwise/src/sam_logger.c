@@ -71,6 +71,7 @@ sam_logger_send (
     sam_log_lvl_t lvl,
     const char *line)
 {
+    assert (logger);
     time_t time_curr = time (NULL);
 
     zsock_send (
@@ -80,4 +81,26 @@ sam_logger_send (
         &lvl, sizeof (sam_log_lvl_t),
         line,
         &time_curr, sizeof (time_t));
+}
+
+
+//  --------------------------------------------------------------------------
+/// Send a log line to the log facility.
+/// The timestamp appearing in the log is created in this function.
+void
+sam_logger_sendf (
+    sam_logger_t *logger,
+    sam_log_lvl_t lvl,
+    const char *fmt,
+    ...)
+{
+    va_list argp;
+    char line[256];
+
+    va_start (argp, fmt);
+    vsnprintf (line, 255, fmt, argp);
+    line[255] = 0;
+    va_end (argp);
+
+    sam_logger_send (logger, lvl, line);
 }
