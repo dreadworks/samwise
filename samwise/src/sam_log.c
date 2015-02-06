@@ -155,7 +155,7 @@ pll_handle_cmd (
 /// Expects a message with at least 3 frames:
 /// | char *cmd | byte[] lvl | void *payload | [...]
 static int
-pll_callback (zloop_t *loop, zsock_t *pll, void *args)
+pll_callback (zloop_t *loop UU, zsock_t *pll, void *args)
 {
     char *cmd;
     sam_log_lvl_t *lvl;
@@ -179,7 +179,7 @@ pll_callback (zloop_t *loop, zsock_t *pll, void *args)
 /// Expects at least 1 frame:
 /// | char *cmd | [...]
 static int
-pipe_callback (zloop_t *loop, zsock_t *pipe, void *args)
+pipe_callback (zloop_t *loop UU, zsock_t *pipe, void *args)
 {
     zmsg_t *msg = zmsg_recv (pipe);
     bool term = false;
