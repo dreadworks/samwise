@@ -90,19 +90,6 @@ sam_log_destroy (sam_log_t **logger);
 
 
 //  --------------------------------------------------------------------------
-/// @brief   Send a log line, alias for sam_logger_send
-/// @param   logger sam_logger instance
-/// @param   lvl Severity of the log message
-/// @param   line A zero-terminated string
-/// @see     sam_logger_send
-CZMQ_EXPORT void
-sam_log (
-    sam_logger_t *logger,
-    sam_log_lvl_t lvl,
-    const char *line);
-
-
-//  --------------------------------------------------------------------------
 /// @brief   Add a function posing as a callback for a severity
 /// @param   logger Log facility
 /// @param   lvl Call handler for all severities up to <lvl>
@@ -148,6 +135,12 @@ sam_log_endpoint (sam_log_t *log);
 /// @param   argc argc size of the argument vector
 CZMQ_EXPORT void
 sam_log_test ();
+
+
+// shortcuts
+#define sam_log_trace(logger, msg) sam_logger_send (logger, SAM_LOG_LVL_TRACE, msg);
+#define sam_log_info(logger, msg) sam_logger_send (logger, SAM_LOG_LVL_INFO,  msg);
+#define sam_log_error(logger, msg) sam_logger_send (logger, SAM_LOG_LVL_ERROR, msg);
 
 
 #endif

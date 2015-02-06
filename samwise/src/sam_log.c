@@ -319,18 +319,6 @@ sam_log_destroy (sam_log_t **log)
 }
 
 
-//  --------------------------------------------------------------------------
-/// Send the log facility a log line.
-/// This function is just a convenience function for sam_logger_send.
-void
-sam_log (
-    sam_logger_t *logger,
-    sam_log_lvl_t lvl,
-    const char *line)
-{
-    sam_logger_send (logger, lvl, line);
-}
-
 
 //  --------------------------------------------------------------------------
 /// Send a command to the log facility.
@@ -436,23 +424,23 @@ sam_log_test (void)
     sam_logger_t *logger = sam_logger_new (endpoint);
 
     printf ("[log] sending log request\n");
-    sam_log (logger, SAM_LOG_LVL_TRACE, "trace test");
-    sam_log (logger, SAM_LOG_LVL_INFO, "info test");
-    sam_log (logger, SAM_LOG_LVL_ERROR, "error test");
+    sam_log_trace (logger, "trace test");
+    sam_log_info (logger, "info test");
+    sam_log_error (logger, "error test");
     sleep (1);
 
     printf ("[log] only log error level\n");
     sam_log_remove_handler (log, SAM_LOG_LVL_INFO, SAM_LOG_HANDLER_STD);
-    sam_log (logger, SAM_LOG_LVL_TRACE, "trace test");
-    sam_log (logger, SAM_LOG_LVL_INFO, "info test");
-    sam_log (logger, SAM_LOG_LVL_ERROR, "error test");
+    sam_log_trace (logger, "trace test");
+    sam_log_info (logger, "info test");
+    sam_log_error (logger, "error test");
     sleep (1);
 
     printf ("[log] re-add info level (idempotency)\n");
     sam_log_add_handler (log, SAM_LOG_LVL_INFO, SAM_LOG_HANDLER_STD);
-    sam_log (logger, SAM_LOG_LVL_TRACE, "trace test");
-    sam_log (logger, SAM_LOG_LVL_INFO, "info test");
-    sam_log (logger, SAM_LOG_LVL_ERROR, "error test");
+    sam_log_trace (logger, "trace test");
+    sam_log_info (logger, "info test");
+    sam_log_error (logger, "error test");
     sleep (1);
 
     printf ("[log] destroying the logger\n");
