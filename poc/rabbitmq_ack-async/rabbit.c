@@ -130,6 +130,25 @@ rabbit_destroy (rabbit_t **self)
 
 
 void
+rabbit_declare_exchange (
+    rabbit_t *self,
+    const char *exchange,
+    const char *type)
+{
+    amqp_exchange_declare (
+        self->conn,                    // connection state
+        self->chan,                    // virtual connection
+        amqp_cstring_bytes (exchange), // exchange name
+        amqp_cstring_bytes (type),     // type
+        0,                             // passive 
+        0,                             // durable
+        amqp_empty_table);             // arguments
+
+    try ("declare exchange", amqp_get_rpc_reply(self->conn));
+}
+
+
+void
 rabbit_declare_and_bind (
     rabbit_t *self,
     const char *queue,

@@ -9,7 +9,9 @@ typedef struct msgd_t {
 
 typedef struct msgd_state {
     rabbit_t *rabbit;
+    zmq_pollitem_t *amqp;
     int ack_c;
+    int exch_c;
 } msgd_state;
 
 

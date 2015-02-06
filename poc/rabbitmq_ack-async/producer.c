@@ -27,13 +27,22 @@ main (int argc, char *argv [])
 
     zsock_t *psh = zsock_new_push (MSGD_PLL_ENDPOINT);
     while (msg_c > 0) {
-        zsock_send (psh, "z");
+        zsock_send (psh, "i", SEND_MESSAGE);
         msg_c -= 1;
+        if (msg_c % 100 == 0) {
+            zsock_send (psh, "i", SEND_METHOD);
+        }
     }
-    zsock_destroy (&psh);
 
     getchar ();
 
+    printf ("[main] testing starvation\n");
+    zsock_send (psh, "i", SEND_METHOD);
+
+    getchar ();
+
+    // clean up
+    zsock_destroy (&psh);
     printf ("[main] destroying msgd\n");
     msgd_destroy (&msgd);
 

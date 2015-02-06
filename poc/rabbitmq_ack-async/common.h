@@ -21,4 +21,9 @@
 
 #define MSGD_PLL_ENDPOINT "inproc://msgd-pull"
 
+// PUSH/PULL signals
+#define SEND_MESSAGE 1
+#define SEND_METHOD 2
+
+
 #endif

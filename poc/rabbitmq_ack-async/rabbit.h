@@ -26,6 +26,13 @@ rabbit_destroy (rabbit_t **self);
 
 
 void
+rabbit_declare_exchange (
+    rabbit_t *self,
+    const char *exchange,
+    const char *type);
+
+
+void
 rabbit_declare_and_bind (
     rabbit_t *self,
     const char *queue,
