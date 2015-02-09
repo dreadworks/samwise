@@ -1,5 +1,5 @@
 
-AM_CFLAGS = -Werror -Wall -Wextra -pedantic -std=c99
+AM_CFLAGS = -Werror -Wall -Wextra -pedantic -std=gnu99
 AM_LDFLAGS = -lczmq -lrabbitmq
 
 bin_PROGRAMS = sam
