@@ -105,8 +105,8 @@ sam_logger_sendf (
     char line[256];
 
     va_start (argp, fmt);
-    vsnprintf (line, 255, fmt, argp);
-    line[255] = 0;
+    vsnprintf (line, SAM_LOG_LINE_MAXSIZE - 1, fmt, argp);
+    line[SAM_LOG_LINE_MAXSIZE - 1] = 0;
     va_end (argp);
 
     sam_logger_send (logger, lvl, line);
