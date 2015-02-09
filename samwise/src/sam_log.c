@@ -432,24 +432,28 @@ sam_log_test (void)
     sam_logger_t *logger = sam_logger_new (endpoint);
 
     printf ("[log] sending log request\n");
-    sam_log_trace (logger, "trace test");
-    sam_log_info (logger, "info test");
-    sam_log_error (logger, "error test");
+    sam_log_trace (logger, "1");
+    sam_log_info (logger, "2");
+    sam_log_error (logger, "3");
+    sleep (1);
 
     printf ("[log] only log error level\n");
     sam_log_remove_handler (log, SAM_LOG_LVL_INFO, SAM_LOG_HANDLER_STD);
-    sam_log_trace (logger, "trace test");
-    sam_log_info (logger, "info test");
-    sam_log_error (logger, "error test");
+    sam_log_trace (logger, "TEST FAILED");
+    sam_log_info (logger, "TEST FAILED");
+    sam_log_error (logger, "4");
+    sleep (1);
 
     printf ("[log] re-add info level (idempotency)\n");
     sam_log_add_handler (log, SAM_LOG_LVL_INFO, SAM_LOG_HANDLER_STD);
-    sam_log_trace (logger, "trace test");
-    sam_log_info (logger, "info test");
-    sam_log_error (logger, "error test");
+    sam_log_trace (logger, "TEST FAILED");
+    sam_log_info (logger, "5");
+    sam_log_error (logger, "6");
+    sleep (1);
 
     printf ("[log] formatted output\n");
-    sam_log_infof (logger, "trace %d %c %s", 1, '2', "3");
+    sam_log_infof (logger, "%d %c %s", 7, '7', "7");
+    sleep (1);
 
     printf ("[log] other log facility with custom endpoint\n");
     endpoint = "ipc://log-test";
@@ -458,9 +462,11 @@ sam_log_test (void)
 
     sam_logger_destroy (&logger);
     logger = sam_logger_new (endpoint);
-    sam_log_trace (logger, "trace test over domain sockets");
+    sam_log_trace (logger, "8");
 
     sleep (1);
+    printf ("[log] uniquely counted to 8?\n");
+
     printf ("[log] destroying the logger\n");
     sam_logger_destroy (&logger);
     sam_log_destroy (&ipc_log);
