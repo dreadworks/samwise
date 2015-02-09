@@ -12,7 +12,7 @@
 
    @brief the central logging facility
    @file sam_log.c
-   
+
    This class enables fast and asynchronous logging
    constrained by different log levels. It is possible
    to define multiple or no output sources per log
@@ -280,24 +280,32 @@ actor (zsock_t *pipe, void *args)
 //  --------------------------------------------------------------------------
 /// Create a new log facility.
 /// This function starts a new thread as a zactor. It also generates a
-/// unique socket endpoint for sam_logger instances to connect to.
+/// unique socket endpoint for sam_logger instances to connect to if the
+/// endpoint parameter is NULL. A copy of the endpoint name is held inside.
 sam_log_t *
-sam_log_new ()
+sam_log_new (char *endpoint)
 {
-    zuuid_t *id = zuuid_new ();
-    char *id_str = zuuid_str (id);
+    if (endpoint == NULL) {
+        zuuid_t *id = zuuid_new ();
+        char *id_str = zuuid_str (id);
+
+        endpoint = malloc (14 + strlen (id_str));
+        assert (endpoint);
+
+        sprintf (endpoint, "inproc://log-%s", id_str);
+        zuuid_destroy (&id);
+    }
+    else {
+        endpoint = strdup (endpoint);
+        assert (endpoint);
+    }
 
     sam_log_t *log = malloc (sizeof (sam_log_t));
     assert (log);
 
-    char *endpoint = malloc (14 + strlen (id_str));
-    assert (endpoint);
-    sprintf (endpoint, "inproc://log-%s", id_str);
-
     log->endpoint = endpoint;
     log->actor = zactor_new (actor, endpoint);
 
-    zuuid_destroy (&id);
     return log;
 }
 
@@ -414,7 +422,7 @@ sam_log_test (void)
 {
     printf ("\n** SAM_LOG **\n");
     printf ("[log] creating logger\n");
-    sam_log_t *log = sam_log_new ();
+    sam_log_t *log = sam_log_new (NULL);
 
     printf ("[log] appending log handler\n");
     sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
@@ -427,28 +435,35 @@ sam_log_test (void)
     sam_log_trace (logger, "trace test");
     sam_log_info (logger, "info test");
     sam_log_error (logger, "error test");
-    sleep (1);
 
     printf ("[log] only log error level\n");
     sam_log_remove_handler (log, SAM_LOG_LVL_INFO, SAM_LOG_HANDLER_STD);
     sam_log_trace (logger, "trace test");
     sam_log_info (logger, "info test");
     sam_log_error (logger, "error test");
-    sleep (1);
 
     printf ("[log] re-add info level (idempotency)\n");
     sam_log_add_handler (log, SAM_LOG_LVL_INFO, SAM_LOG_HANDLER_STD);
     sam_log_trace (logger, "trace test");
     sam_log_info (logger, "info test");
     sam_log_error (logger, "error test");
-    sleep (1);
 
     printf ("[log] formatted output\n");
     sam_log_infof (logger, "trace %d %c %s", 1, '2', "3");
-    sleep (1);
 
+    printf ("[log] other log facility with custom endpoint\n");
+    endpoint = "ipc://log-test";
+    sam_log_t *ipc_log = sam_log_new (endpoint);
+    sam_log_add_handler (ipc_log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
+
+    sam_logger_destroy (&logger);
+    logger = sam_logger_new (endpoint);
+    sam_log_trace (logger, "trace test over domain sockets");
+
+    sleep (1);
     printf ("[log] destroying the logger\n");
     sam_logger_destroy (&logger);
+    sam_log_destroy (&ipc_log);
 
     printf ("[log] destroying log facility\n");
     sam_log_destroy (&log);

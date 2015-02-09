@@ -16,8 +16,6 @@
     handles different log levels and different
     output channels.
 
-    
-
 */
 
 
@@ -78,9 +76,10 @@ typedef struct sam_logger_t_ {
 
 //  --------------------------------------------------------------------------
 /// @brief   Create a new logger
+/// @param   endpoint Optional endpoint name
 /// @return  Pointer to the logger state
 CZMQ_EXPORT sam_log_t *
-sam_log_new (void);
+sam_log_new (char *endpoint);
 
 
 //  --------------------------------------------------------------------------

@@ -12,7 +12,7 @@
 
    @brief distributed logger instances
    @file sam_logger.c
-   
+
    Instances of this class communicate with a specific log
    facility. They must not be shared between threads, but
    arbitrary many instances of this class (one per thread)
@@ -46,7 +46,7 @@ sam_logger_new (char *endpoint)
     sam_logger_t *logger = malloc (sizeof (sam_logger_t));
     logger->psh = zsock_new_push (endpoint);
     return logger;
-    
+
 }
 
 
