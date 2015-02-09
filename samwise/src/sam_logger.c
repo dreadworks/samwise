@@ -41,10 +41,13 @@
 /// Most of the time you need to provide the return value of
 /// sam_log_endpoint (...)
 sam_logger_t *
-sam_logger_new (char *endpoint)
+sam_logger_new (char *name, char *endpoint)
 {
     sam_logger_t *logger = malloc (sizeof (sam_logger_t));
+
     logger->psh = zsock_new_push (endpoint);
+    logger->name = strdup (name);
+
     return logger;
 
 }
@@ -57,7 +60,10 @@ sam_logger_destroy (sam_logger_t **logger)
 {
     assert (logger);
     zsock_destroy (&(*logger)->psh);
+
+    free ((*logger)->name);
     free (*logger);
+
     logger = NULL;
 }
 
@@ -76,9 +82,10 @@ sam_logger_send (
 
     zsock_send (
         logger->psh,
-        "sbsb",
+        "sbssb",
         "log",
         &lvl, sizeof (sam_log_lvl_t),
+        logger->name,
         line,
         &time_curr, sizeof (time_t));
 }

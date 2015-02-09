@@ -114,10 +114,9 @@ pll_handle_cmd (
             line_buf[SAM_LOG_LINE_MAXSIZE + 64],
             date_buf[SAM_LOG_DATE_MAXSIZE];
 
-        // read log line
-        zframe_t *payload = zmsg_pop (msg);
-        char *raw  = zframe_strdup (payload);
-        zframe_destroy (&payload);
+        // read logger name
+        char *name = zmsg_popstr (msg);
+        char *raw = zmsg_popstr (msg);
 
         // read and convert timestamp
         zframe_t *time_frame = zmsg_pop (msg);
@@ -132,20 +131,23 @@ pll_handle_cmd (
         sprintf (
             line_buf, state->line_fmt,
             date_buf,
+            16, name, // TODO maxsize configuration
             get_lvl_repr (lvl),
             SAM_LOG_LINE_MAXSIZE, raw);
+
+        // clean up
+        free (name);
+        free (raw);
 
         // invoke handler
         zlist_t *handler_list = get_handler_list (state, lvl);
         zlist_first (handler_list);
-        
+
         while (zlist_item (handler_list) != NULL) {
             sam_log_handler_t handler =
                 (sam_log_handler_t) zlist_next (handler_list);
             multiplex (handler, lvl, line_buf);
         }
-
-        free (raw);
     }
 }
 
@@ -251,7 +253,8 @@ actor (zsock_t *pipe, void *args)
     sam_log_inner_t state;
     char *endpoint = (char *) args;
 
-    state.line_fmt = "%s [%s] %.*s\n";
+    // timestamp, level, logger name, message
+    state.line_fmt = "%s [%.*s] (%s): %.*s\n";
     state.date_fmt = "%T";
 
     state.handler.trace = zlist_new ();
@@ -429,7 +432,7 @@ sam_log_test (void)
 
     printf ("[log] creating logger\n");
     char *endpoint = sam_log_endpoint (log);
-    sam_logger_t *logger = sam_logger_new (endpoint);
+    sam_logger_t *logger = sam_logger_new ("test", endpoint);
 
     printf ("[log] sending log request\n");
     sam_log_trace (logger, "1");
@@ -461,7 +464,7 @@ sam_log_test (void)
     sam_log_add_handler (ipc_log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
 
     sam_logger_destroy (&logger);
-    logger = sam_logger_new (endpoint);
+    logger = sam_logger_new ("ipc", endpoint);
     sam_log_trace (logger, "8");
 
     sleep (1);

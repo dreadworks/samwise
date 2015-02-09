@@ -65,6 +65,7 @@ typedef struct sam_log_inner_t_ {
 /// The state of a logger
 typedef struct sam_logger_t_ {
     zsock_t *psh;            ///< socket pushing log requests
+    char *name;              ///< identifier for the logger
 } sam_logger_t;
 
 

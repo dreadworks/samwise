@@ -27,7 +27,7 @@
 /// @param   endpoint The log facilities endpoint
 /// @return  The new logger instance
 CZMQ_EXPORT sam_logger_t *
-sam_logger_new (char *endpoint);
+sam_logger_new (char *name, char *endpoint);
 
 
 //  --------------------------------------------------------------------------
