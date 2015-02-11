@@ -12,7 +12,7 @@
 
    @brief public API
    @file sam.c
-   
+
    TODO description
 
 */
@@ -28,6 +28,14 @@ int
 main (void)
 {
     printf ("running tests\n");
-    sam_log_test ();
+    // sam_log_test ();
+
+    sam_log_t *log = sam_log_new (SAM_LOG_ENDPOINT);
+    sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
+
+    sam_msg_rabbitmq_test ();
+
+    zclock_sleep (10);
+    sam_log_destroy (&log);
     return 0;
 }

@@ -24,14 +24,20 @@
 
 #define UU __attribute__((unused))
 
+// shared config, TODO: put into config file (#32)
+#define SAM_LOG_ENDPOINT "inproc://log"
+
 
 #include <czmq.h>
 #if CZMQ_VERSION < 20200
 #  error "sam needs at least CZMQ 2.2.0"
 #endif
 
+#include <amqp.h>
+#include <amqp_tcp_socket.h>
 
 #include "sam_log.h"
 #include "sam_logger.h"
+#include "sam_msg_rabbitmq.h"
 
 #endif
