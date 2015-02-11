@@ -13,7 +13,12 @@
    @brief message backend for RabbitMQ
    @file sam_msg_rabbit.c
 
-   TODO description
+   This class is an abstraction of the RabbitMQ-C library maintained
+   by Alan Antonuk (https://github.com/alanxz/rabbitmq-c). It offers
+   the basic functionality to publish messages, send methods and read
+   buffered ACKS. An instance of this class wraps a TCP connection to
+   the RabbitMQ broker containing one channel. The channel then can be
+   put into confirm mode.
 
 */
 
@@ -21,7 +26,9 @@
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// This helper function analyses the return value of an AMQP rpc
+/// call. If the return code is anything other than
+/// AMQP_RESPONSE_NORMAL, an assertion fails.
 static void
 try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
 {
@@ -32,11 +39,20 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
         return;
 
     case AMQP_RESPONSE_NONE:
-        sam_log_errorf (self->logger, "%s: missing RPC reply type\n", ctx);
+        sam_log_errorf (
+            self->logger,
+            "%s: missing RPC reply type\n",
+            ctx);
+
         break;
 
     case AMQP_RESPONSE_LIBRARY_EXCEPTION:
-        sam_log_errorf (self->logger, "%s: %s\n", ctx, amqp_error_string2(x.library_error));
+        sam_log_errorf (
+            self->logger,
+            "%s: %s\n",
+            ctx,
+            amqp_error_string2(x.library_error));
+
         break;
 
     case AMQP_RESPONSE_SERVER_EXCEPTION:
@@ -88,7 +104,7 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// Returns the underlying TCP connections socket file descriptor.
 int
 sam_msg_rabbitmq_sockfd (sam_msg_rabbitmq_t *self)
 {
@@ -97,7 +113,10 @@ sam_msg_rabbitmq_sockfd (sam_msg_rabbitmq_t *self)
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// Creates a new instance of msg_rabbitmq. This instance wraps an
+/// AMQP TCP connection to a RabbitMQ broker. This constructor
+/// function creates an AMQP connection state and initializes a TCP
+/// socket for the broker connection.
 sam_msg_rabbitmq_t *
 sam_msg_rabbitmq_new ()
 {
@@ -120,7 +139,9 @@ sam_msg_rabbitmq_new ()
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// Destroy an instance of msg_rabbitmq. This destructor function
+/// savely closes the TCP connection to the broker and free's all
+/// allocated memory.
 void
 sam_msg_rabbitmq_destroy (sam_msg_rabbitmq_t **self)
 {
@@ -149,7 +170,9 @@ sam_msg_rabbitmq_destroy (sam_msg_rabbitmq_t **self)
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// Establish a connection to the RabbitMQ broker. This function opens
+/// the connection on the TCP socket. It then opens a channel for
+/// communication, which it sets into confirm mode.
 void
 sam_msg_rabbitmq_connect (
     sam_msg_rabbitmq_t *self,
@@ -204,7 +227,7 @@ sam_msg_rabbitmq_connect (
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// Returns a boolean indicating the connection status.
 bool
 sam_msg_rabbitmq_connected (sam_msg_rabbitmq_t *self)
 {
@@ -214,7 +237,7 @@ sam_msg_rabbitmq_connected (sam_msg_rabbitmq_t *self)
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// Publish a message to the RabbitMQ broker.
 void
 sam_msg_rabbitmq_publish (
     sam_msg_rabbitmq_t *self,
@@ -244,7 +267,8 @@ sam_msg_rabbitmq_publish (
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// Try to receive one or more buffered ACK's from the channel.
+/// TODO: send acknowledgement message per ACK on the PIPE.
 void
 sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
 {
@@ -289,7 +313,7 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
 
 
 //  --------------------------------------------------------------------------
-/// TODO
+/// Self test this class
 void
 sam_msg_rabbitmq_test ()
 {
