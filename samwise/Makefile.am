@@ -10,6 +10,7 @@ sam_SOURCES =									\
 	include/sam_log.h						\
 	src/sam_log.c								\
 \
+	include/sam_msg.h						\
 	include/sam_msg_rabbitmq.h	\
 	src/sam_msg_rabbitmq.c			\
 \

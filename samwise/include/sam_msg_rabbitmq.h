@@ -13,25 +13,33 @@
 
    @brief message backend for RabbitMQ
 
-   TODO
+   This class should mainly be used by invoking it's start
+   function. It then handles publishing requests, acknowledgements
+   from the channel and heartbeats.
 
 */
 
 
+/// the msg_rabbitmq state
 typedef struct sam_msg_rabbitmq_t {
 
-    sam_logger_t *logger;
+    sam_logger_t *logger;                 ///< logger instance
 
-    struct {
+    struct {                              ///< amqp connection
         bool connected;
         amqp_connection_state_t conn;
         amqp_socket_t *sock;
         int chan;
+        int seq;
     } amqp;
+
+    zsock_t *rep;
+    zsock_t *psh;
 
 } sam_msg_rabbitmq_t;
 
 
+/// structured message data
 typedef struct sam_msg_rabbitmq_message_t {
     const char *exchange;
     const char *routing_key;
@@ -40,13 +48,12 @@ typedef struct sam_msg_rabbitmq_message_t {
 } sam_msg_rabbitmq_message_t;
 
 
+/// structured connection options
 typedef struct sam_msg_rabbitmq_opts_t {
-
     char *host;
     int  port;
     char *user;
     char *pass;
-
 } sam_msg_rabbitmq_opts_t;
 
 
@@ -107,6 +114,25 @@ sam_msg_rabbitmq_publish (
 void
 sam_msg_rabbitmq_handle_ack (
     sam_msg_rabbitmq_t *self);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Start an actor handling requests asynchronously
+/// @param self A msg_rabbitmq instance
+/// @return Actor handling the internal loop
+sam_msg_backend_t *
+sam_msg_rabbitmq_start (
+    sam_msg_rabbitmq_t **self,
+    char *pll_endpoint);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Stop the actor and free all allocated memory
+/// @param self A msg_rabbitmq msg_backend instance
+/// @return Reclaimed msg_rabbitmq instance
+sam_msg_rabbitmq_t *
+sam_msg_rabbitmq_stop (
+    sam_msg_backend_t **backend);
 
 
 //  --------------------------------------------------------------------------

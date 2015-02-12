@@ -38,6 +38,7 @@
 
 #include "sam_log.h"
 #include "sam_logger.h"
+#include "sam_msg.h"
 #include "sam_msg_rabbitmq.h"
 
 #endif

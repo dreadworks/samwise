@@ -20,9 +20,188 @@
    the RabbitMQ broker containing one channel. The channel then can be
    put into confirm mode.
 
+   It is also possible to start an internal actor in a separate thread
+   by using the start function. This actor then asynchronously waits
+   for publishing requests, heartbeats and acks by using the following
+   channels:
+
+                   RabbitMQ broker
+                        ^
+                        |
+   PULL    PUSH         o
+    o------> sam_msg_rabbitmq o REP
+                   |         /
+                 PIPE       /
+                   |       /
+                  caller < REQ
+
 */
 
 #include "../include/sam_prelude.h"
+
+
+//  --------------------------------------------------------------------------
+/// Checks if the frame returned by the broker is an acknowledgement.
+static void
+check_amqp_ack_frame (sam_msg_rabbitmq_t *self, amqp_frame_t frame)
+{
+    if (frame.frame_type != AMQP_FRAME_METHOD) {
+
+        sam_log_errorf (
+            self->logger,
+            "amqp: got %d instead of METHOD\n",
+            frame.frame_type);
+
+        assert (false);
+    }
+
+    if (frame.payload.method.id != AMQP_BASIC_ACK_METHOD) {
+
+        sam_log_errorf (
+            self->logger,
+            "amqp: got %d instead of BASIC_ACK",
+            frame.payload.properties.class_id);
+
+        assert (false);
+    }
+}
+
+
+//  --------------------------------------------------------------------------
+/// Callback for POLLIN events on the AMQP TCP socket. While the
+/// poll-loop works in a level triggered fashion, the AMQP library
+/// greedily reads all content from the socket and buffers the frames
+/// internally. Because of this, a loop gets started that reads from
+/// this data structure with a 0 timeout (NULL as timeout would turn
+/// the call into a blocking read).
+static int
+handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
+{
+    sam_msg_rabbitmq_t *self = args;
+    sam_log_trace (self->logger, "received ack");
+
+    amqp_frame_t frame;
+    struct timeval timeout = { .tv_sec = 0, .tv_usec = 0 };
+
+    int rc = amqp_simple_wait_frame_noblock (
+        self->amqp.conn, &frame, &timeout);
+
+    while (rc != AMQP_STATUS_TIMEOUT) {
+        check_amqp_ack_frame (self, frame);
+
+        amqp_basic_ack_t *props = frame.payload.method.decoded;
+        assert (props);
+
+        zsock_send (self->psh, "ii", SAM_MSG_RES_ACK, props->delivery_tag);
+
+        rc = amqp_simple_wait_frame_noblock (
+            self->amqp.conn, &frame, &timeout);
+    }
+
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Callback for communication arriving on the REP socket. Most of the
+/// time, these are publishing requests. It also handles RPC calls.
+static int
+handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
+{
+    sam_msg_rabbitmq_t *self = args;
+
+    sam_msg_req_t req_t;
+    zmsg_t *msg = zmsg_new ();
+
+    zsock_recv (rep, "im", &req_t, &msg);
+
+    if (req_t != SAM_MSG_REQ_PUBLISH) {
+        sam_log_errorf (
+            self->logger,
+            "req: received unknown command %d",
+            req_t);
+
+        return -1;
+    }
+
+    zframe_t *msg_data = zmsg_pop (msg);
+    assert (msg_data);
+
+    sam_msg_rabbitmq_message_t *amqp_msg =
+        *((void **) zframe_data (msg_data));
+    assert (amqp_msg);
+
+    zsock_send (rep, "i", self->amqp.seq);
+    sam_msg_rabbitmq_publish (self, amqp_msg);
+
+    zframe_destroy (&msg_data);
+    zmsg_destroy (&msg);
+
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Callback for requests on the actor's PIPE. Only handles interrupts
+/// and termination commands.
+static int
+handle_pipe (zloop_t *loop UU, zsock_t *pipe, void *args)
+{
+    sam_msg_rabbitmq_t *self = args;
+    zmsg_t *msg = zmsg_recv (pipe);
+
+    if (!msg) {
+        sam_log_info (self->logger, "pipe: interrupted!");
+        return -1;
+    }
+
+    bool term = false;
+    char *cmd = zmsg_popstr (msg);
+    if (!strcmp (cmd, "$TERM")) {
+        sam_log_info (self->logger, "pipe: terminated");
+        term = true;
+    }
+
+    free (cmd);
+    zmsg_destroy (&msg);
+
+    if (term) {
+        return -1;
+    }
+
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Entry point for the actor thread. Starts a loop listening on the
+/// PIPE, REP zsock and the AMQP TCP socket.
+static void
+actor (zsock_t *pipe, void *args)
+{
+    sam_msg_rabbitmq_t *self = args;
+    sam_log_info (self->logger, "started msg_rabbitmq actor");
+
+    zmq_pollitem_t amqp_pollitem = {
+        .socket = NULL,
+        .fd = sam_msg_rabbitmq_sockfd (self),
+        .events = ZMQ_POLLIN,
+        .revents = 0
+    };
+
+    zloop_t *loop = zloop_new ();
+
+    zloop_reader (loop, pipe, handle_pipe, self);
+    zloop_reader (loop, self->rep, handle_req, self);
+    zloop_poller (loop, &amqp_pollitem, handle_amqp, self);
+
+    sam_log_trace (self->logger, "send ready signal");
+    zsock_signal (pipe, 0);
+    zloop_start (loop);
+
+    sam_log_info (self->logger, "stopping msg_rabbitmq actor");
+    zloop_destroy (&loop);
+}
 
 
 //  --------------------------------------------------------------------------
@@ -129,9 +308,11 @@ sam_msg_rabbitmq_new ()
     self->logger = logger;
 
     // init amqp
+    self->amqp.seq = 1;
     self->amqp.chan = 1;
     self->amqp.conn = amqp_new_connection ();
     self->amqp.sock = amqp_tcp_socket_new (self->amqp.conn);
+
     self->amqp.connected = false;
 
     return self;
@@ -145,8 +326,7 @@ sam_msg_rabbitmq_new ()
 void
 sam_msg_rabbitmq_destroy (sam_msg_rabbitmq_t **self)
 {
-    assert (*self);
-    sam_log_info (
+    sam_log_trace (
         (*self)->logger, "destroying rabbitmq message backend instance");
 
     sam_logger_destroy (&(*self)->logger);
@@ -228,16 +408,16 @@ sam_msg_rabbitmq_connect (
 
 //  --------------------------------------------------------------------------
 /// Returns a boolean indicating the connection status.
+/// TODO (#34)
 bool
 sam_msg_rabbitmq_connected (sam_msg_rabbitmq_t *self)
 {
-    assert (self);
     return self->amqp.connected;
 }
 
 
 //  --------------------------------------------------------------------------
-/// Publish a message to the RabbitMQ broker.
+/// Publish (basic_publish) a message to the RabbitMQ broker.
 void
 sam_msg_rabbitmq_publish (
     sam_msg_rabbitmq_t *self,
@@ -249,7 +429,10 @@ sam_msg_rabbitmq_publish (
     };
 
     sam_log_tracef (
-        self->logger, "publishing message of size %d", msg->payload_len);
+        self->logger,
+        "publishing message %d of size %d",
+        self->amqp.seq,
+        msg->payload_len);
 
     int rc = amqp_basic_publish (
         self->amqp.conn,                      // connection state
@@ -262,18 +445,18 @@ sam_msg_rabbitmq_publish (
         msg_bytes);                           // body
 
     assert (rc == 0);
-
+    self->amqp.seq += 1;
 }
 
 
 //  --------------------------------------------------------------------------
-/// Try to receive one or more buffered ACK's from the channel.
-/// TODO: send acknowledgement message per ACK on the PIPE.
+/// Try to receive one or more buffered ACK's from the channel. This
+/// function currently just serves to "eat" frames and might be
+/// removed.
 void
 sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
 {
     amqp_frame_t frame;
-
     struct timeval timeout = { .tv_sec = 0, .tv_usec = 0 };
 
     int rc = amqp_simple_wait_frame_noblock (
@@ -282,25 +465,7 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
     int ack_c = 0;
 
     while (rc != AMQP_STATUS_TIMEOUT) {
-        if (frame.frame_type != AMQP_FRAME_METHOD) {
-
-            sam_log_errorf (
-                self->logger,
-                "[rabbit] handle_ack: got %d instead of METHOD\n",
-                frame.frame_type);
-
-            assert (false);
-        }
-
-        if (frame.payload.method.id != AMQP_BASIC_ACK_METHOD) {
-
-            sam_log_errorf (
-                self->logger,
-                "[rabbit] handle_ack: got %d instead of BASIC_ACK",
-                frame.payload.properties.class_id);
-
-            assert (false);
-        }
+        check_amqp_ack_frame (self, frame);
 
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.conn, &frame, &timeout);
@@ -313,7 +478,69 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
 
 
 //  --------------------------------------------------------------------------
-/// Self test this class
+/// Start an actor handling requests asynchronously. Internally, it
+/// starts an zactor with a zloop listening to data on either the
+/// actors pipe, reply socket or the AMQP TCP socket. The provided
+/// msg_rabbitmq instance must already have openend a connection and
+/// be logged in to the broker.
+sam_msg_backend_t *
+sam_msg_rabbitmq_start (
+    sam_msg_rabbitmq_t **self,
+    char *pll_endpoint)
+{
+    sam_log_trace ((*self)->logger, "starting message backend actor");
+
+    sam_msg_backend_t *backend = malloc (sizeof (sam_msg_backend_t));
+    zuuid_t *rep_endpoint_id = zuuid_new ();
+    char rep_endpoint [64];
+
+    snprintf (rep_endpoint, 64, "inproc://%s", zuuid_str (rep_endpoint_id));
+    zuuid_destroy (&rep_endpoint_id);
+
+    sam_log_tracef (
+        (*self)->logger, "generated req/rep endpoint: %s", rep_endpoint);
+
+    (*self)->rep = zsock_new_rep (rep_endpoint);
+    (*self)->psh = zsock_new_push (pll_endpoint);
+
+    // change ownership
+    backend->self = *self;
+    backend->req = zsock_new_req (rep_endpoint);
+    backend->actor = zactor_new (actor, *self);
+
+    *self = NULL;
+    return backend;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Stop the message backend thread. When calling this function, all
+/// sockets for communicating with the thread are closed and all
+/// memory allocated by sam_msg_rabbitmq_start is free'd. By calling
+/// this function, ownership of the msg_rabbitmq instance is
+/// reclaimed.
+sam_msg_rabbitmq_t *
+sam_msg_rabbitmq_stop (
+    sam_msg_backend_t **backend)
+{
+    sam_msg_rabbitmq_t *self = (*backend)->self;
+
+    zsock_destroy (&(*backend)->req);
+    zactor_destroy (&(*backend)->actor);
+
+    free (*backend);
+    *backend = NULL;
+
+    zsock_destroy (&self->rep);
+    zsock_destroy (&self->psh);
+
+    return self;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Self test this class. Tests the synchronous amqp wrapper and the
+/// asynchronous handling as a generic message backend.
 void
 sam_msg_rabbitmq_test ()
 {
@@ -336,6 +563,10 @@ sam_msg_rabbitmq_test ()
     connected = sam_msg_rabbitmq_connected (rabbit);
     assert (connected);
 
+    //
+    //   SYNCHRONOUS COMMUNICATION
+    //
+
     sam_msg_rabbitmq_message_t msg = {
         .exchange =  "amq.direct",
         .routing_key = "test",
@@ -357,6 +588,59 @@ sam_msg_rabbitmq_test ()
     int rc = zmq_poll (&items, 1, 500);
     assert (rc == 1);
 
+    // TODO: this must either be removed
+    // or replaced by something more useful
     sam_msg_rabbitmq_handle_ack (rabbit);
+
+
+    //
+    //   ASYNCHRONOUS COMMUNICATION
+    //
+    char *pll_endpoint = "inproc://test-pll";
+    zsock_t *pll = zsock_new_pull (pll_endpoint);
+    assert (pll);
+
+    zclock_sleep (500);
+    sam_msg_backend_t *backend =
+        sam_msg_rabbitmq_start (&rabbit, pll_endpoint);
+
+    assert (backend);
+    assert (!rabbit);
+
+    // send publishing request
+    char *amqp_message_payload = "hi!";
+    char *amqp_message_exch = "amq.direct";
+    char *amqp_message_rkey = "";
+
+    sam_msg_rabbitmq_message_t amqp_message = {
+        .exchange = amqp_message_exch,
+        .routing_key = amqp_message_rkey,
+        .payload = (byte *) amqp_message_payload,
+        .payload_len = strlen (amqp_message_payload)
+    };
+
+    zsock_send (
+        backend->req, "ip",
+        SAM_MSG_REQ_PUBLISH,
+        &amqp_message);
+
+    // wait for sequence number
+    int seq;
+    zsock_recv (backend->req, "i", &seq);
+    assert (seq == 2);
+
+    // wait for ack
+    int ack_seq;
+    sam_msg_res_t res_t;
+    zsock_recv (pll, "ii", &res_t, &ack_seq);
+    assert (res_t == SAM_MSG_RES_ACK);
+    assert (ack_seq == seq);
+
+    // reclaim ownership
+    rabbit = sam_msg_rabbitmq_stop (&backend);
+    assert (rabbit);
+
+    // mr gorbachev tear down this wall
+    zsock_destroy (&pll);
     sam_msg_rabbitmq_destroy (&rabbit);
 }
