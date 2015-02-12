@@ -84,31 +84,31 @@ sam_log_new (char *endpoint);
 
 
 //  --------------------------------------------------------------------------
-/// @brief   Free's all memory of the logger state
+/// @brief   Free's all memory of the log's state
 CZMQ_EXPORT void
-sam_log_destroy (sam_log_t **logger);
+sam_log_destroy (sam_log_t **self);
 
 
 //  --------------------------------------------------------------------------
 /// @brief   Add a function posing as a callback for a severity
-/// @param   logger Log facility
+/// @param   self Log facility
 /// @param   lvl Call handler for all severities up to <lvl>
 /// @param   handler The callback function
 CZMQ_EXPORT void
 sam_log_add_handler (
-    sam_log_t *log,
+    sam_log_t *self,
     sam_log_lvl_t lvl,
     sam_log_handler_t handler);
 
 
 //  --------------------------------------------------------------------------
 /// @brief   Remove a function registered for the lvl and lower
-/// @param   logger Log facility
+/// @param   self Log facility
 /// @param   lvl Call handler for all severities down to <lvl>
 /// @param   handler The callback function
 CZMQ_EXPORT void
 sam_log_remove_handler (
-    sam_log_t *log,
+    sam_log_t *self,
     sam_log_lvl_t lvl,
     sam_log_handler_t handler);
 
@@ -126,7 +126,7 @@ sam_log_handler_std (sam_log_lvl_t lvl, const char *line);
 /// @param   log Log facility
 /// @param   line The log line
 CZMQ_EXPORT char *
-sam_log_endpoint (sam_log_t *log);
+sam_log_endpoint (sam_log_t *self);
 
 
 //  --------------------------------------------------------------------------

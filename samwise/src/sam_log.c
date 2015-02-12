@@ -318,15 +318,15 @@ sam_log_new (char *endpoint)
 /// Please note that log messages not already handled may get lost.
 /// TODO: optional synchronisation method
 void
-sam_log_destroy (sam_log_t **log)
+sam_log_destroy (sam_log_t **self)
 {
-    assert (log);
+    assert (self);
 
-    free ((*log)->endpoint);
-    zactor_destroy (&(*log)->actor);
+    free ((*self)->endpoint);
+    zactor_destroy (&(*self)->actor);
 
-    free (*log);
-    *log = NULL;
+    free (*self);
+    *self = NULL;
 }
 
 
@@ -337,7 +337,7 @@ sam_log_destroy (sam_log_t **log)
 /// PIPE: | char *cmd | byte[] lvl | void *payload |
 static void
 send_cmd (
-    sam_log_t *log,
+    sam_log_t *self,
     const char *cmd,
     sam_log_lvl_t lvl,
     void *payload,
@@ -346,7 +346,7 @@ send_cmd (
     zframe_t *lvl_f = zframe_new (&lvl, sizeof (sam_log_lvl_t));
     zframe_t *pay_f = zframe_new (payload, payload_len);
 
-    int rc = zsock_send (log->actor, "sff", cmd, lvl_f, pay_f);
+    int rc = zsock_send (self->actor, "sff", cmd, lvl_f, pay_f);
     assert (rc == 0);
 
     zframe_destroy (&lvl_f);
@@ -361,12 +361,12 @@ send_cmd (
 /// levels up to and including the provided one.
 void
 sam_log_add_handler (
-    sam_log_t *log,
+    sam_log_t *self,
     sam_log_lvl_t lvl,
     sam_log_handler_t handler)
 {
-    assert (log);
-    send_cmd (log, "add_handler", lvl, &handler, sizeof (sam_log_handler_t));
+    assert (self);
+    send_cmd (self, "add_handler", lvl, &handler, sizeof (sam_log_handler_t));
 }
 
 
@@ -377,12 +377,12 @@ sam_log_add_handler (
 /// log levels up to and including the provided one.
 void
 sam_log_remove_handler (
-    sam_log_t *log,
+    sam_log_t *self,
     sam_log_lvl_t lvl,
     sam_log_handler_t handler)
 {
-    assert (log);
-    send_cmd (log, "rem_handler", lvl, &handler, sizeof (sam_log_handler_t));
+    assert (self);
+    send_cmd (self, "rem_handler", lvl, &handler, sizeof (sam_log_handler_t));
 }
 
 
@@ -411,10 +411,10 @@ sam_log_handler_std (sam_log_lvl_t lvl, const char *msg)
 //  --------------------------------------------------------------------------
 /// Accessor method to retrieve the log facilities socket endpoint.
 char *
-sam_log_endpoint (sam_log_t *log)
+sam_log_endpoint (sam_log_t *self)
 {
-    assert (log);
-    return log->endpoint;
+    assert (self);
+    return self->endpoint;
 }
 
 
