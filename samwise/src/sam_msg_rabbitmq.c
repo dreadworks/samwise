@@ -600,7 +600,6 @@ sam_msg_rabbitmq_test ()
     zsock_t *pll = zsock_new_pull (pll_endpoint);
     assert (pll);
 
-    zclock_sleep (500);
     sam_msg_backend_t *backend =
         sam_msg_rabbitmq_start (&rabbit, pll_endpoint);
 
