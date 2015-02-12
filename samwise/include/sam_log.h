@@ -43,14 +43,14 @@ typedef enum {
 
 
 /// State for sam_log instances
-typedef struct sam_log_t_ {
+typedef struct sam_log_t {
     char *endpoint;     ///< pull socket endpoint
     zactor_t *actor;    ///< logging thread
 } sam_log_t;
 
 
 /// The state of a log thread
-typedef struct sam_log_inner_t_ {
+typedef struct sam_log_inner_t {
     zsock_t *pll;             ///< socket accepting log requests
     const char *line_fmt;     ///< the output format for messages
     const char *date_fmt;     ///< format for timestamps
@@ -63,7 +63,7 @@ typedef struct sam_log_inner_t_ {
 
 
 /// The state of a logger
-typedef struct sam_logger_t_ {
+typedef struct sam_logger_t {
     zsock_t *psh;            ///< socket pushing log requests
     char *name;              ///< identifier for the logger
 } sam_logger_t;
