@@ -169,3 +169,9 @@ sam_stuff (void *args, int argc)
     // ...
 }
 ```
+
+
+## Notes ##
+
+* capture local amqp network traffic with tshark: `sudo tshark -f "tcp port 5672" -R amqp -i lo`
+
