@@ -54,6 +54,7 @@ typedef struct sam_msg_rabbitmq_opts_t {
     int  port;
     char *user;
     char *pass;
+    int heartbeat;
 } sam_msg_rabbitmq_opts_t;
 
 
@@ -102,7 +103,7 @@ sam_msg_rabbitmq_connected (
 /// @brief Publish a message to the broker
 /// @param self A msg_rabbitmq instance
 /// @param msg  The message as structured data
-void
+int
 sam_msg_rabbitmq_publish (
     sam_msg_rabbitmq_t *self,
     sam_msg_rabbitmq_message_t *msg);

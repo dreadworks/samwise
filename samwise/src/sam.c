@@ -20,20 +20,27 @@
 #include "../include/sam_prelude.h"
 
 
+// to be removed before shipping. for debugging
+static void
+sigabrt (int signo UU)
+{
+    sam_logger_t *logger = sam_logger_new ("sigabrt", SAM_LOG_ENDPOINT);
+    sam_log_error (logger, "catched SIGABRT");
+    sam_logger_destroy (&logger);
+    zclock_sleep (500);
+}
+
 
 //  --------------------------------------------------------------------------
 /// Main entry function.
-/// Runs the test, currently.
 int
 main (void)
 {
-    printf ("running tests\n");
-    // sam_log_test ();
-
     sam_log_t *log = sam_log_new (SAM_LOG_ENDPOINT);
     sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
 
-    sam_msg_rabbitmq_test ();
+    signal (SIGABRT, sigabrt);
+    playground_publish_loop ();
 
     zclock_sleep (10);
     sam_log_destroy (&log);

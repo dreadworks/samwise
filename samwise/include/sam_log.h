@@ -137,24 +137,55 @@ CZMQ_EXPORT void
 sam_log_test ();
 
 
-// shortcuts
-#define sam_log_trace(logger, msg)                    \
-    sam_logger_send (logger, SAM_LOG_LVL_TRACE, msg);
 
-#define sam_log_info(logger, msg)                     \
-    sam_logger_send (logger, SAM_LOG_LVL_INFO, msg);
+//
+// TRACE LOGGING
+//
+#if defined(LOG_THRESHOLD_TRACE)
+    #define sam_log_trace(logger, msg)
+    #define sam_log_tracef(logger, msg, ...)
 
-#define sam_log_error(logger, msg)                    \
-    sam_logger_send (logger, SAM_LOG_LVL_ERROR, msg);
+#else
+    #define sam_log_trace(logger, msg)                    \
+        sam_logger_send (logger, SAM_LOG_LVL_TRACE, msg);
+    #define sam_log_tracef(logger, msg, ...)                            \
+        sam_logger_sendf (logger, SAM_LOG_LVL_TRACE, msg, __VA_ARGS__);
 
-#define sam_log_tracef(logger, msg, ...)                            \
-    sam_logger_sendf (logger, SAM_LOG_LVL_TRACE, msg, __VA_ARGS__);
+#endif
 
-#define sam_log_infof(logger, msg, ...)                             \
-    sam_logger_sendf (logger, SAM_LOG_LVL_INFO,  msg, __VA_ARGS__);
 
-#define sam_log_errorf(logger, msg, ...)                            \
-    sam_logger_sendf (logger, SAM_LOG_LVL_ERROR, msg, __VA_ARGS__);
+//
+// INFO LOGGING
+//
+#if defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_TRACE)
+    #define sam_log_info(logger, msg)
+    #define sam_log_infof(logger, msg, ...)
+
+#else
+
+    #define sam_log_info(logger, msg)                     \
+        sam_logger_send (logger, SAM_LOG_LVL_INFO, msg);
+    #define sam_log_infof(logger, msg, ...)                             \
+        sam_logger_sendf (logger, SAM_LOG_LVL_INFO,  msg, __VA_ARGS__);
+
+#endif
+
+
+//
+// ERROR LOGGING
+//
+#if defined(LOG_THRESHOLD_ERROR) || defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_TRACE)
+    #define sam_log_error(logger, msg)
+    #define sam_log_errorf(logger, msg, ...)
+
+#else
+
+    #define sam_log_error(logger, msg)                    \
+        sam_logger_send (logger, SAM_LOG_LVL_ERROR, msg);
+    #define sam_log_errorf(logger, msg, ...)                            \
+        sam_logger_sendf (logger, SAM_LOG_LVL_ERROR, msg, __VA_ARGS__);
+
+#endif
 
 
 #endif

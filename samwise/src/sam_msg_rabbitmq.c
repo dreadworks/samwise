@@ -78,7 +78,6 @@ static int
 handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 {
     sam_msg_rabbitmq_t *self = args;
-    sam_log_trace (self->logger, "received ack");
 
     amqp_frame_t frame;
     struct timeval timeout = { .tv_sec = 0, .tv_usec = 0 };
@@ -86,8 +85,15 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
     int rc = amqp_simple_wait_frame_noblock (
         self->amqp.conn, &frame, &timeout);
 
+    if (frame.frame_type == AMQP_FRAME_HEARTBEAT) {
+        sam_log_trace (self->logger, "registered heartbeat (outer)");
+    }
+
     while (rc != AMQP_STATUS_TIMEOUT) {
         check_amqp_ack_frame (self, frame);
+
+        sam_log_tracef (
+            self->logger, "received frame on channel %d", frame.channel);
 
         amqp_basic_ack_t *props = frame.payload.method.decoded;
         assert (props);
@@ -96,6 +102,10 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.conn, &frame, &timeout);
+
+        if (frame.frame_type == AMQP_FRAME_HEARTBEAT) {
+            sam_log_trace (self->logger, "registered heartbeat (inner)");
+        }
     }
 
     return 0;
@@ -124,6 +134,7 @@ handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
         return -1;
     }
 
+    sam_log_trace (self->logger, "received publishing request");
     zframe_t *msg_data = zmsg_pop (msg);
     assert (msg_data);
 
@@ -132,12 +143,12 @@ handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
     assert (amqp_msg);
 
     zsock_send (rep, "i", self->amqp.seq);
-    sam_msg_rabbitmq_publish (self, amqp_msg);
+    int rc = sam_msg_rabbitmq_publish (self, amqp_msg);
 
     zframe_destroy (&msg_data);
     zmsg_destroy (&msg);
 
-    return 0;
+    return rc;
 }
 
 
@@ -220,7 +231,7 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
     case AMQP_RESPONSE_NONE:
         sam_log_errorf (
             self->logger,
-            "%s: missing RPC reply type\n",
+            "%s: missing RPC reply type",
             ctx);
 
         break;
@@ -242,7 +253,7 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
 
             sam_log_errorf (
                 self->logger,
-                "%s: server connection error %d, message: %.*s\n",
+                "%s: server connection error %d, message: %.*s",
                 ctx,
                 m->reply_code,
                 (int) m->reply_text.len,
@@ -257,7 +268,7 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
 
             sam_log_errorf (
                 self->logger,
-                "%s: server channel error %d, message: %.*s\n",
+                "%s: server channel error %d, message: %.*s",
                 ctx,
                 m->reply_code,
                 (int) m->reply_text.len,
@@ -268,7 +279,7 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
         default:
             sam_log_errorf (
                 self->logger,
-                "%s: unknown server error, method id 0x%08X\n",
+                "%s: unknown server error, method id 0x%08X",
                 ctx,
                 x.reply.id);
 
@@ -375,7 +386,7 @@ sam_msg_rabbitmq_connect (
             "/",                     // vhost
             0,                       // channel max
             AMQP_DEFAULT_FRAME_SIZE, // frame max
-            0,                       // hearbeat
+            opts->heartbeat,         // hearbeat
             AMQP_SASL_METHOD_PLAIN,  // sasl method
             opts->user,
             opts->pass));
@@ -418,7 +429,7 @@ sam_msg_rabbitmq_connected (sam_msg_rabbitmq_t *self)
 
 //  --------------------------------------------------------------------------
 /// Publish (basic_publish) a message to the RabbitMQ broker.
-void
+int
 sam_msg_rabbitmq_publish (
     sam_msg_rabbitmq_t *self,
     sam_msg_rabbitmq_message_t *msg)
@@ -444,8 +455,17 @@ sam_msg_rabbitmq_publish (
         NULL,                                 // properties
         msg_bytes);                           // body
 
+    if (rc == AMQP_STATUS_HEARTBEAT_TIMEOUT) {
+        sam_log_error (
+            self->logger,
+            "connection lost while publishing!");
+        zsock_send (self->psh, "i", SAM_MSG_RES_CONNECTION_LOSS);
+        return -1;
+    }
+
     assert (rc == 0);
     self->amqp.seq += 1;
+    return rc;
 }
 
 
@@ -501,7 +521,10 @@ sam_msg_rabbitmq_start (
         (*self)->logger, "generated req/rep endpoint: %s", rep_endpoint);
 
     (*self)->rep = zsock_new_rep (rep_endpoint);
+    assert ((*self)->rep);
+
     (*self)->psh = zsock_new_push (pll_endpoint);
+    assert ((*self)->psh);
 
     // change ownership
     backend->self = *self;
@@ -574,7 +597,8 @@ sam_msg_rabbitmq_test ()
         .payload_len = 5
     };
 
-    sam_msg_rabbitmq_publish (rabbit, &msg);
+    int rc = sam_msg_rabbitmq_publish (rabbit, &msg);
+    assert (rc == 0);
 
     zmq_pollitem_t items = {
         .socket = NULL,
@@ -585,7 +609,7 @@ sam_msg_rabbitmq_test ()
 
     // wait for ack to arrive
     sam_log_trace (rabbit->logger, "waiting for ACK");
-    int rc = zmq_poll (&items, 1, 500);
+    rc = zmq_poll (&items, 1, 500);
     assert (rc == 1);
 
     // TODO: this must either be removed
@@ -607,15 +631,11 @@ sam_msg_rabbitmq_test ()
     assert (!rabbit);
 
     // send publishing request
-    char *amqp_message_payload = "hi!";
-    char *amqp_message_exch = "amq.direct";
-    char *amqp_message_rkey = "";
-
     sam_msg_rabbitmq_message_t amqp_message = {
-        .exchange = amqp_message_exch,
-        .routing_key = amqp_message_rkey,
-        .payload = (byte *) amqp_message_payload,
-        .payload_len = strlen (amqp_message_payload)
+        .exchange = "amq.direct",
+        .routing_key = "",
+        .payload = (byte *) "hi!",
+        .payload_len = 4
     };
 
     zsock_send (

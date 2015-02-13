@@ -9,7 +9,8 @@ typedef enum {
 
 /// response types
 typedef enum {
-    SAM_MSG_RES_ACK
+    SAM_MSG_RES_ACK,
+    SAM_MSG_RES_CONNECTION_LOSS
 } sam_msg_res_t;
 
 

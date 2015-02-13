@@ -24,8 +24,15 @@
 
 #define UU __attribute__((unused))
 
+
 // shared config, TODO: put into config file (#32)
 #define SAM_LOG_ENDPOINT "inproc://log"
+
+
+// don't define these to show all log levels
+// #define LOG_THRESHOLD_TRACE   // show info + error
+// #define LOG_THRESHOLD_INFO    // only show error
+// #define LOG_THRESHOLD_ERROR   // disable logging
 
 
 #include <czmq.h>
@@ -40,5 +47,7 @@
 #include "sam_logger.h"
 #include "sam_msg.h"
 #include "sam_msg_rabbitmq.h"
+
+#include "playground.h"  // to be removed (#40)
 
 #endif
