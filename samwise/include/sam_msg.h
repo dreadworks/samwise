@@ -3,7 +3,9 @@
 
 /// request types
 typedef enum {
-    SAM_MSG_REQ_PUBLISH
+    SAM_MSG_REQ_PUBLISH,
+    SAM_MSG_REQ_EXCH_DECLARE,
+    SAM_MSG_REQ_EXCH_DELETE
 } sam_msg_req_t;
 
 

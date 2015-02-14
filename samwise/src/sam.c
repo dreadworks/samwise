@@ -40,7 +40,8 @@ main (void)
     sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
 
     signal (SIGABRT, sigabrt);
-    playground_publish_loop ();
+    //playground_publish_loop ();
+    sam_msg_rabbitmq_test ();
 
     zclock_sleep (10);
     sam_log_destroy (&log);

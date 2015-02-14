@@ -83,7 +83,7 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
     struct timeval timeout = { .tv_sec = 0, .tv_usec = 0 };
 
     int rc = amqp_simple_wait_frame_noblock (
-        self->amqp.conn, &frame, &timeout);
+        self->amqp.connection, &frame, &timeout);
 
     if (frame.frame_type == AMQP_FRAME_HEARTBEAT) {
         sam_log_trace (self->logger, "registered heartbeat (outer)");
@@ -91,17 +91,14 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 
     while (rc != AMQP_STATUS_TIMEOUT) {
         check_amqp_ack_frame (self, frame);
-
-        sam_log_tracef (
-            self->logger, "received frame on channel %d", frame.channel);
-
         amqp_basic_ack_t *props = frame.payload.method.decoded;
         assert (props);
 
+        sam_log_trace (self->logger, "received ack");
         zsock_send (self->psh, "ii", SAM_MSG_RES_ACK, props->delivery_tag);
 
         rc = amqp_simple_wait_frame_noblock (
-            self->amqp.conn, &frame, &timeout);
+            self->amqp.connection, &frame, &timeout);
 
         if (frame.frame_type == AMQP_FRAME_HEARTBEAT) {
             sam_log_trace (self->logger, "registered heartbeat (inner)");
@@ -298,7 +295,7 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
 int
 sam_msg_rabbitmq_sockfd (sam_msg_rabbitmq_t *self)
 {
-    return amqp_get_sockfd (self->amqp.conn);
+    return amqp_get_sockfd (self->amqp.connection);
 }
 
 
@@ -320,11 +317,10 @@ sam_msg_rabbitmq_new ()
 
     // init amqp
     self->amqp.seq = 1;
-    self->amqp.chan = 1;
-    self->amqp.conn = amqp_new_connection ();
-    self->amqp.sock = amqp_tcp_socket_new (self->amqp.conn);
-
-    self->amqp.connected = false;
+    self->amqp.message_channel = 1;
+    self->amqp.method_channel = 2;
+    self->amqp.connection = amqp_new_connection ();
+    self->amqp.socket = amqp_tcp_socket_new (self->amqp.connection);
 
     return self;
 }
@@ -342,17 +338,21 @@ sam_msg_rabbitmq_destroy (sam_msg_rabbitmq_t **self)
 
     sam_logger_destroy (&(*self)->logger);
 
-    // close amqp connection
-    try (*self, "closing channel", amqp_channel_close (
-             (*self)->amqp.conn,
-             (*self)->amqp.chan,
+    try (*self, "closing message channel", amqp_channel_close (
+             (*self)->amqp.connection,
+             (*self)->amqp.message_channel,
+             AMQP_REPLY_SUCCESS));
+
+    try (*self, "closing method channel", amqp_channel_close (
+             (*self)->amqp.connection,
+             (*self)->amqp.method_channel,
              AMQP_REPLY_SUCCESS));
 
     try (*self, "closing connection", amqp_connection_close (
-             (*self)->amqp.conn,
+             (*self)->amqp.connection,
              AMQP_REPLY_SUCCESS));
 
-    int rc = amqp_destroy_connection ((*self)->amqp.conn);
+    int rc = amqp_destroy_connection ((*self)->amqp.connection);
     assert (rc >= 0);
 
     free (*self);
@@ -373,7 +373,7 @@ sam_msg_rabbitmq_connect (
         self->logger, "connecting to %s:%d", opts->host, opts->port);
 
     int rc = amqp_socket_open (
-        self->amqp.sock,
+        self->amqp.socket,
         opts->host,
         opts->port);
 
@@ -382,7 +382,7 @@ sam_msg_rabbitmq_connect (
     // login
     sam_log_tracef (self->logger, "logging in as user '%s'", opts->user);
     try(self, "logging in", amqp_login(
-            self->amqp.conn,         // state
+            self->amqp.connection,   // state
             "/",                     // vhost
             0,                       // channel max
             AMQP_DEFAULT_FRAME_SIZE, // frame max
@@ -391,11 +391,33 @@ sam_msg_rabbitmq_connect (
             opts->user,
             opts->pass));
 
-    // opening channel
-    sam_log_tracef (self->logger, "opening channel %d", self->amqp.chan);
-    amqp_channel_open (self->amqp.conn, self->amqp.chan);
-    try (self, "opening channel", amqp_get_rpc_reply (self->amqp.conn));
-    self->amqp.connected = true;
+    // message channel
+    sam_log_tracef (
+        self->logger,
+        "opening message channel (%d)",
+        self->amqp.message_channel);
+
+    amqp_channel_open (
+        self->amqp.connection,
+        self->amqp.message_channel);
+
+    try (self,
+         "opening message channel",
+         amqp_get_rpc_reply (self->amqp.connection));
+
+    // method channel
+    sam_log_tracef (
+        self->logger,
+        "opening method channel (%d)",
+        self->amqp.method_channel);
+
+    amqp_channel_open (
+        self->amqp.connection,
+        self->amqp.method_channel);
+
+    try (self,
+         "opening method channel",
+         amqp_get_rpc_reply (self->amqp.connection));
 
     // enable publisher confirms
     sam_log_trace (self->logger, "set channel in confirm mode");
@@ -403,8 +425,8 @@ sam_msg_rabbitmq_connect (
     req.nowait = 0;
 
     amqp_simple_rpc_decoded(
-        self->amqp.conn,               // state
-        self->amqp.chan,               // channel
+        self->amqp.connection,         // state
+        self->amqp.message_channel,    // channel
         AMQP_CONFIRM_SELECT_METHOD,    // request id
         AMQP_CONFIRM_SELECT_OK_METHOD, // reply id
         &req);                         // request options
@@ -412,18 +434,8 @@ sam_msg_rabbitmq_connect (
     try (
         self,
         "enable publisher confirms",
-        amqp_get_rpc_reply(self->amqp.conn));
+        amqp_get_rpc_reply(self->amqp.connection));
 
-}
-
-
-//  --------------------------------------------------------------------------
-/// Returns a boolean indicating the connection status.
-/// TODO (#34)
-bool
-sam_msg_rabbitmq_connected (sam_msg_rabbitmq_t *self)
-{
-    return self->amqp.connected;
 }
 
 
@@ -446,8 +458,8 @@ sam_msg_rabbitmq_publish (
         msg->payload_len);
 
     int rc = amqp_basic_publish (
-        self->amqp.conn,                      // connection state
-        self->amqp.chan,                      // virtual connection
+        self->amqp.connection,                // connection state
+        self->amqp.message_channel,           // virtual connection
         amqp_cstring_bytes(msg->exchange),    // exchange name
         amqp_cstring_bytes(msg->routing_key), // routing key
         0,                                    // mandatory
@@ -480,7 +492,7 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
     struct timeval timeout = { .tv_sec = 0, .tv_usec = 0 };
 
     int rc = amqp_simple_wait_frame_noblock (
-        self->amqp.conn, &frame, &timeout);
+        self->amqp.connection, &frame, &timeout);
 
     int ack_c = 0;
 
@@ -488,7 +500,7 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
         check_amqp_ack_frame (self, frame);
 
         rc = amqp_simple_wait_frame_noblock (
-            self->amqp.conn, &frame, &timeout);
+            self->amqp.connection, &frame, &timeout);
 
         ack_c += 1;
     }
@@ -572,19 +584,15 @@ sam_msg_rabbitmq_test ()
     sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new ();
     assert (rabbit);
 
-    bool connected = sam_msg_rabbitmq_connected (rabbit);
-    assert (!connected);
-
     sam_msg_rabbitmq_opts_t opts = {
         .host = "localhost",
         .port = 5672,
         .user = "guest",
-        .pass = "guest"
+        .pass = "guest",
+        .heartbeat = 1
     };
 
     sam_msg_rabbitmq_connect (rabbit, &opts);
-    connected = sam_msg_rabbitmq_connected (rabbit);
-    assert (connected);
 
     //
     //   SYNCHRONOUS COMMUNICATION

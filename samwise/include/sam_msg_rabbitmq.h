@@ -26,10 +26,10 @@ typedef struct sam_msg_rabbitmq_t {
     sam_logger_t *logger;                 ///< logger instance
 
     struct {                              ///< amqp connection
-        bool connected;
-        amqp_connection_state_t conn;
-        amqp_socket_t *sock;
-        int chan;
+        amqp_connection_state_t connection;
+        amqp_socket_t *socket;
+        int message_channel;
+        int method_channel;
         int seq;
     } amqp;
 
@@ -88,15 +88,6 @@ void
 sam_msg_rabbitmq_connect (
     sam_msg_rabbitmq_t *self,
     sam_msg_rabbitmq_opts_t *opts);
-
-
-//  --------------------------------------------------------------------------
-/// @brief Returns a boolean indicating the connection status
-/// @param self A msg_rabbitmq instance
-/// @return True if connected, otherwise false
-bool
-sam_msg_rabbitmq_connected (
-    sam_msg_rabbitmq_t *self);
 
 
 //  --------------------------------------------------------------------------

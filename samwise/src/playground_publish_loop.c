@@ -142,6 +142,10 @@ playground_publish_loop ()
         .backend = NULL
     };
 
+    sam_log_trace (state.logger, "logging trace");
+    sam_log_info (state.logger, "logging info");
+    sam_log_error (state.logger, "logging error");
+
     sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new ();
     sam_msg_rabbitmq_opts_t opts = {
         .host = "localhost",

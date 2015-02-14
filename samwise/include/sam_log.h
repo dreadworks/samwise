@@ -141,7 +141,7 @@ sam_log_test ();
 //
 // TRACE LOGGING
 //
-#if defined(LOG_THRESHOLD_TRACE)
+#if defined(LOG_THRESHOLD_TRACE) || defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_ERROR)
     #define sam_log_trace(logger, msg)
     #define sam_log_tracef(logger, msg, ...)
 
@@ -162,7 +162,6 @@ sam_log_test ();
     #define sam_log_infof(logger, msg, ...)
 
 #else
-
     #define sam_log_info(logger, msg)                     \
         sam_logger_send (logger, SAM_LOG_LVL_INFO, msg);
     #define sam_log_infof(logger, msg, ...)                             \
@@ -174,12 +173,11 @@ sam_log_test ();
 //
 // ERROR LOGGING
 //
-#if defined(LOG_THRESHOLD_ERROR) || defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_TRACE)
+#if defined(LOG_THRESHOLD_ERROR)
     #define sam_log_error(logger, msg)
     #define sam_log_errorf(logger, msg, ...)
 
 #else
-
     #define sam_log_error(logger, msg)                    \
         sam_logger_send (logger, SAM_LOG_LVL_ERROR, msg);
     #define sam_log_errorf(logger, msg, ...)                            \
