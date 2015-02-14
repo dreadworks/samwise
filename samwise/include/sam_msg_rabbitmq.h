@@ -35,6 +35,7 @@ typedef struct sam_msg_rabbitmq_t {
 
     zsock_t *rep;
     zsock_t *psh;
+    zmq_pollitem_t *amqp_pollitem;
 
 } sam_msg_rabbitmq_t;
 
@@ -48,7 +49,6 @@ typedef struct sam_msg_rabbitmq_message_t {
 } sam_msg_rabbitmq_message_t;
 
 
-/// structured connection options
 typedef struct sam_msg_rabbitmq_opts_t {
     char *host;
     int  port;
@@ -106,6 +106,28 @@ sam_msg_rabbitmq_publish (
 void
 sam_msg_rabbitmq_handle_ack (
     sam_msg_rabbitmq_t *self);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Declare an exchange
+/// @param self A msg_rabbitmq instance
+/// @param exchange Name of the exchange
+/// @param type One of the AMQ-exchange types
+void
+sam_msg_rabbitmq_exchange_declare (
+    sam_msg_rabbitmq_t *self,
+    const char *exchange,
+    const char *type);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Delete an exchange
+/// @param self A msg_rabbitmq instance
+/// @param exchange Name of the exchange
+void
+sam_msg_rabbitmq_exchange_delete (
+    sam_msg_rabbitmq_t *self,
+    const char *exchange);
 
 
 //  --------------------------------------------------------------------------

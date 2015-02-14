@@ -113,7 +113,7 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 /// Callback for communication arriving on the REP socket. Most of the
 /// time, these are publishing requests. It also handles RPC calls.
 static int
-handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
+handle_req (zloop_t *loop, zsock_t *rep, void *args)
 {
     sam_msg_rabbitmq_t *self = args;
 
@@ -122,29 +122,58 @@ handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
 
     zsock_recv (rep, "im", &req_t, &msg);
 
-    if (req_t != SAM_MSG_REQ_PUBLISH) {
+    int rc = 0;
+    if (req_t == SAM_MSG_REQ_EXCH_DECLARE) {
+        sam_log_info (self->logger, "req: declare exchange");
+
+        char
+            *exchange = zmsg_popstr (msg),
+            *type = zmsg_popstr (msg);
+
+        sam_msg_rabbitmq_exchange_declare (self, exchange, type);
+        zsock_signal (rep, 0);
+
+        free (exchange);
+        free (type);
+        rc = handle_amqp (loop, self->amqp_pollitem, self);
+    }
+
+    else if (req_t == SAM_MSG_REQ_EXCH_DELETE) {
+        sam_log_info (self->logger, "req: delete exchange");
+        char *exchange = zmsg_popstr (msg);
+
+        sam_msg_rabbitmq_exchange_delete (self, exchange);
+        zsock_signal (rep, 0);
+
+        free(exchange);
+        rc = handle_amqp (loop, self->amqp_pollitem, self);
+    }
+
+    else if (req_t == SAM_MSG_REQ_PUBLISH) {
+        sam_log_trace (self->logger, "req: publishing");
+        zframe_t *msg_data = zmsg_pop (msg);
+        assert (msg_data);
+
+        sam_msg_rabbitmq_message_t *amqp_msg =
+            *((void **) zframe_data (msg_data));
+        assert (amqp_msg);
+
+        zsock_send (rep, "i", self->amqp.seq);
+        rc = sam_msg_rabbitmq_publish (self, amqp_msg);
+
+        zframe_destroy (&msg_data);
+    }
+
+    else {
         sam_log_errorf (
             self->logger,
             "req: received unknown command %d",
             req_t);
 
-        return -1;
+        rc = -1;
     }
 
-    sam_log_trace (self->logger, "received publishing request");
-    zframe_t *msg_data = zmsg_pop (msg);
-    assert (msg_data);
-
-    sam_msg_rabbitmq_message_t *amqp_msg =
-        *((void **) zframe_data (msg_data));
-    assert (amqp_msg);
-
-    zsock_send (rep, "i", self->amqp.seq);
-    int rc = sam_msg_rabbitmq_publish (self, amqp_msg);
-
-    zframe_destroy (&msg_data);
     zmsg_destroy (&msg);
-
     return rc;
 }
 
@@ -198,6 +227,7 @@ actor (zsock_t *pipe, void *args)
     };
 
     zloop_t *loop = zloop_new ();
+    self->amqp_pollitem = &amqp_pollitem;
 
     zloop_reader (loop, pipe, handle_pipe, self);
     zloop_reader (loop, self->rep, handle_req, self);
@@ -510,6 +540,47 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
 
 
 //  --------------------------------------------------------------------------
+///
+void
+sam_msg_rabbitmq_exchange_declare (
+    sam_msg_rabbitmq_t *self,
+    const char *exchange,
+    const char *type)
+{
+    sam_log_infof (
+        self->logger, "declaring exchange '%s' (%s)", exchange, type);
+
+    amqp_exchange_declare (
+        self->amqp.connection,         // connection state
+        self->amqp.method_channel,     // virtual connection
+        amqp_cstring_bytes (exchange), // exchange name
+        amqp_cstring_bytes (type),     // type
+        0,                             // passive
+        0,                             // durable
+        amqp_empty_table);             // arguments
+
+    try (self, "declare exchange", amqp_get_rpc_reply(self->amqp.connection));
+}
+
+
+//  --------------------------------------------------------------------------
+///
+void
+sam_msg_rabbitmq_exchange_delete (
+    sam_msg_rabbitmq_t *self,
+    const char *exchange UU)
+{
+    amqp_exchange_delete (
+        self->amqp.connection,
+        self->amqp.method_channel,
+        amqp_cstring_bytes (exchange),
+        0);
+
+    try (self, "delete exchange", amqp_get_rpc_reply(self->amqp.connection));
+}
+
+
+//  --------------------------------------------------------------------------
 /// Start an actor handling requests asynchronously. Internally, it
 /// starts an zactor with a zloop listening to data on either the
 /// actors pipe, reply socket or the AMQP TCP socket. The provided
@@ -593,11 +664,12 @@ sam_msg_rabbitmq_test ()
     };
 
     sam_msg_rabbitmq_connect (rabbit, &opts);
+    sam_msg_rabbitmq_exchange_declare (rabbit, "x-test", "direct");
+    sam_msg_rabbitmq_exchange_delete (rabbit, "x-test");
 
     //
     //   SYNCHRONOUS COMMUNICATION
     //
-
     sam_msg_rabbitmq_message_t msg = {
         .exchange =  "amq.direct",
         .routing_key = "test",
@@ -637,6 +709,20 @@ sam_msg_rabbitmq_test ()
 
     assert (backend);
     assert (!rabbit);
+
+    // send method request
+    zsock_send (
+        backend->req, "iss",
+        SAM_MSG_REQ_EXCH_DECLARE,
+        "x-test-async",
+        "direct");
+    zsock_recv (backend->req, "z");
+
+    zsock_send (
+        backend->req, "is",
+        SAM_MSG_REQ_EXCH_DELETE,
+        "x-test-async");
+    zsock_recv (backend->req, "z");
 
     // send publishing request
     sam_msg_rabbitmq_message_t amqp_message = {
