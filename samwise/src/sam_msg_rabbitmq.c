@@ -151,17 +151,22 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
 
     else if (req_t == SAM_MSG_REQ_PUBLISH) {
         sam_log_trace (self->logger, "req: publishing");
-        zframe_t *msg_data = zmsg_pop (msg);
-        assert (msg_data);
 
-        sam_msg_rabbitmq_message_t *amqp_msg =
-            *((void **) zframe_data (msg_data));
-        assert (amqp_msg);
+        char *exchange = zmsg_popstr (msg);
+        char *routing_key = zmsg_popstr (msg);
+        zframe_t *payload = zmsg_pop (msg);
 
         zsock_send (rep, "i", self->amqp.seq);
-        rc = sam_msg_rabbitmq_publish (self, amqp_msg);
+        rc = sam_msg_rabbitmq_publish (
+            self,
+            exchange,
+            routing_key,
+            zframe_data (payload),
+            zframe_size (payload));
 
-        zframe_destroy (&msg_data);
+        free (exchange);
+        free (routing_key);
+        zframe_destroy (&payload);
     }
 
     else {
@@ -474,24 +479,27 @@ sam_msg_rabbitmq_connect (
 int
 sam_msg_rabbitmq_publish (
     sam_msg_rabbitmq_t *self,
-    sam_msg_rabbitmq_message_t *msg)
+    const char *exchange,
+    const char *routing_key,
+    byte *payload,
+    int payload_len)
 {
     amqp_bytes_t msg_bytes = {
-        .len = msg->payload_len,
-        .bytes = (byte *) msg->payload
+        .len = payload_len,
+        .bytes = payload
     };
 
     sam_log_tracef (
         self->logger,
         "publishing message %d of size %d",
         self->amqp.seq,
-        msg->payload_len);
+        payload_len);
 
     int rc = amqp_basic_publish (
         self->amqp.connection,                // connection state
         self->amqp.message_channel,           // virtual connection
-        amqp_cstring_bytes(msg->exchange),    // exchange name
-        amqp_cstring_bytes(msg->routing_key), // routing key
+        amqp_cstring_bytes(exchange),         // exchange name
+        amqp_cstring_bytes(routing_key),      // routing key
         0,                                    // mandatory
         0,                                    // immediate
         NULL,                                 // properties
@@ -670,14 +678,9 @@ sam_msg_rabbitmq_test ()
     //
     //   SYNCHRONOUS COMMUNICATION
     //
-    sam_msg_rabbitmq_message_t msg = {
-        .exchange =  "amq.direct",
-        .routing_key = "test",
-        .payload = (byte *) "test",
-        .payload_len = 5
-    };
+    int rc = sam_msg_rabbitmq_publish (
+        rabbit, "amq.direct", "", (byte *) "hi!", 3);
 
-    int rc = sam_msg_rabbitmq_publish (rabbit, &msg);
     assert (rc == 0);
 
     zmq_pollitem_t items = {
@@ -724,18 +727,11 @@ sam_msg_rabbitmq_test ()
         "x-test-async");
     zsock_recv (backend->req, "z");
 
-    // send publishing request
-    sam_msg_rabbitmq_message_t amqp_message = {
-        .exchange = "amq.direct",
-        .routing_key = "",
-        .payload = (byte *) "hi!",
-        .payload_len = 4
-    };
-
     zsock_send (
-        backend->req, "ip",
+        backend->req, "isss",
         SAM_MSG_REQ_PUBLISH,
-        &amqp_message);
+        "amq.direct", "",
+        "hi!");
 
     // wait for sequence number
     int seq;

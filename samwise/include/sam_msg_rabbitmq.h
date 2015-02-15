@@ -40,15 +40,6 @@ typedef struct sam_msg_rabbitmq_t {
 } sam_msg_rabbitmq_t;
 
 
-/// structured message data
-typedef struct sam_msg_rabbitmq_message_t {
-    const char *exchange;
-    const char *routing_key;
-    const byte *payload;
-    const int payload_len;
-} sam_msg_rabbitmq_message_t;
-
-
 typedef struct sam_msg_rabbitmq_opts_t {
     char *host;
     int  port;
@@ -97,7 +88,10 @@ sam_msg_rabbitmq_connect (
 int
 sam_msg_rabbitmq_publish (
     sam_msg_rabbitmq_t *self,
-    sam_msg_rabbitmq_message_t *msg);
+    const char *exchange,
+    const char *routing_key,
+    byte *payload,
+    int payload_len);
 
 
 //  --------------------------------------------------------------------------

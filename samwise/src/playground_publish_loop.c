@@ -44,18 +44,16 @@ publishing_burst (zsock_t *pipe, void *args)
     zsock_t *req = args;
     sam_logger_t *logger = sam_logger_new ("burst", SAM_LOG_ENDPOINT);
 
-    static sam_msg_rabbitmq_message_t amqp_message = {
-        .exchange = "amq.direct",
-        .routing_key = "",
-        .payload = (byte *) "hi!",
-        .payload_len = 4
-    };
-
     sam_log_info (logger, "starting publishing burst");
     int64_t start_time = zclock_mono ();
     int p_c = 0;
     for (; p_c < BURST; p_c++) {
-        zsock_send (req, "ip", SAM_MSG_REQ_PUBLISH, &amqp_message);
+
+        zsock_send (
+            req, "iss",
+            SAM_MSG_REQ_PUBLISH,
+            "amq.direct", "",
+            "hi!");
 
         int seq;
         zsock_recv (req, "i", &seq);

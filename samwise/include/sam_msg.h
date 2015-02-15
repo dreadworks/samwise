@@ -16,6 +16,13 @@ typedef enum {
 } sam_msg_res_t;
 
 
+
+typedef struct sam_msg_t {
+    sam_logger_t *logger;
+    zactor_t *actor;
+} sam_msg_t;
+
+
 /// return type for "start" functions
 /// of different message backends
 typedef struct sam_msg_backend_t {
@@ -23,3 +30,23 @@ typedef struct sam_msg_backend_t {
     zsock_t *req;
     zactor_t *actor;
 } sam_msg_backend_t;
+
+
+//  --------------------------------------------------------------------------
+/// @brief Creates a new sam_msg instance
+/// @return Handle for inter thread communication
+sam_msg_t *
+sam_msg_new ();
+
+
+//  --------------------------------------------------------------------------
+/// @brief Save and publish a message
+void
+sam_msg_destroy (
+    sam_msg_t **self);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Self test this class
+void
+sam_msg_test ();

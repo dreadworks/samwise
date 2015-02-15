@@ -27,7 +27,7 @@ sigabrt (int signo UU)
     sam_logger_t *logger = sam_logger_new ("sigabrt", SAM_LOG_ENDPOINT);
     sam_log_error (logger, "catched SIGABRT");
     sam_logger_destroy (&logger);
-    zclock_sleep (500);
+    zclock_sleep (10);
 }
 
 
@@ -40,10 +40,15 @@ main (void)
     sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
 
     signal (SIGABRT, sigabrt);
-    //playground_publish_loop ();
-    sam_msg_rabbitmq_test ();
 
-    zclock_sleep (10);
+    // playground
+    //playground_publish_loop ();
+
+    // tests
+    sam_msg_rabbitmq_test ();
+    //sam_msg_test ();
+
+    zclock_sleep (100);
     sam_log_destroy (&log);
     return 0;
 }
