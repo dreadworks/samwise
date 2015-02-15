@@ -91,7 +91,8 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
         assert (props);
 
         sam_log_trace (self->logger, "received ack");
-        zsock_send (self->psh, "ii", SAM_MSG_RES_ACK, props->delivery_tag);
+        zsock_send (
+            self->psh, "iii", self->id, SAM_MSG_RES_ACK, props->delivery_tag);
 
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.connection, &frame, &timeout);
@@ -123,7 +124,7 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
             *type = zmsg_popstr (msg);
 
         sam_msg_rabbitmq_exchange_declare (self, exchange, type);
-        zsock_signal (rep, 0);
+        zsock_send (rep, "i", self->id);
 
         free (exchange);
         free (type);
@@ -135,7 +136,7 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
         char *exchange = zmsg_popstr (msg);
 
         sam_msg_rabbitmq_exchange_delete (self, exchange);
-        zsock_signal (rep, 0);
+        zsock_send (rep, "i", self->id);
 
         free(exchange);
         rc = handle_amqp (loop, self->amqp_pollitem, self);
@@ -332,10 +333,10 @@ sam_msg_rabbitmq_sockfd (sam_msg_rabbitmq_t *self)
 /// function creates an AMQP connection state and initializes a TCP
 /// socket for the broker connection.
 sam_msg_rabbitmq_t *
-sam_msg_rabbitmq_new ()
+sam_msg_rabbitmq_new (unsigned int id)
 {
     sam_logger_t *logger = sam_logger_new ("msg_rabbitmq", SAM_LOG_ENDPOINT);
-    sam_log_info (logger, "creating rabbitmq message backend instance");
+    sam_log_infof (logger, "creating rabbitmq message backend (%d)", id);
 
     sam_msg_rabbitmq_t *self = malloc (sizeof (sam_msg_rabbitmq_t));
     assert (self);
@@ -349,6 +350,7 @@ sam_msg_rabbitmq_new ()
     self->amqp.connection = amqp_new_connection ();
     self->amqp.socket = amqp_tcp_socket_new (self->amqp.connection);
 
+    self->id = id;
     return self;
 }
 
@@ -652,7 +654,8 @@ sam_msg_rabbitmq_test ()
 {
     printf ("\n** SAM_MSG_RABBIT **\n");
 
-    sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new ();
+    int id = 0;
+    sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new (id);
     assert (rabbit);
 
     sam_msg_rabbitmq_opts_t opts = {
@@ -711,13 +714,19 @@ sam_msg_rabbitmq_test ()
         SAM_MSG_REQ_EXCH_DECLARE,
         "x-test-async",
         "direct");
-    zsock_recv (backend->req, "z");
+
+    int backend_id;
+    zsock_recv (backend->req, "i", &backend_id);
+    assert (backend_id == id);
 
     zsock_send (
         backend->req, "is",
         SAM_MSG_REQ_EXCH_DELETE,
         "x-test-async");
-    zsock_recv (backend->req, "z");
+
+    backend_id = -1;
+    zsock_recv (backend->req, "i", &backend_id);
+    assert (backend_id == id);
 
     zsock_send (
         backend->req, "isss",
@@ -733,7 +742,10 @@ sam_msg_rabbitmq_test ()
     // wait for ack
     int ack_seq;
     sam_msg_res_t res_t;
-    zsock_recv (pll, "ii", &res_t, &ack_seq);
+
+    backend_id = -1;
+    zsock_recv (pll, "iii", &backend_id, &res_t, &ack_seq);
+    assert (backend_id == id);
     assert (res_t == SAM_MSG_RES_ACK);
     assert (ack_seq == seq);
 

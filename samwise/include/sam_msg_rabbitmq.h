@@ -22,6 +22,7 @@
 
 /// the msg_rabbitmq state
 typedef struct sam_msg_rabbitmq_t {
+    unsigned int id;
 
     sam_logger_t *logger;                 ///< logger instance
 
