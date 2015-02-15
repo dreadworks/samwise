@@ -45,8 +45,8 @@ main (void)
     //playground_publish_loop ();
 
     // tests
-    sam_msg_rabbitmq_test ();
-    //sam_msg_test ();
+    // sam_msg_rabbitmq_test ();
+    sam_msg_test ();
 
     zclock_sleep (100);
     sam_log_destroy (&log);
