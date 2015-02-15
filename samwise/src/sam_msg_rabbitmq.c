@@ -85,10 +85,6 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
     int rc = amqp_simple_wait_frame_noblock (
         self->amqp.connection, &frame, &timeout);
 
-    if (frame.frame_type == AMQP_FRAME_HEARTBEAT) {
-        sam_log_trace (self->logger, "registered heartbeat (outer)");
-    }
-
     while (rc != AMQP_STATUS_TIMEOUT) {
         check_amqp_ack_frame (self, frame);
         amqp_basic_ack_t *props = frame.payload.method.decoded;
@@ -99,10 +95,6 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.connection, &frame, &timeout);
-
-        if (frame.frame_type == AMQP_FRAME_HEARTBEAT) {
-            sam_log_trace (self->logger, "registered heartbeat (inner)");
-        }
     }
 
     return 0;
