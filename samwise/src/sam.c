@@ -27,7 +27,7 @@ sam_new ()
     sam_t *self = malloc (sizeof (sam_t));
     assert (self);
 
-    self->logger = sam_logger_new (SAM_LOG_ENDPOINT);
+    self->logger = sam_logger_new ("sam", SAM_LOG_ENDPOINT);
     return self;
 }
 
@@ -37,22 +37,23 @@ void
 sam_destroy (sam_t **self)
 {
     assert (*self);
-    sam_logger_destroy ((*self)->logger);
+    sam_logger_destroy (&(*self)->logger);
     *self = NULL;
 }
 
 
 //  --------------------------------------------------------------------------
 int
-sam_config (sam_t *self, const char *conf)
+sam_config (sam_t *self, const char *conf UU)
 {
     sam_log_error (self->logger, "sam_config is not yet implemented");
+    return 0;
 }
 
 
 //  --------------------------------------------------------------------------
 int
-sam_publish (sam_t *self, zmsg_t *msg)
+sam_publish (sam_t *self, zmsg_t *msg UU)
 {
     sam_log_trace (self->logger, "got publishing request");
     return 0;
@@ -64,6 +65,7 @@ int
 sam_stats (sam_t *self)
 {
     sam_log_error (self->logger, "sam_stats is not yet implemented!");
+    return 0;
 }
 
 

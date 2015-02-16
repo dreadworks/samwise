@@ -34,6 +34,17 @@
                      SAM_VERSION_PATCH)
 
 
+
+// don't define these to show all log levels
+// #define LOG_THRESHOLD_TRACE   // show info + error
+// #define LOG_THRESHOLD_INFO    // only show error
+// #define LOG_THRESHOLD_ERROR   // disable logging
+
+
+// TODO implement shared config (#32)
+#define SAM_PUBLIC_ENDPOINT "ipc://samwise"
+
+
 typedef struct sam_t {
     sam_logger_t *logger;
 } sam_t;

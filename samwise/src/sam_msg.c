@@ -110,9 +110,9 @@ sam_msg_destroy (sam_msg_t **self)
 
 
 int
-sam_msg_create_backend (sam_msg_t *self, char *backend, void *opts)
+sam_msg_create_backend (sam_msg_t *self UU, char *backend UU, void *opts UU)
 {
-    
+    return 0;
 }
 
 

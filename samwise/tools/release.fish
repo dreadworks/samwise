@@ -83,7 +83,7 @@ function __release \
   autoscan
   __release_change_configure $vers
 
-  echo "creating Makefile"
+  echo "creating configure"
   autoreconf -iv
 
 end
