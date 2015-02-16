@@ -13,6 +13,15 @@ function __deps_libzmq \
   and make
   and make install
   and popd
+  or begin
+    if [ (basename (pwd)) = "zeromq-4.0.5" ]
+      popd
+    end
+
+    popd
+    echo "installing libzmq failed"
+    return -1
+  end
 
   popd
   rm -rf .tmp
@@ -34,6 +43,15 @@ function __deps_libczmq \
   and make
   and make install
   and popd
+  or begin
+    if [ (basename (pwd)) = "czmq-3.0.0" ]
+      popd
+    end
+
+    popd
+    echo "installing czmq failed"
+    return -1
+  end
 
   popd
   rm -rf .tmp
@@ -56,6 +74,11 @@ function __deps_librabbitmq \
   and cmake "-DCMAKE_INSTALL_PREFIX=$dir" ..
   and cmake --build . --target install
   and find "$dir" -name "librabbitmq.so*" -exec cp -p -d "{}" "$dir/lib/" \;
+  or begin
+    popd
+    echo "installing rabbitmq-c failed"
+    return -1
+  end
 
   popd
   rm -rf .tmp
@@ -66,7 +89,7 @@ end
 function __deps \
   -a cflags
   echo "resolving dependencies"
-  
+
   if [ "tools" = (basename (pwd)) ]
     echo "moving up to /samwise"
     cd ..
@@ -80,10 +103,20 @@ function __deps \
     rm -rf "$dir"
   end
 
+  if [ -d .tmp ]
+    echo "cleaning up older state"
+    rm -rf .tmp
+  end
+
   mkdir "$dir"
+  mkdir "$dir/lib"
+
+  set -Ux LDFLAGS "-L$dir/lib"
+
   __deps_libzmq "$dir"
-  __deps_libczmq "$dir"
-  __deps_librabbitmq "$dir"
+  and __deps_libczmq "$dir"
+  and __deps_librabbitmq "$dir"
+  or echo "something went wrong, exiting."
 
 end
 
