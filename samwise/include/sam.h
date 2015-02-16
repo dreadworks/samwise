@@ -33,4 +33,55 @@
                      SAM_VERSION_MINOR, \
                      SAM_VERSION_PATCH)
 
+
+typedef struct sam_t {
+    sam_logger_t *logger;
+} sam_t;
+
+
+
+//  --------------------------------------------------------------------------
+/// @brief Create a new instance of samwise
+/// @return A freshly allocated sam instance
+sam_t *
+sam_new ();
+
+
+//  --------------------------------------------------------------------------
+/// @brief Ends all processes and free's all allocated memory
+/// @return A freshly allocated sam instance
+void
+sam_destroy (
+    sam_t **self);
+
+
+//  --------------------------------------------------------------------------
+/// @brief (Re)load configuration file
+/// @param conf Location of the configuration file
+/// @return 0 in case of success, -1 in case of error
+int
+sam_config (
+    sam_t *self,
+    const char *conf);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Publish a (content/method) -message to some backend
+/// @param self A sam instance
+/// @param msg Message containing backend type, distribution etc.
+/// @return The calculated delay in ms or -1 in case of error
+int
+sam_publish (
+    sam_t *self,
+    zmsg_t *msg);
+
+
+
+//  --------------------------------------------------------------------------
+/// @brief TODO to be defined
+int
+sam_stats (
+    sam_t *self);
+
+
 #endif

@@ -1,6 +1,6 @@
 /*  =========================================================================
 
-    samwise - reliable message publishing
+    samwise - best effort store and forward message publishing
 
     This Source Code Form is subject to the terms of the MIT
     License. If a copy of the MIT License was not distributed with
@@ -18,6 +18,70 @@
 */
 
 #include "../include/sam_prelude.h"
+
+
+//  --------------------------------------------------------------------------
+sam_t *
+sam_new ()
+{
+    sam_t *self = malloc (sizeof (sam_t));
+    assert (self);
+
+    self->logger = sam_logger_new (SAM_LOG_ENDPOINT);
+    return self;
+}
+
+
+//  --------------------------------------------------------------------------
+void
+sam_destroy (sam_t **self)
+{
+    assert (*self);
+    sam_logger_destroy ((*self)->logger);
+    *self = NULL;
+}
+
+
+//  --------------------------------------------------------------------------
+int
+sam_config (sam_t *self, const char *conf)
+{
+    sam_log_error (self->logger, "sam_config is not yet implemented");
+}
+
+
+//  --------------------------------------------------------------------------
+int
+sam_publish (sam_t *self, zmsg_t *msg)
+{
+    sam_log_trace (self->logger, "got publishing request");
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
+int
+sam_stats (sam_t *self)
+{
+    sam_log_error (self->logger, "sam_stats is not yet implemented!");
+}
+
+
+//  --------------------------------------------------------------------------
+/// Invokes the test functions of all components and finally tests itself.
+void
+sam_test ()
+{
+    // sam_log_test ();
+    // sam_msg_rabbitmq_test ();
+    // sam_msg_test ();
+
+    sam_t *sam = sam_new ();
+    assert (sam);
+
+    sam_destroy (&sam);
+    assert (!sam);
+}
 
 
 // to be removed before shipping. for debugging
@@ -45,8 +109,8 @@ main (void)
     //playground_publish_loop ();
 
     // tests
-    // sam_msg_rabbitmq_test ();
-    sam_msg_test ();
+    sam_msg_rabbitmq_test ();
+    // sam_msg_test ();
 
     zclock_sleep (100);
     sam_log_destroy (&log);
