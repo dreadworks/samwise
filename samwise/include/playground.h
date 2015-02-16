@@ -17,8 +17,13 @@
 
 */
 
+#ifndef __PLAYGROUND_H__
+#define __PLAYGROUND_H__
 
 //  --------------------------------------------------------------------------
 /// @brief Send bursts of messages to the broker.
 void
 playground_publish_loop ();
+
+
+#endif

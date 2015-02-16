@@ -1,12 +1,24 @@
+/*  =========================================================================
 
-// TODO implement sam_msg (#35)
+    sam_msg - message backend maintainer
 
-/// request types
-typedef enum {
-    SAM_MSG_REQ_PUBLISH,
-    SAM_MSG_REQ_EXCH_DECLARE,
-    SAM_MSG_REQ_EXCH_DELETE
-} sam_msg_req_t;
+    This Source Code Form is subject to the terms of the MIT
+    License. If a copy of the MIT License was not distributed with
+    this file, You can obtain one at http://opensource.org/licenses/MIT
+
+
+    =========================================================================
+*/
+/**
+
+   @brief message backend maintainer
+
+   TODO description
+
+*/
+
+#ifndef __SAM_MSG_H__
+#define __SAM_MSG_H__
 
 
 /// response types
@@ -17,6 +29,8 @@ typedef enum {
 
 
 typedef struct sam_msg_state_t {
+    unsigned int backend_c;
+
     sam_logger_t *logger;
     zsock_t *rep;
 } sam_msg_state_t;
@@ -61,6 +75,18 @@ sam_msg_destroy (
 /// @param msg Message containing distribution method and payload
 /// @return The calculated delay in ms or -1 in case of error
 int
+sam_msg_create_backend (
+    sam_msg_t *self,
+    char *backend,
+    void *opts);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Save and publish a message
+/// @param self A sam_msg instance
+/// @param msg Message containing distribution method and payload
+/// @return The calculated delay in ms or -1 in case of error
+int
 sam_msg_publish (
     sam_msg_t *self,
     zmsg_t *msg);
@@ -70,3 +96,6 @@ sam_msg_publish (
 /// @brief Self test this class
 void
 sam_msg_test ();
+
+
+#endif
