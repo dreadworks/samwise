@@ -39,38 +39,6 @@ handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
 }
 
 
-//  --------------------------------------------------------------------------
-/// Callback for requests on the actor's PIPE. Only handles interrupts
-/// and termination commands.
-static int
-handle_pipe (zloop_t *loop UU, zsock_t *pipe, void *args)
-{
-    sam_msg_state_t *self = args;
-    zmsg_t *msg = zmsg_recv (pipe);
-
-    if (!msg) {
-        sam_log_info (self->logger, "pipe: interrupted!");
-        return -1;
-    }
-
-    bool term = false;
-    char *cmd = zmsg_popstr (msg);
-    if (!strcmp (cmd, "$TERM")) {
-        sam_log_info (self->logger, "pipe: terminated");
-        term = true;
-    }
-
-    free (cmd);
-    zmsg_destroy (&msg);
-
-    if (term) {
-        return -1;
-    }
-
-    return 0;
-}
-
-
 static void
 actor (zsock_t *pipe, void *args)
 {
@@ -78,7 +46,7 @@ actor (zsock_t *pipe, void *args)
     zloop_t *loop = zloop_new ();
 
     zloop_reader (loop, state->rep, handle_req, state);
-    zloop_reader (loop, pipe, handle_pipe, state);
+    zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
 
     sam_log_info (state->logger, "starting poll loop");
     zsock_signal (pipe, 0);
@@ -142,6 +110,13 @@ sam_msg_destroy (sam_msg_t **self)
 
 
 int
+sam_msg_create_backend (sam_msg_t *self, char *backend, void *opts)
+{
+    
+}
+
+
+int
 sam_msg_publish (sam_msg_t *self, zmsg_t *msg)
 {
     sam_log_trace (self->logger, "publish message");
@@ -160,6 +135,17 @@ sam_msg_test ()
 {
     sam_msg_t *sms = sam_msg_new ("test");
     assert (sms);
+
+    // testing rabbitmq
+    sam_msg_rabbitmq_opts_t rabbitmq_opts = {
+        .host = "localhost",
+        .port = 5672,
+        .user = "guest",
+        .pass = "guest",
+        .heartbeat = 2
+    };
+
+    sam_msg_create_backend (sms, "rabbitmq", &rabbitmq_opts);
 
     // construct publishing message
     zmsg_t *msg = zmsg_new ();

@@ -177,38 +177,6 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
 
 
 //  --------------------------------------------------------------------------
-/// Callback for requests on the actor's PIPE. Only handles interrupts
-/// and termination commands.
-static int
-handle_pipe (zloop_t *loop UU, zsock_t *pipe, void *args)
-{
-    sam_msg_rabbitmq_t *self = args;
-    zmsg_t *msg = zmsg_recv (pipe);
-
-    if (!msg) {
-        sam_log_info (self->logger, "pipe: interrupted!");
-        return -1;
-    }
-
-    bool term = false;
-    char *cmd = zmsg_popstr (msg);
-    if (!strcmp (cmd, "$TERM")) {
-        sam_log_info (self->logger, "pipe: terminated");
-        term = true;
-    }
-
-    free (cmd);
-    zmsg_destroy (&msg);
-
-    if (term) {
-        return -1;
-    }
-
-    return 0;
-}
-
-
-//  --------------------------------------------------------------------------
 /// Entry point for the actor thread. Starts a loop listening on the
 /// PIPE, REP zsock and the AMQP TCP socket.
 static void
@@ -227,7 +195,7 @@ actor (zsock_t *pipe, void *args)
     zloop_t *loop = zloop_new ();
     self->amqp_pollitem = &amqp_pollitem;
 
-    zloop_reader (loop, pipe, handle_pipe, self);
+    zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
     zloop_reader (loop, self->rep, handle_req, self);
     zloop_poller (loop, &amqp_pollitem, handle_amqp, self);
 
