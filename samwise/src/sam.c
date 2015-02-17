@@ -97,24 +97,24 @@ sigabrt (int signo UU)
 }
 
 
-//  --------------------------------------------------------------------------
-/// Main entry function.
-int
-main (void)
-{
-    sam_log_t *log = sam_log_new (SAM_LOG_ENDPOINT);
-    sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
+/* //  -------------------------------------------------------------------------- */
+/* /// Main entry function. */
+/* int */
+/* main (void) */
+/* { */
+/*     sam_log_t *log = sam_log_new (SAM_LOG_ENDPOINT); */
+/*     sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD); */
 
-    signal (SIGABRT, sigabrt);
+/*     signal (SIGABRT, sigabrt); */
 
-    // playground
-    //playground_publish_loop ();
+/*     // playground */
+/*     //playground_publish_loop (); */
 
-    // tests
-    sam_msg_rabbitmq_test ();
-    // sam_msg_test ();
+/*     // tests */
+/*     sam_msg_rabbitmq_test (); */
+/*     // sam_msg_test (); */
 
-    zclock_sleep (100);
-    sam_log_destroy (&log);
-    return 0;
-}
+/*     zclock_sleep (100); */
+/*     sam_log_destroy (&log); */
+/*     return 0; */
+/* } */

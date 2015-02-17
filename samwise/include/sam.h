@@ -34,6 +34,9 @@
                      SAM_VERSION_PATCH)
 
 
+// compiler macros
+#define UU __attribute__((unused))
+
 
 // don't define these to show all log levels
 // #define LOG_THRESHOLD_TRACE   // show info + error
@@ -45,6 +48,18 @@
 #define SAM_PUBLIC_ENDPOINT "ipc://samwise"
 
 
+//
+//  public types
+//
+
+/// The state of a logger
+typedef struct sam_logger_t {
+    zsock_t *psh;            ///< socket pushing log requests
+    char *name;              ///< identifier for the logger
+} sam_logger_t;
+
+
+/// Type for sam instances
 typedef struct sam_t {
     sam_logger_t *logger;
 } sam_t;

@@ -62,13 +62,6 @@ typedef struct sam_log_inner_t {
 } sam_log_inner_t;
 
 
-/// The state of a logger
-typedef struct sam_logger_t {
-    zsock_t *psh;            ///< socket pushing log requests
-    char *name;              ///< identifier for the logger
-} sam_logger_t;
-
-
 // Everything above gets cut. Prevents
 // buffer overflows, since no heap is used.
 #define SAM_LOG_LINE_MAXSIZE 256

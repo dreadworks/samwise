@@ -1,15 +1,14 @@
 
 AM_CFLAGS = -g -Wall -Wextra -pedantic -std=gnu99
-AM_LDFLAGS = -lzmq -lczmq -lrabbitmq
 
-bin_PROGRAMS = sam
-# bin_PROGRAMS = samd
 
-# samd_SOURCES =									\
-#   include/sam.h									\
-# 	src/samd.c
+#
+#  libsam
+#
+lib_LTLIBRARIES = src/libsam.la
+include_HEADERS = include/sam.h
 
-sam_SOURCES =										\
+src_libsam_la_SOURCES =					\
 \
 	include/sam_gen.h							\
 	src/sam_gen.c									\
@@ -30,3 +29,13 @@ sam_SOURCES =										\
 	include/playground.h					\
 	src/playground_publish_loop.c	\
 	src/sam.c
+
+src_libsam_la_LDFLAGS = -lzmq -lczmq -lrabbitmq
+
+
+#
+#  samd
+#
+bin_PROGRAMS = samd
+samd_SOURCES = src/samd.c
+samd_LDADD = src/libsam.la
