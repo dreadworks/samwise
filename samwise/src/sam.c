@@ -20,14 +20,32 @@
 #include "../include/sam_prelude.h"
 
 
+// to be removed before shipping. for debugging
+static void
+sigabrt (int signo UU)
+{
+    sam_logger_t *logger = sam_logger_new ("sigabrt", SAM_LOG_ENDPOINT);
+    sam_log_error (logger, "catched SIGABRT");
+    sam_logger_destroy (&logger);
+    zclock_sleep (10);
+}
+
+
 //  --------------------------------------------------------------------------
 sam_t *
 sam_new ()
 {
+    signal (SIGABRT, sigabrt); // for debug purposes
+
     sam_t *self = malloc (sizeof (sam_t));
     assert (self);
 
+    // logging
+    self->log = sam_log_new (SAM_LOG_ENDPOINT);
     self->logger = sam_logger_new ("sam", SAM_LOG_ENDPOINT);
+    sam_log_add_handler (
+        self->log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
+
     return self;
 }
 
@@ -37,7 +55,11 @@ void
 sam_destroy (sam_t **self)
 {
     assert (*self);
+
     sam_logger_destroy (&(*self)->logger);
+    sam_log_destroy (&(*self)->log);
+
+    free (*self);
     *self = NULL;
 }
 
@@ -74,9 +96,9 @@ sam_stats (sam_t *self)
 void
 sam_test ()
 {
-    // sam_log_test ();
-    // sam_msg_rabbitmq_test ();
-    // sam_msg_test ();
+    sam_log_test ();
+    sam_msg_rabbitmq_test ();
+    sam_msg_test ();
 
     sam_t *sam = sam_new ();
     assert (sam);
@@ -84,37 +106,3 @@ sam_test ()
     sam_destroy (&sam);
     assert (!sam);
 }
-
-
-// to be removed before shipping. for debugging
-static void
-sigabrt (int signo UU)
-{
-    sam_logger_t *logger = sam_logger_new ("sigabrt", SAM_LOG_ENDPOINT);
-    sam_log_error (logger, "catched SIGABRT");
-    sam_logger_destroy (&logger);
-    zclock_sleep (10);
-}
-
-
-/* //  -------------------------------------------------------------------------- */
-/* /// Main entry function. */
-/* int */
-/* main (void) */
-/* { */
-/*     sam_log_t *log = sam_log_new (SAM_LOG_ENDPOINT); */
-/*     sam_log_add_handler (log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD); */
-
-/*     signal (SIGABRT, sigabrt); */
-
-/*     // playground */
-/*     //playground_publish_loop (); */
-
-/*     // tests */
-/*     sam_msg_rabbitmq_test (); */
-/*     // sam_msg_test (); */
-
-/*     zclock_sleep (100); */
-/*     sam_log_destroy (&log); */
-/*     return 0; */
-/* } */

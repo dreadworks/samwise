@@ -45,22 +45,17 @@
 
 
 // TODO implement shared config (#32)
+#define SAM_LOG_ENDPOINT "inproc://log"
 #define SAM_PUBLIC_ENDPOINT "ipc://samwise"
 
 
-//
-//  public types
-//
-
-/// The state of a logger
-typedef struct sam_logger_t {
-    zsock_t *psh;            ///< socket pushing log requests
-    char *name;              ///< identifier for the logger
-} sam_logger_t;
+// necessary includes
+#include "sam_prelude.h"
 
 
 /// Type for sam instances
 typedef struct sam_t {
+    sam_log_t *log;
     sam_logger_t *logger;
 } sam_t;
 

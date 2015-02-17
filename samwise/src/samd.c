@@ -23,15 +23,17 @@
 
 
 static int
-handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
+handle_req (zloop_t *loop UU, zsock_t *router, void *args)
 {
     sam_t *sam = args;
-    zmsg_t *msg = zmsg_recv (rep);
+    zmsg_t *msg = zmsg_recv (router);
+    sam_log_trace (sam->logger, "received message on router socket");
+
     int delay = sam_publish (sam, msg);
 
     // sleep and return to client
     zclock_sleep (delay);
-    zsock_signal (rep, 0);
+    zsock_signal (router, 0);
 
     return 0;
 }
@@ -39,18 +41,26 @@ handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
 
 int main ()
 {
+    sam_logger_t *logger = sam_logger_new ("samd", SAM_LOG_ENDPOINT);
+
     sam_t *sam = sam_new ();
     assert (sam);
 
-    zsock_t *rep = zsock_new_rep (SAM_PUBLIC_ENDPOINT);
-    assert (rep);
+    zsock_t *router = zsock_new_router (SAM_PUBLIC_ENDPOINT);
+    assert (router);
 
     zloop_t *loop = zloop_new ();
-    zloop_reader (loop, rep, handle_req, sam);
+    zloop_reader (loop, router, handle_req, sam);
+
+    sam_log_info (logger, "starting main event loop");
     zloop_start (loop);
 
+    sam_log_info (logger, "exiting");
     zloop_destroy (&loop);
-    zsock_destroy (&rep);
+    zsock_destroy (&router);
+    sam_logger_destroy (&logger);
+
+    zclock_sleep (100);
     sam_destroy (&sam);
 }
 
