@@ -94,22 +94,5 @@ tramp
 #  CUSTOM
 #
 # these may be changed...
-/samwise/.backup/
-/samwise/sam
-/samwise/.deps/
-/samwise/Makefile
-/samwise/aclocal.m4
-/samwise/autom4te.cache/
-/samwise/autoscan.log
-/samwise/config.h
-/samwise/config.h.in
-/samwise/config.log
-/samwise/config.status
-/samwise/configure.scan
-/samwise/depcomp
-/samwise/install-sh
-/samwise/missing
-/samwise/stamp-h1
-/samwise/TAGS
 /usr/
 /.tags/
