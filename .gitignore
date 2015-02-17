@@ -105,7 +105,6 @@ tramp
 /samwise/config.h.in
 /samwise/config.log
 /samwise/config.status
-/samwise/configure.ac
 /samwise/configure.scan
 /samwise/depcomp
 /samwise/install-sh
