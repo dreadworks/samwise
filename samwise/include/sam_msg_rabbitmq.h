@@ -19,6 +19,9 @@
 
 */
 
+#ifndef __SAM_MSG_RABBIT_H__
+#define __SAM_MSG_RABBIT_H__
+
 
 /// the msg_rabbitmq state
 typedef struct sam_msg_rabbitmq_t {
@@ -48,6 +51,14 @@ typedef struct sam_msg_rabbitmq_opts_t {
     char *pass;
     int heartbeat;
 } sam_msg_rabbitmq_opts_t;
+
+
+/// request types
+typedef enum {
+    SAM_MSG_REQ_PUBLISH,
+    SAM_MSG_REQ_EXCH_DECLARE,
+    SAM_MSG_REQ_EXCH_DELETE
+} sam_msg_req_t;
 
 
 //  --------------------------------------------------------------------------
@@ -149,3 +160,5 @@ sam_msg_rabbitmq_stop (
 void
 sam_msg_rabbitmq_test ();
 
+
+#endif

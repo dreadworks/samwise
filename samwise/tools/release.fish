@@ -33,6 +33,8 @@ function __release_change_configure \
     -e "s|\[BUG-REPORT-ADDRESS\]|$addr|" \
     -e '10i\
 AM_INIT_AUTOMAKE' \
+    -e '12i\
+LT_INIT' \
   < configure.scan > configure.ac
 
 end
@@ -83,7 +85,7 @@ function __release \
   autoscan
   __release_change_configure $vers
 
-  echo "creating Makefile"
+  echo "creating configure"
   autoreconf -iv
 
 end

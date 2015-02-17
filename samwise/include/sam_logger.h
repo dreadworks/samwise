@@ -22,6 +22,13 @@
 #define _SAM_LOGGER_H_
 
 
+/// The state of a logger
+typedef struct sam_logger_t {
+    zsock_t *psh;            ///< socket pushing log requests
+    char *name;              ///< identifier for the logger
+} sam_logger_t;
+
+
 //  --------------------------------------------------------------------------
 /// @brief   Create a new logger instance
 /// @param   endpoint The log facilities endpoint

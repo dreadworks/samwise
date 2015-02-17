@@ -1,6 +1,6 @@
 /*  =========================================================================
 
-    playground - defining entry points for playground code
+    samwise - reliable message publishing
 
     This Source Code Form is subject to the terms of the MIT
     License. If a copy of the MIT License was not distributed with
@@ -11,19 +11,24 @@
 */
 /**
 
-   @brief playground entry points
+   @brief API interface for sam
 
-   This file is going to be removed before shipping (#40)
+   TODO: description
 
 */
 
-#ifndef __PLAYGROUND_H__
-#define __PLAYGROUND_H__
+#ifndef __SAM_GEN_H__
+#define __SAM_GEN_H__
+
 
 //  --------------------------------------------------------------------------
-/// @brief Send bursts of messages to the broker.
-void
-playground_publish_loop ();
+/// @brief Generic pipe handler for zactors reacting to interrupts and $TERM
+/// @return -1 in case of termination, 0 otherwise
+int
+sam_gen_handle_pipe (
+    zloop_t *loop,
+    zsock_t *pipe,
+    void *args);
 
 
 #endif

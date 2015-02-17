@@ -21,20 +21,6 @@
 #ifndef __SAM_PRELUDE_H__
 #define __SAM_PRELUDE_H__
 
-
-#define UU __attribute__((unused))
-
-
-// shared config, TODO: put into config file (#32)
-#define SAM_LOG_ENDPOINT "inproc://log"
-
-
-// don't define these to show all log levels
-// #define LOG_THRESHOLD_TRACE   // show info + error
-// #define LOG_THRESHOLD_INFO    // only show error
-// #define LOG_THRESHOLD_ERROR   // disable logging
-
-
 #include <czmq.h>
 #if CZMQ_VERSION < 20200
 #  error "sam needs at least CZMQ 2.2.0"
@@ -43,10 +29,12 @@
 #include <amqp.h>
 #include <amqp_tcp_socket.h>
 
+#include "sam_gen.h"
 #include "sam_log.h"
 #include "sam_logger.h"
 #include "sam_msg.h"
 #include "sam_msg_rabbitmq.h"
+#include "sam.h"
 
 #include "playground.h"  // to be removed (#40)
 
