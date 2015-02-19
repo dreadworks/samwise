@@ -22,18 +22,42 @@
 
 
 static int
-handle_req (zloop_t *loop UU, zsock_t *rep, void *args)
+handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
 {
     sam_msg_state_t *state = args;
     zmsg_t *msg = zmsg_new ();
-    char *distribution;
+    zframe_t *payload;
+    char
+        *distribution,
+        *exchange,
+        *routing_key;
 
-    zsock_recv (rep, "sm", &distribution, &msg);
-    sam_log_tracef (state->logger, "handle req called (%s)", distribution);
+    zsock_recv (
+        rep, "sssf", &distribution, &exchange, &routing_key, &payload);
+
+    sam_log_tracef (
+        "handle req called, payload size: %d",
+        zframe_size (payload));
+
+    zsock_send (
+        state->backend->req, "issf",
+        SAM_MSG_REQ_PUBLISH,
+        exchange, routing_key,
+        payload);
 
     zsock_send (rep, "i", 0);
 
     free (distribution);
+    zmsg_destroy (&msg);
+    return 0;
+}
+
+
+static int
+handle_backend_req (zloop_t *loop UU, zsock_t *pull, void *args UU)
+{
+    sam_log_trace ("handle backend request");
+    zmsg_t *msg = zmsg_recv (pull);
     zmsg_destroy (&msg);
     return 0;
 }
@@ -45,14 +69,16 @@ actor (zsock_t *pipe, void *args)
     sam_msg_state_t *state = args;
     zloop_t *loop = zloop_new ();
 
-    zloop_reader (loop, state->rep, handle_req, state);
+    zloop_reader (loop, state->actor_rep, handle_actor_req, state);
+    zloop_reader (loop, state->backend_pull, handle_backend_req, state);
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
 
-    sam_log_info (state->logger, "starting poll loop");
+    sam_log_info ("starting poll loop");
     zsock_signal (pipe, 0);
     zloop_start (loop);
+    printf ("EXIT LOOP SAM_MSG\n");
 
-    sam_log_trace (state->logger, "destroying loop");
+    sam_log_trace ("destroying loop");
     zloop_destroy (&loop);
 }
 
@@ -67,23 +93,26 @@ sam_msg_new (const char *name)
     sam_msg_state_t *state = malloc (sizeof (sam_msg_state_t));
     assert (self);
 
-    snprintf (buf, buf_s, "msg_%s", name);
-    self->logger = sam_logger_new (buf, SAM_LOG_ENDPOINT);
+    // actor req/rep
+    snprintf (buf, buf_s, "inproc://msg-actor-%s", name);
+    self->actor_req = zsock_new_req (buf);
+    assert (self->actor_req);
+    state->actor_rep = zsock_new_rep (buf);
+    assert (state->actor_rep);
 
-    snprintf (buf, buf_s, "msg_actor_%s", name);
-    state->logger = sam_logger_new (buf, SAM_LOG_ENDPOINT);
+    // backend pull
+    snprintf (buf, buf_s, "inproc://msg-backend-%s", name);
+    sam_log_tracef ("pull socket at: %s", buf);
+    state->backend_pull = zsock_new_pull (buf);
+    assert (state->backend_pull);
 
-    snprintf (buf, buf_s, "inproc://msg-%s", name);
-    sam_log_tracef (self->logger, "creating req/rep pair at: %s", buf);
+    int buf_len = strlen (buf);
+    self->backend_pull_endpoint = malloc (buf_len + 1);
+    memcpy (self->backend_pull_endpoint, buf, buf_len + 1);
 
-    state->rep = zsock_new_rep (buf);
-    assert (state->rep);
-
-    self->req = zsock_new_req (buf);
-    assert (self->req);
-
+    // actor
     self->actor = zactor_new (actor, state);
-    sam_log_info (self->logger, "created msg instance");
+    sam_log_info ("created msg instance");
 
     self->state = state;
     return self;
@@ -94,14 +123,14 @@ void
 sam_msg_destroy (sam_msg_t **self)
 {
     assert (self);
-    sam_log_info ((*self)->logger, "destroying msg instance");
+    sam_log_info ("destroying msg instance");
     zactor_destroy (&(*self)->actor);
 
-    sam_logger_destroy (&(*self)->logger);
-    sam_logger_destroy (&(*self)->state->logger);
+    zsock_destroy (&(*self)->state->backend_pull);
+    free ((*self)->backend_pull_endpoint);
 
-    zsock_destroy (&(*self)->req);
-    zsock_destroy (&(*self)->state->rep);
+    zsock_destroy (&(*self)->state->actor_rep);
+    zsock_destroy (&(*self)->actor_req);
 
     free ((*self)->state);
     free (*self);
@@ -109,23 +138,48 @@ sam_msg_destroy (sam_msg_t **self)
 }
 
 
-int
-sam_msg_create_backend (sam_msg_t *self UU, char *backend UU, void *opts UU)
+static int
+create_be_rabbitmq (sam_msg_t *self, sam_msg_rabbitmq_opts_t *opts)
 {
+    sam_msg_rabbitmq_opts_t *rabbit_opts = opts;
+    sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new (0); // TODO id
+    assert (rabbit);
+
+    sam_msg_rabbitmq_connect (rabbit, rabbit_opts);
+    self->state->backend =
+        sam_msg_rabbitmq_start (&rabbit, self->backend_pull_endpoint);
+
     return 0;
+}
+
+
+int
+sam_msg_create_backend (sam_msg_t *self, sam_msg_be_t be_type, void *opts)
+{
+    sam_log_infof ("creating backend %d", be_type);
+
+    switch (be_type) {
+    case SAM_MSG_BE_RABBITMQ:
+        return create_be_rabbitmq (self, (sam_msg_rabbitmq_opts_t *) opts);
+
+    default:
+        sam_log_errorf ("unrecognized backend: %d", be_type);
+    }
+
+    return -1;
 }
 
 
 int
 sam_msg_publish (sam_msg_t *self, zmsg_t *msg)
 {
-    sam_log_trace (self->logger, "publish message");
-    zmsg_send (&msg, self->req);
+    sam_log_trace ("publish message");
+    zmsg_send (&msg, self->actor_req);
 
     int rc;
-    sam_log_trace (self->logger, "waiting to receive");
-    zsock_recv (self->req, "i", &rc);
-    sam_log_tracef (self->logger, "received %dms delay", rc);
+    sam_log_trace ("waiting to receive");
+    zsock_recv (self->actor_req, "i", &rc);
+    sam_log_tracef ("received return code %d", rc);
     return rc;
 }
 
@@ -145,24 +199,29 @@ sam_msg_test ()
         .heartbeat = 2
     };
 
-    sam_msg_create_backend (sms, "rabbitmq", &rabbitmq_opts);
+    sam_msg_create_backend (sms, SAM_MSG_BE_RABBITMQ, &rabbitmq_opts);
 
     // construct publishing message
     zmsg_t *msg = zmsg_new ();
     char *str;
     zframe_t *frame;
 
-    // frame 1: distribution type
+    // action
+    str = "publish";
+    frame = zframe_new (str, strlen (str));
+    zmsg_append (msg, &frame);
+
+    // distribution type
     str = "redundant";
     frame = zframe_new (str, strlen (str));
     zmsg_append (msg, &frame);
 
-    // frame 2: exchange name
+    // exchange name
     str = "amq.direct";
     frame = zframe_new (str, strlen (str));
     zmsg_append (msg, &frame);
 
-    // frame 3: payload
+    // payload
     str = "hi!";
     frame = zframe_new (str, strlen (str));
     zmsg_append (msg, &frame);

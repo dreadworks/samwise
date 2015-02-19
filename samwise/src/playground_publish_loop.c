@@ -28,7 +28,6 @@
 
 
 typedef struct state_t {
-    sam_logger_t *logger;
     sam_msg_backend_t *backend;
     zactor_t *burster;
 } state_t;
@@ -42,9 +41,8 @@ publishing_burst (zsock_t *pipe, void *args)
 {
     zsock_signal (pipe, 0);
     zsock_t *req = args;
-    sam_logger_t *logger = sam_logger_new ("burst", SAM_LOG_ENDPOINT);
 
-    sam_log_info (logger, "starting publishing burst");
+    sam_log_info ("starting publishing burst");
     int64_t start_time = zclock_mono ();
     int p_c = 0;
     for (; p_c < BURST; p_c++) {
@@ -57,18 +55,16 @@ publishing_burst (zsock_t *pipe, void *args)
 
         int seq;
         zsock_recv (req, "i", &seq);
-        sam_log_tracef (logger, "received seq %d", seq);
+        sam_log_tracef ("received seq %d", seq);
     }
 
     sam_log_infof (
-        logger,
+        "publish",
         "finished publishing %d messages in %dms",
         BURST,
         zclock_mono () - start_time);
 
     printf ("publishing took %zdms\n", zclock_mono () - start_time);
-
-    sam_logger_destroy (&logger);
 }
 
 
@@ -95,10 +91,8 @@ handle_stdin (zloop_t *loop UU, zmq_pollitem_t *poll_stdin UU, void *args)
 //  --------------------------------------------------------------------------
 /// Callback for msg_rabbitmq answers arriving on the pull socket.
 static int
-handle_pll (zloop_t *loop UU, zsock_t *pll, void *args)
+handle_pll (zloop_t *loop UU, zsock_t *pll, void *args UU)
 {
-    state_t *state = args;
-
     sam_msg_res_t res;
     zmsg_t *msg = zmsg_new ();
 
@@ -110,18 +104,18 @@ handle_pll (zloop_t *loop UU, zsock_t *pll, void *args)
     case SAM_MSG_RES_ACK:
 
         seq = zmsg_popstr (msg);
-        sam_log_tracef (state->logger, "received ACK %s", seq);
+        sam_log_tracef ("received ACK %s", seq);
         free (seq);
 
         break;
 
 
     case SAM_MSG_RES_CONNECTION_LOSS:
-        sam_log_error (state->logger, "received CONNECTION LOSS");
+        sam_log_error ("received CONNECTION LOSS");
         break;
 
     default:
-        sam_log_errorf (state->logger, "received unknown response id: %d", res);
+        sam_log_errorf ("received unknown response id: %d", res);
     }
 
     zmsg_destroy (&msg);
@@ -136,13 +130,8 @@ void
 playground_publish_loop ()
 {
     state_t state = {
-        .logger = sam_logger_new ("publish loop", SAM_LOG_ENDPOINT),
         .backend = NULL
     };
-
-    sam_log_trace (state.logger, "logging trace");
-    sam_log_info (state.logger, "logging info");
-    sam_log_error (state.logger, "logging error");
 
     sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new ();
     sam_msg_rabbitmq_opts_t opts = {
@@ -174,5 +163,4 @@ playground_publish_loop ()
     zsock_destroy (&pll);
 
     sam_msg_rabbitmq_destroy (&rabbit);
-    sam_logger_destroy (&state.logger);
 }

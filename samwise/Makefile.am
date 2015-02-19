@@ -13,8 +13,6 @@ src_libsam_la_SOURCES =					\
 	include/sam_gen.h							\
 	src/sam_gen.c									\
 \
-	include/sam_logger.h					\
-	src/sam_logger.c							\
 	include/sam_log.h							\
 	src/sam_log.c									\
 \

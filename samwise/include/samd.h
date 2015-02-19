@@ -26,7 +26,6 @@
 
 typedef struct samd_t {
     sam_t *sam;
-    sam_logger_t *logger;
     zsock_t *client_rep;
 } samd_t;
 

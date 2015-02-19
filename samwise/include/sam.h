@@ -53,12 +53,9 @@
 #include "sam_prelude.h"
 
 
-/// Type for sam instances
 typedef struct sam_t {
-    sam_log_t *log;
-    sam_logger_t *logger;
+    sam_msg_t *backends;
 } sam_t;
-
 
 
 //  --------------------------------------------------------------------------

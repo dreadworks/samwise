@@ -28,20 +28,9 @@ typedef enum {
 } sam_msg_res_t;
 
 
-typedef struct sam_msg_state_t {
-    unsigned int backend_c;
-
-    sam_logger_t *logger;
-    zsock_t *rep;
-} sam_msg_state_t;
-
-
-typedef struct sam_msg_t {
-    sam_logger_t *logger;
-    zsock_t *req;
-    zactor_t *actor;
-    sam_msg_state_t *state;
-} sam_msg_t;
+typedef enum {
+    SAM_MSG_BE_RABBITMQ
+} sam_msg_be_t;
 
 
 /// return type for "start" functions
@@ -51,6 +40,22 @@ typedef struct sam_msg_backend_t {
     zsock_t *req;
     zactor_t *actor;
 } sam_msg_backend_t;
+
+
+typedef struct sam_msg_state_t {
+    unsigned int backend_c;
+    zsock_t *actor_rep;
+    zsock_t *backend_pull;
+    sam_msg_backend_t *backend;
+} sam_msg_state_t;
+
+
+typedef struct sam_msg_t {
+    zsock_t *actor_req;
+    char *backend_pull_endpoint;
+    zactor_t *actor;
+    sam_msg_state_t *state;
+} sam_msg_t;
 
 
 //  --------------------------------------------------------------------------
@@ -77,7 +82,7 @@ sam_msg_destroy (
 int
 sam_msg_create_backend (
     sam_msg_t *self,
-    char *backend,
+    sam_msg_be_t be_type,
     void *opts);
 
 

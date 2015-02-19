@@ -27,8 +27,6 @@
 typedef struct sam_msg_rabbitmq_t {
     unsigned int id;
 
-    sam_logger_t *logger;                 ///< logger instance
-
     struct {                              ///< amqp connection
         amqp_connection_state_t connection;
         amqp_socket_t *socket;
