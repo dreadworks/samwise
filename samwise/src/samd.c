@@ -20,47 +20,78 @@
 
 #include <czmq.h>
 #include "../include/sam.h"
+#include "../include/samd.h"
 
 
 static int
-handle_req (zloop_t *loop UU, zsock_t *router, void *args)
+handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
 {
-    sam_t *sam = args;
-    zmsg_t *msg = zmsg_recv (router);
-    sam_log_trace (sam->logger, "received message on router socket");
+    samd_t *self = args;
+    zmsg_t *msg = zmsg_recv (client_rep);
 
-    int delay = sam_publish (sam, msg);
+    sam_log_trace (
+        self->logger,
+        "received message on router socket");
 
-    // sleep and return to client
-    zclock_sleep (delay);
-    zsock_signal (router, 0);
-
+    // int rc = sam_publish (self->sam, msg);
+    int rc = 0;
+    zsock_send (client_rep, "i", rc);
     return 0;
+}
+
+
+samd_t *
+samd_new (const char *endpoint)
+{
+    samd_t *self = malloc (sizeof (samd_t));
+    assert (self);
+
+    self->sam = sam_new ();
+    assert (self->sam);
+
+    self->logger = sam_logger_new ("samd", SAM_LOG_ENDPOINT);
+    assert (self->logger);
+
+
+    self->client_rep = zsock_new_rep (endpoint);
+    assert (self->client_rep);
+
+    sam_log_info (self->logger, "created samd");
+    return self;
+}
+
+
+void
+samd_destroy (samd_t **self)
+{
+    sam_log_info ((*self)->logger, "destroying samd");
+    zsock_destroy (&(*self)->client_rep);
+
+    sam_logger_destroy (&(*self)->logger);
+
+    // get remaining log lines :: TODO set linger
+    zclock_sleep (100);
+    sam_destroy (&(*self)->sam);
+
+    free (*self);
+    *self = NULL;
+}
+
+
+void
+samd_start (samd_t *self)
+{
+    zloop_t *loop = zloop_new ();
+    zloop_reader (loop, self->client_rep, handle_req, self);
+
+    zloop_start (loop);
 }
 
 
 int main ()
 {
-    sam_logger_t *logger = sam_logger_new ("samd", SAM_LOG_ENDPOINT);
-
-    sam_t *sam = sam_new ();
-    assert (sam);
-
-    zsock_t *router = zsock_new_router (SAM_PUBLIC_ENDPOINT);
-    assert (router);
-
-    zloop_t *loop = zloop_new ();
-    zloop_reader (loop, router, handle_req, sam);
-
-    sam_log_info (logger, "starting main event loop");
-    zloop_start (loop);
-
-    sam_log_info (logger, "exiting");
-    zloop_destroy (&loop);
-    zsock_destroy (&router);
-    sam_logger_destroy (&logger);
-
-    zclock_sleep (100);
-    sam_destroy (&sam);
+    samd_t *samd = samd_new (SAM_PUBLIC_ENDPOINT);
+    samd_start (samd);
+    samd_destroy (&samd);
 }
 

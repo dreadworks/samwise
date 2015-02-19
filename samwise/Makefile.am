@@ -37,6 +37,9 @@ src_libsam_la_LDFLAGS = -lzmq -lczmq -lrabbitmq
 #  samd
 #
 bin_PROGRAMS = samd
-samd_SOURCES = src/samd.c
+samd_SOURCES =   \
+  include/samd.h \
+  src/samd.c
+
 samd_LDADD = src/libsam.la
 samd_LDFLAGS = -static
