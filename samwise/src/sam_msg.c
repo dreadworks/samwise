@@ -20,12 +20,15 @@
 #include "../include/sam_prelude.h"
 
 
-
+//  --------------------------------------------------------------------------
+/// Callback for events on the internally used req/rep
+/// connection. This function accepts messages crafted as defined by
+/// the protocol to delegate them (based on the distribution method)
+/// to various message backends.
 static int
 handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
 {
     sam_msg_state_t *state = args;
-    zmsg_t *msg = zmsg_new ();
     zframe_t *payload;
     char
         *distribution,
@@ -45,14 +48,25 @@ handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
         exchange, routing_key,
         payload);
 
+    int rc = -1;
+    zsock_recv (state->backend->req, "i", &rc);
+    assert (rc != -1);
+
+    sam_log_tracef ("received seqno %d", rc);
     zsock_send (rep, "i", 0);
 
     free (distribution);
-    zmsg_destroy (&msg);
+    free (exchange);
+    free (routing_key);
+    zframe_destroy (&payload);
+
     return 0;
 }
 
 
+//  --------------------------------------------------------------------------
+/// Demultiplexes acknowledgements arriving on the push/pull
+/// connection wiring the backends to sam_msg.
 static int
 handle_backend_req (zloop_t *loop UU, zsock_t *pull, void *args UU)
 {
@@ -63,6 +77,10 @@ handle_backend_req (zloop_t *loop UU, zsock_t *pull, void *args UU)
 }
 
 
+//  --------------------------------------------------------------------------
+/// The thread encapsulated by sam_msg instances. Starts a loop
+/// listening to the various sockets to multiplex and demultiplex
+/// requests to a backend pool.
 static void
 actor (zsock_t *pipe, void *args)
 {
@@ -76,13 +94,15 @@ actor (zsock_t *pipe, void *args)
     sam_log_info ("starting poll loop");
     zsock_signal (pipe, 0);
     zloop_start (loop);
-    printf ("EXIT LOOP SAM_MSG\n");
 
     sam_log_trace ("destroying loop");
     zloop_destroy (&loop);
 }
 
 
+//  --------------------------------------------------------------------------
+/// Create a new sam_msg instance. It initializes both the sam_msg_t
+/// object and the internally used state object.
 sam_msg_t *
 sam_msg_new (const char *name)
 {
@@ -99,12 +119,13 @@ sam_msg_new (const char *name)
     assert (self->actor_req);
     state->actor_rep = zsock_new_rep (buf);
     assert (state->actor_rep);
+    sam_log_tracef ("created req/rep pair at '%s'", buf);
 
     // backend pull
     snprintf (buf, buf_s, "inproc://msg-backend-%s", name);
-    sam_log_tracef ("pull socket at: %s", buf);
     state->backend_pull = zsock_new_pull (buf);
     assert (state->backend_pull);
+    sam_log_tracef ("created pull socket at '%s'", buf);
 
     int buf_len = strlen (buf);
     self->backend_pull_endpoint = malloc (buf_len + 1);
@@ -119,12 +140,22 @@ sam_msg_new (const char *name)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Destroy the sam_msg_t instance. Also closes all sockets and free's
+/// all memory of the internally used state object.
 void
 sam_msg_destroy (sam_msg_t **self)
 {
     assert (self);
     sam_log_info ("destroying msg instance");
     zactor_destroy (&(*self)->actor);
+
+    // TODO generic tear down
+    sam_msg_backend_t *be = (*self)->state->backend;
+    if (be) {
+        sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_stop (&be);
+        sam_msg_rabbitmq_destroy (&rabbit);
+    }
 
     zsock_destroy (&(*self)->state->backend_pull);
     free ((*self)->backend_pull_endpoint);
@@ -138,6 +169,9 @@ sam_msg_destroy (sam_msg_t **self)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Function to create a sam_msg_rabbitmq instance and transform it
+/// into a generic backend.
 static int
 create_be_rabbitmq (sam_msg_t *self, sam_msg_rabbitmq_opts_t *opts)
 {
@@ -146,6 +180,9 @@ create_be_rabbitmq (sam_msg_t *self, sam_msg_rabbitmq_opts_t *opts)
     assert (rabbit);
 
     sam_msg_rabbitmq_connect (rabbit, rabbit_opts);
+
+    // TODO state MUST NOT be accessed from outside the running thread.
+    // this is part of #44.
     self->state->backend =
         sam_msg_rabbitmq_start (&rabbit, self->backend_pull_endpoint);
 
@@ -153,6 +190,8 @@ create_be_rabbitmq (sam_msg_t *self, sam_msg_rabbitmq_opts_t *opts)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Create a new backend instance based on sam_msg_be_t.
 int
 sam_msg_create_backend (sam_msg_t *self, sam_msg_be_t be_type, void *opts)
 {
@@ -170,20 +209,25 @@ sam_msg_create_backend (sam_msg_t *self, sam_msg_be_t be_type, void *opts)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Delegates a publishing request to the thread.
 int
 sam_msg_publish (sam_msg_t *self, zmsg_t *msg)
 {
     sam_log_trace ("publish message");
     zmsg_send (&msg, self->actor_req);
 
-    int rc;
-    sam_log_trace ("waiting to receive");
+    int rc = -1;
     zsock_recv (self->actor_req, "i", &rc);
+    assert (rc != -1);
+
     sam_log_tracef ("received return code %d", rc);
     return rc;
 }
 
 
+//  --------------------------------------------------------------------------
+/// Self test this class.
 void
 sam_msg_test ()
 {

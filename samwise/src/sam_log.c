@@ -38,12 +38,16 @@ get_lvl_repr (sam_log_lvl_t lvl)
 }
 
 
+
+//  --------------------------------------------------------------------------
+/// Print log line to the designated FILE.
 static void
 out (
     FILE *f,
     sam_log_lvl_t lvl,
-    const char *fac,
-    const char *msg)
+    const char *msg,
+    const char *filename,
+    const int line)
 {
     char date_buf[SAM_LOG_DATE_MAXSIZE];
 
@@ -53,28 +57,32 @@ out (
 
     // format output string
     fprintf (
-        f, "%s [%.*s] (%s): %.*s\n",
+        f, "%s [%.*s:%d] (%s): %.*s\n",
         date_buf,
-        16, fac,
+        16, filename,
+        line,
         get_lvl_repr (lvl),
         SAM_LOG_LINE_MAXSIZE, msg);
 }
 
 
+//  --------------------------------------------------------------------------
+/// This function is used by the preprocessor to replace sam_log_* calls.
 void
 sam_log_ (
     sam_log_lvl_t lvl,
-    const char *fac,
-    const char *msg)
+    const char *msg,
+    const char *filename,
+    const int line)
 {
 
     if (lvl == SAM_LOG_LVL_TRACE || lvl == SAM_LOG_LVL_INFO) {
-        out (stdout, lvl, fac, msg);
+        out (stdout, lvl, msg, filename, line);
         return;
     }
 
     if (lvl == SAM_LOG_LVL_ERROR) {
-        out (stderr, lvl, fac, msg);
+        out (stderr, lvl, msg, filename, line);
         return;
     }
 
@@ -82,20 +90,23 @@ sam_log_ (
 }
 
 
+//  --------------------------------------------------------------------------
+/// This function is used by the preprocessor to replace sam_log_*f calls.
 void
 sam_logf_ (
     sam_log_lvl_t lvl,
-    const char *fac,
     const char *fmt,
+    const char *filename,
+    const int line,
     ...)
 {
     va_list argp;
     char buf [SAM_LOG_LINE_MAXSIZE];
 
-    va_start (argp, fmt);
+    va_start (argp, line);
     vsnprintf (buf, SAM_LOG_LINE_MAXSIZE - 1, fmt, argp);
     buf[SAM_LOG_LINE_MAXSIZE - 1] = 0;
     va_end (argp);
 
-    sam_log_ (lvl, fac, buf);
+    sam_log_ (lvl, buf, filename, line);
 }

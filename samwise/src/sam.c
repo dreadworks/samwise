@@ -21,6 +21,7 @@
 
 
 //  --------------------------------------------------------------------------
+/// Create a new sam instance.
 sam_t *
 sam_new ()
 {
@@ -38,6 +39,8 @@ sam_new ()
 
 
 //  --------------------------------------------------------------------------
+/// Free's all allocated memory and destroys the sam_msg instance if
+/// initialized.
 void
 sam_destroy (sam_t **self)
 {
@@ -53,6 +56,9 @@ sam_destroy (sam_t **self)
 
 
 //  --------------------------------------------------------------------------
+/// Read from a configuration file (TODO #32). Currently just
+/// statically creates a sam_msg instance with one rabbitmq broker
+/// connection.
 int
 sam_init (sam_t *self, const char *conf UU)
 {
@@ -77,11 +83,13 @@ sam_init (sam_t *self, const char *conf UU)
         sam_log_error ("could not create rabbitmq backend");
     }
 
+    sam_log_info ("(re)loaded configuration");
     return 0;
 }
 
 
 //  --------------------------------------------------------------------------
+/// TODO analyze message content before passing it on, part of #7.
 int
 sam_publish (sam_t *self, zmsg_t *msg)
 {
@@ -91,22 +99,10 @@ sam_publish (sam_t *self, zmsg_t *msg)
 
 
 //  --------------------------------------------------------------------------
-int
-sam_stats (sam_t *self UU)
-{
-    sam_log_error ("sam_stats is not yet implemented!");
-    return 0;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Invokes the test functions of all components and finally tests itself.
+/// Self test this class.
 void
 sam_test ()
 {
-    sam_msg_rabbitmq_test ();
-    sam_msg_test ();
-
     sam_t *sam = sam_new ();
     assert (sam);
 

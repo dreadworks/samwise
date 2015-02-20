@@ -27,27 +27,28 @@
 typedef struct sam_msg_rabbitmq_t {
     unsigned int id;
 
-    struct {                              ///< amqp connection
-        amqp_connection_state_t connection;
-        amqp_socket_t *socket;
-        int message_channel;
-        int method_channel;
-        int seq;
+    struct {                                ///< amqp connection
+        amqp_connection_state_t connection; ///< internal connection state
+        amqp_socket_t *socket;              ///< tcp socket holding the conn
+        int message_channel;                ///< channel for messages
+        int method_channel;                 ///< channel for rpc calls
+        int seq;                            ///< incremented number for acks
     } amqp;
 
-    zsock_t *rep;
-    zsock_t *psh;
-    zmq_pollitem_t *amqp_pollitem;
+    zsock_t *rep;                  ///< accepting publish/rpc requests
+    zsock_t *psh;                  ///< pushing ack's as a generic backend
+    zmq_pollitem_t *amqp_pollitem; ///< amqp tcp socket wrapped as pollitem
 
 } sam_msg_rabbitmq_t;
 
 
+/// option set to pass for backend creation
 typedef struct sam_msg_rabbitmq_opts_t {
-    char *host;
-    int  port;
-    char *user;
-    char *pass;
-    int heartbeat;
+    char *host;     ///< hostname, mostly some ip address
+    int  port;      ///< port the broker listens to
+    char *user;     ///< username
+    char *pass;     ///< password
+    int heartbeat;  ///< heartbeat interval in seconds
 } sam_msg_rabbitmq_opts_t;
 
 

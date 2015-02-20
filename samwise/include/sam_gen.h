@@ -11,9 +11,7 @@
 */
 /**
 
-   @brief API interface for sam
-
-   TODO: description
+   @brief Generic functions for reuse
 
 */
 

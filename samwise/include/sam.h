@@ -34,27 +34,13 @@
                      SAM_VERSION_PATCH)
 
 
-// compiler macros
-#define UU __attribute__((unused))
-
-
-// don't define these to show all log levels
-// #define LOG_THRESHOLD_TRACE   // show info + error
-// #define LOG_THRESHOLD_INFO    // only show error
-// #define LOG_THRESHOLD_ERROR   // disable logging
-
-
-// TODO implement shared config (#32)
-#define SAM_LOG_ENDPOINT "inproc://log"
-#define SAM_PUBLIC_ENDPOINT "ipc://samwise"
-
-
 // necessary includes
 #include "sam_prelude.h"
 
 
+/// sam instance
 typedef struct sam_t {
-    sam_msg_t *backends;
+    sam_msg_t *backends;  ///< @see sam_msg.c
 } sam_t;
 
 
@@ -78,7 +64,7 @@ sam_destroy (
 /// @param conf Location of the configuration file
 /// @return 0 in case of success, -1 in case of error
 int
-sam_config (
+sam_init (
     sam_t *self,
     const char *conf);
 
@@ -94,12 +80,10 @@ sam_publish (
     zmsg_t *msg);
 
 
-
 //  --------------------------------------------------------------------------
-/// @brief TODO to be defined
-int
-sam_stats (
-    sam_t *self);
+/// @brief Self test this class.
+void
+sam_test ();
 
 
 #endif

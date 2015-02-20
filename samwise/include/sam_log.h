@@ -42,65 +42,76 @@ typedef enum {
 #define SAM_LOG_DATE_MAXSIZE 16
 
 
+//  --------------------------------------------------------------------------
+/// @brief Log a line
+/// @param msg String to be logged
+/// @param filename Filename set by the preprocessor
+/// @param line Line number set by the preprocessor
 void
 sam_log_ (
     sam_log_lvl_t lvl,
-    const char *fac,
-    const char *msg);
+    const char *msg,
+    const char *filename,
+    const int line);
 
 
+//  --------------------------------------------------------------------------
+/// @brief Log a formatted line
+/// @param fmt String containing a format
+/// @param filename Filename set by the preprocessor
+/// @param line Line number set by the preprocessor
+/// @param ... Format arguments
 void
 sam_logf_ (
     sam_log_lvl_t lvl,
-    const char *fac,
-    const char *msg,
+    const char *fmt,
+    const char *filename,
+    const int line,
     ...);
 
 
 //
-// TRACE LOGGING
+//   PREPROCESSOR MACROS
 //
+
+// trace logging
 #if defined(LOG_THRESHOLD_TRACE) || defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_ERROR)
     #define sam_log_trace(msg)
-    #define sam_log_tracef(msg, __FILE__, ...)
+    #define sam_log_tracef(msg, ...)
 
 #else
     #define sam_log_trace(msg)                            \
-        sam_log_ (SAM_LOG_LVL_TRACE, msg, __FILE__);
+        sam_log_ (SAM_LOG_LVL_TRACE, msg, __FILE__, __LINE__);
     #define sam_log_tracef(msg, ...)                              \
-        sam_logf_ (SAM_LOG_LVL_TRACE, msg, __FILE__, __VA_ARGS__);
+        sam_logf_ (SAM_LOG_LVL_TRACE, msg, __FILE__, __LINE__, __VA_ARGS__);
 
 #endif
 
 
-//
-// INFO LOGGING
-//
+// info logging
 #if defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_TRACE)
     #define sam_log_info(msg)
-    #define sam_log_infof(msg, __FILE__, ...)
+    #define sam_log_infof(msg, ...)
 
 #else
     #define sam_log_info(msg)                     \
-        sam_log_ (SAM_LOG_LVL_INFO, msg, __FILE__);
+        sam_log_ (SAM_LOG_LVL_INFO, msg, __FILE__, __LINE__);
     #define sam_log_infof(msg, ...)                             \
-        sam_logf_ (SAM_LOG_LVL_INFO,  msg, __FILE__, __VA_ARGS__);
+        sam_logf_ (SAM_LOG_LVL_INFO,  msg, __FILE__, __LINE__, __VA_ARGS__);
 
 #endif
 
 
-//
-// ERROR LOGGING
-//
+// error logging
 #if defined(LOG_THRESHOLD_ERROR)
     #define sam_log_error(msg)
-    #define sam_log_errorf(msg, __FILE__, ...)
+    #define sam_log_errorf(msg, ...)
 
 #else
     #define sam_log_error(msg)                    \
-        sam_log_ (SAM_LOG_LVL_ERROR, msg, __FILE__);
+        sam_log_ (SAM_LOG_LVL_ERROR, msg, __FILE__, __LINE__);
     #define sam_log_errorf(msg, ...)                            \
-        sam_logf_ (SAM_LOG_LVL_ERROR, msg, __FILE__, __VA_ARGS__);
+        sam_logf_ (SAM_LOG_LVL_ERROR, msg, __FILE__, __LINE__, __VA_ARGS__);
 
 #endif
 

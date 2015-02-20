@@ -141,8 +141,7 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
     }
 
     else if (req_t == SAM_MSG_REQ_PUBLISH) {
-        sam_log_trace ("req: publishing");
-
+        sam_log_trace ("publishing message");
         char *exchange = zmsg_popstr (msg);
         char *routing_key = zmsg_popstr (msg);
         zframe_t *payload = zmsg_pop (msg);
@@ -198,8 +197,7 @@ actor (zsock_t *pipe, void *args)
 
     sam_log_trace ("send ready signal");
     zsock_signal (pipe, 0);
-    int rc = zloop_start (loop);
-    printf ("EXIT LOOP SAM_MSG_RABBITMQ %d\n", rc);
+    zloop_start (loop);
 
     sam_log_info ("stopping msg_rabbitmq actor");
     zloop_destroy (&loop);
@@ -489,7 +487,7 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
 
 
 //  --------------------------------------------------------------------------
-///
+/// Declare an exchange.
 void
 sam_msg_rabbitmq_exchange_declare (
     sam_msg_rabbitmq_t *self,
@@ -513,7 +511,7 @@ sam_msg_rabbitmq_exchange_declare (
 
 
 //  --------------------------------------------------------------------------
-///
+/// Delete an exchange.
 void
 sam_msg_rabbitmq_exchange_delete (
     sam_msg_rabbitmq_t *self,
@@ -549,11 +547,12 @@ sam_msg_rabbitmq_start (
     snprintf (rep_endpoint, 64, "inproc://%s", zuuid_str (rep_endpoint_id));
     zuuid_destroy (&rep_endpoint_id);
 
-    sam_log_tracef ("generated req/rep endpoint: %s", rep_endpoint);
+    sam_log_trace ("generated internal req/rep endpoint");
 
     (*self)->rep = zsock_new_rep (rep_endpoint);
     assert ((*self)->rep);
 
+    sam_log_tracef ("connected push socket to '%s'", pll_endpoint);
     (*self)->psh = zsock_new_push (pll_endpoint);
     assert ((*self)->psh);
 
