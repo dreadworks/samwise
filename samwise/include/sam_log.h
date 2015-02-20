@@ -36,32 +36,6 @@ typedef enum {
 #define SAM_LOG_LVL_ERROR_REPR  "error"
 
 
-/// The different handler options
-typedef enum {
-    SAM_LOG_HANDLER_STD  ///< stdout and stderr handler
-} sam_log_handler_t;
-
-
-/// State for sam_log instances
-typedef struct sam_log_t {
-    char *endpoint;     ///< pull socket endpoint
-    zactor_t *actor;    ///< logging thread
-} sam_log_t;
-
-
-/// The state of a log thread
-typedef struct sam_log_inner_t {
-    zsock_t *pll;             ///< socket accepting log requests
-    const char *line_fmt;     ///< the output format for messages
-    const char *date_fmt;     ///< format for timestamps
-    struct handler_ {         ///< references to handlers per level
-        zlist_t *trace;
-        zlist_t *info;
-        zlist_t *error;
-    } handler;
-} sam_log_inner_t;
-
-
 // Everything above gets cut. Prevents
 // buffer overflows, since no heap is used.
 #define SAM_LOG_LINE_MAXSIZE 256
@@ -69,112 +43,75 @@ typedef struct sam_log_inner_t {
 
 
 //  --------------------------------------------------------------------------
-/// @brief   Create a new logger
-/// @param   endpoint Optional endpoint name
-/// @return  Pointer to the logger state
-CZMQ_EXPORT sam_log_t *
-sam_log_new (char *endpoint);
-
-
-//  --------------------------------------------------------------------------
-/// @brief   Free's all memory of the log's state
-CZMQ_EXPORT void
-sam_log_destroy (sam_log_t **self);
-
-
-//  --------------------------------------------------------------------------
-/// @brief   Add a function posing as a callback for a severity
-/// @param   self Log facility
-/// @param   lvl Call handler for all severities up to <lvl>
-/// @param   handler The callback function
-CZMQ_EXPORT void
-sam_log_add_handler (
-    sam_log_t *self,
+/// @brief Log a line
+/// @param msg String to be logged
+/// @param filename Filename set by the preprocessor
+/// @param line Line number set by the preprocessor
+void
+sam_log_ (
     sam_log_lvl_t lvl,
-    sam_log_handler_t handler);
+    const char *msg,
+    const char *filename,
+    const int line);
 
 
 //  --------------------------------------------------------------------------
-/// @brief   Remove a function registered for the lvl and lower
-/// @param   self Log facility
-/// @param   lvl Call handler for all severities down to <lvl>
-/// @param   handler The callback function
-CZMQ_EXPORT void
-sam_log_remove_handler (
-    sam_log_t *self,
+/// @brief Log a formatted line
+/// @param fmt String containing a format
+/// @param filename Filename set by the preprocessor
+/// @param line Line number set by the preprocessor
+/// @param ... Format arguments
+void
+sam_logf_ (
     sam_log_lvl_t lvl,
-    sam_log_handler_t handler);
-
-
-//  --------------------------------------------------------------------------
-/// @brief   Logs to stdout and stderr
-/// @param   lvl Severity level
-/// @param   line The log line
-CZMQ_EXPORT void
-sam_log_handler_std (sam_log_lvl_t lvl, const char *line);
-
-
-//  --------------------------------------------------------------------------
-/// @brief   Retrieves the logging endpoint
-/// @param   log Log facility
-/// @param   line The log line
-CZMQ_EXPORT char *
-sam_log_endpoint (sam_log_t *self);
-
-
-//  --------------------------------------------------------------------------
-/// @brief   short description of the functions purpose
-/// @param   args some arguments
-/// @param   argc argc size of the argument vector
-CZMQ_EXPORT void
-sam_log_test ();
-
+    const char *fmt,
+    const char *filename,
+    const int line,
+    ...);
 
 
 //
-// TRACE LOGGING
+//   PREPROCESSOR MACROS
 //
+
+// trace logging
 #if defined(LOG_THRESHOLD_TRACE) || defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_ERROR)
-    #define sam_log_trace(logger, msg)
-    #define sam_log_tracef(logger, msg, ...)
+    #define sam_log_trace(msg)
+    #define sam_log_tracef(msg, ...)
 
 #else
-    #define sam_log_trace(logger, msg)                    \
-        sam_logger_send (logger, SAM_LOG_LVL_TRACE, msg);
-    #define sam_log_tracef(logger, msg, ...)                            \
-        sam_logger_sendf (logger, SAM_LOG_LVL_TRACE, msg, __VA_ARGS__);
+    #define sam_log_trace(msg)                            \
+        sam_log_ (SAM_LOG_LVL_TRACE, msg, __FILE__, __LINE__);
+    #define sam_log_tracef(msg, ...)                              \
+        sam_logf_ (SAM_LOG_LVL_TRACE, msg, __FILE__, __LINE__, __VA_ARGS__);
 
 #endif
 
 
-//
-// INFO LOGGING
-//
+// info logging
 #if defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_TRACE)
-    #define sam_log_info(logger, msg)
-    #define sam_log_infof(logger, msg, ...)
+    #define sam_log_info(msg)
+    #define sam_log_infof(msg, ...)
 
 #else
-    #define sam_log_info(logger, msg)                     \
-        sam_logger_send (logger, SAM_LOG_LVL_INFO, msg);
-    #define sam_log_infof(logger, msg, ...)                             \
-        sam_logger_sendf (logger, SAM_LOG_LVL_INFO,  msg, __VA_ARGS__);
+    #define sam_log_info(msg)                     \
+        sam_log_ (SAM_LOG_LVL_INFO, msg, __FILE__, __LINE__);
+    #define sam_log_infof(msg, ...)                             \
+        sam_logf_ (SAM_LOG_LVL_INFO,  msg, __FILE__, __LINE__, __VA_ARGS__);
 
 #endif
 
 
-//
-// ERROR LOGGING
-//
+// error logging
 #if defined(LOG_THRESHOLD_ERROR)
-    #define sam_log_error(logger, msg)
-    #define sam_log_errorf(logger, msg, ...)
+    #define sam_log_error(msg)
+    #define sam_log_errorf(msg, ...)
 
 #else
-    #define sam_log_error(logger, msg)                    \
-        sam_logger_send (logger, SAM_LOG_LVL_ERROR, msg);
-    #define sam_log_errorf(logger, msg, ...)                            \
-        sam_logger_sendf (logger, SAM_LOG_LVL_ERROR, msg, __VA_ARGS__);
+    #define sam_log_error(msg)                    \
+        sam_log_ (SAM_LOG_LVL_ERROR, msg, __FILE__, __LINE__);
+    #define sam_log_errorf(msg, ...)                            \
+        sam_logf_ (SAM_LOG_LVL_ERROR, msg, __FILE__, __LINE__, __VA_ARGS__);
 
 #endif
 

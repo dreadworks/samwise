@@ -43,12 +43,11 @@
 //  --------------------------------------------------------------------------
 /// Checks if the frame returned by the broker is an acknowledgement.
 static void
-check_amqp_ack_frame (sam_msg_rabbitmq_t *self, amqp_frame_t frame)
+check_amqp_ack_frame (amqp_frame_t frame)
 {
     if (frame.frame_type != AMQP_FRAME_METHOD) {
 
         sam_log_errorf (
-            self->logger,
             "amqp: got %d instead of METHOD\n",
             frame.frame_type);
 
@@ -58,7 +57,6 @@ check_amqp_ack_frame (sam_msg_rabbitmq_t *self, amqp_frame_t frame)
     if (frame.payload.method.id != AMQP_BASIC_ACK_METHOD) {
 
         sam_log_errorf (
-            self->logger,
             "amqp: got %d instead of BASIC_ACK",
             frame.payload.properties.class_id);
 
@@ -86,11 +84,11 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
         self->amqp.connection, &frame, &timeout);
 
     while (rc != AMQP_STATUS_TIMEOUT) {
-        check_amqp_ack_frame (self, frame);
+        check_amqp_ack_frame (frame);
         amqp_basic_ack_t *props = frame.payload.method.decoded;
         assert (props);
 
-        sam_log_trace (self->logger, "received ack");
+        sam_log_trace ("received ack");
         zsock_send (
             self->psh, "iii", self->id, SAM_MSG_RES_ACK, props->delivery_tag);
 
@@ -117,7 +115,7 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
 
     int rc = 0;
     if (req_t == SAM_MSG_REQ_EXCH_DECLARE) {
-        sam_log_info (self->logger, "req: declare exchange");
+        sam_log_info ("req: declare exchange");
 
         char
             *exchange = zmsg_popstr (msg),
@@ -132,7 +130,7 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
     }
 
     else if (req_t == SAM_MSG_REQ_EXCH_DELETE) {
-        sam_log_info (self->logger, "req: delete exchange");
+        sam_log_info ("req: delete exchange");
         char *exchange = zmsg_popstr (msg);
 
         sam_msg_rabbitmq_exchange_delete (self, exchange);
@@ -143,8 +141,7 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
     }
 
     else if (req_t == SAM_MSG_REQ_PUBLISH) {
-        sam_log_trace (self->logger, "req: publishing");
-
+        sam_log_trace ("publishing message");
         char *exchange = zmsg_popstr (msg);
         char *routing_key = zmsg_popstr (msg);
         zframe_t *payload = zmsg_pop (msg);
@@ -164,7 +161,6 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
 
     else {
         sam_log_errorf (
-            self->logger,
             "req: received unknown command %d",
             req_t);
 
@@ -183,7 +179,7 @@ static void
 actor (zsock_t *pipe, void *args)
 {
     sam_msg_rabbitmq_t *self = args;
-    sam_log_info (self->logger, "started msg_rabbitmq actor");
+    sam_log_info ("started msg_rabbitmq actor");
 
     zmq_pollitem_t amqp_pollitem = {
         .socket = NULL,
@@ -199,11 +195,11 @@ actor (zsock_t *pipe, void *args)
     zloop_reader (loop, self->rep, handle_req, self);
     zloop_poller (loop, &amqp_pollitem, handle_amqp, self);
 
-    sam_log_trace (self->logger, "send ready signal");
+    sam_log_trace ("send ready signal");
     zsock_signal (pipe, 0);
     zloop_start (loop);
 
-    sam_log_info (self->logger, "stopping msg_rabbitmq actor");
+    sam_log_info ("stopping msg_rabbitmq actor");
     zloop_destroy (&loop);
 }
 
@@ -213,7 +209,7 @@ actor (zsock_t *pipe, void *args)
 /// call. If the return code is anything other than
 /// AMQP_RESPONSE_NORMAL, an assertion fails.
 static void
-try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
+try (char const *ctx, amqp_rpc_reply_t x)
 {
 
     switch (x.reply_type) {
@@ -223,7 +219,6 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
 
     case AMQP_RESPONSE_NONE:
         sam_log_errorf (
-            self->logger,
             "%s: missing RPC reply type",
             ctx);
 
@@ -231,7 +226,6 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
 
     case AMQP_RESPONSE_LIBRARY_EXCEPTION:
         sam_log_errorf (
-            self->logger,
             "%s: %s\n",
             ctx,
             amqp_error_string2(x.library_error));
@@ -245,7 +239,6 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
                 (amqp_connection_close_t *) x.reply.decoded;
 
             sam_log_errorf (
-                self->logger,
                 "%s: server connection error %d, message: %.*s",
                 ctx,
                 m->reply_code,
@@ -260,7 +253,6 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
                 (amqp_channel_close_t *) x.reply.decoded;
 
             sam_log_errorf (
-                self->logger,
                 "%s: server channel error %d, message: %.*s",
                 ctx,
                 m->reply_code,
@@ -271,7 +263,6 @@ try (sam_msg_rabbitmq_t *self, char const *ctx, amqp_rpc_reply_t x)
 
         default:
             sam_log_errorf (
-                self->logger,
                 "%s: unknown server error, method id 0x%08X",
                 ctx,
                 x.reply.id);
@@ -303,13 +294,11 @@ sam_msg_rabbitmq_sockfd (sam_msg_rabbitmq_t *self)
 sam_msg_rabbitmq_t *
 sam_msg_rabbitmq_new (unsigned int id)
 {
-    sam_logger_t *logger = sam_logger_new ("msg_rabbitmq", SAM_LOG_ENDPOINT);
-    sam_log_infof (logger, "creating rabbitmq message backend (%d)", id);
+    sam_log_infof (
+        "creating rabbitmq message backend (%d)", id);
 
     sam_msg_rabbitmq_t *self = malloc (sizeof (sam_msg_rabbitmq_t));
     assert (self);
-
-    self->logger = logger;
 
     // init amqp
     self->amqp.seq = 1;
@@ -330,22 +319,19 @@ sam_msg_rabbitmq_new (unsigned int id)
 void
 sam_msg_rabbitmq_destroy (sam_msg_rabbitmq_t **self)
 {
-    sam_log_trace (
-        (*self)->logger, "destroying rabbitmq message backend instance");
+    sam_log_trace ("destroying rabbitmq message backend instance");
 
-    sam_logger_destroy (&(*self)->logger);
-
-    try (*self, "closing message channel", amqp_channel_close (
+    try ("closing message channel", amqp_channel_close (
              (*self)->amqp.connection,
              (*self)->amqp.message_channel,
              AMQP_REPLY_SUCCESS));
 
-    try (*self, "closing method channel", amqp_channel_close (
+    try ("closing method channel", amqp_channel_close (
              (*self)->amqp.connection,
              (*self)->amqp.method_channel,
              AMQP_REPLY_SUCCESS));
 
-    try (*self, "closing connection", amqp_connection_close (
+    try ("closing connection", amqp_connection_close (
              (*self)->amqp.connection,
              AMQP_REPLY_SUCCESS));
 
@@ -367,7 +353,7 @@ sam_msg_rabbitmq_connect (
     sam_msg_rabbitmq_opts_t *opts)
 {
     sam_log_infof (
-        self->logger, "connecting to %s:%d", opts->host, opts->port);
+        "connecting to %s:%d", opts->host, opts->port);
 
     int rc = amqp_socket_open (
         self->amqp.socket,
@@ -377,8 +363,8 @@ sam_msg_rabbitmq_connect (
     assert (rc == 0);
 
     // login
-    sam_log_tracef (self->logger, "logging in as user '%s'", opts->user);
-    try(self, "logging in", amqp_login(
+    sam_log_tracef ("logging in as user '%s'", opts->user);
+    try ("logging in", amqp_login(
             self->amqp.connection,   // state
             "/",                     // vhost
             0,                       // channel max
@@ -390,7 +376,6 @@ sam_msg_rabbitmq_connect (
 
     // message channel
     sam_log_tracef (
-        self->logger,
         "opening message channel (%d)",
         self->amqp.message_channel);
 
@@ -398,13 +383,11 @@ sam_msg_rabbitmq_connect (
         self->amqp.connection,
         self->amqp.message_channel);
 
-    try (self,
-         "opening message channel",
+    try ("opening message channel",
          amqp_get_rpc_reply (self->amqp.connection));
 
     // method channel
     sam_log_tracef (
-        self->logger,
         "opening method channel (%d)",
         self->amqp.method_channel);
 
@@ -412,12 +395,11 @@ sam_msg_rabbitmq_connect (
         self->amqp.connection,
         self->amqp.method_channel);
 
-    try (self,
-         "opening method channel",
+    try ("opening method channel",
          amqp_get_rpc_reply (self->amqp.connection));
 
     // enable publisher confirms
-    sam_log_trace (self->logger, "set channel in confirm mode");
+    sam_log_trace ("set channel in confirm mode");
     amqp_confirm_select_t req;
     req.nowait = 0;
 
@@ -428,10 +410,8 @@ sam_msg_rabbitmq_connect (
         AMQP_CONFIRM_SELECT_OK_METHOD, // reply id
         &req);                         // request options
 
-    try (
-        self,
-        "enable publisher confirms",
-        amqp_get_rpc_reply(self->amqp.connection));
+    try ("enable publisher confirms",
+         amqp_get_rpc_reply(self->amqp.connection));
 
 }
 
@@ -452,7 +432,6 @@ sam_msg_rabbitmq_publish (
     };
 
     sam_log_tracef (
-        self->logger,
         "publishing message %d of size %d",
         self->amqp.seq,
         payload_len);
@@ -468,9 +447,7 @@ sam_msg_rabbitmq_publish (
         msg_bytes);                           // body
 
     if (rc == AMQP_STATUS_HEARTBEAT_TIMEOUT) {
-        sam_log_error (
-            self->logger,
-            "connection lost while publishing!");
+        sam_log_error ("connection lost while publishing!");
         zsock_send (self->psh, "i", SAM_MSG_RES_CONNECTION_LOSS);
         return -1;
     }
@@ -497,7 +474,7 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
     int ack_c = 0;
 
     while (rc != AMQP_STATUS_TIMEOUT) {
-        check_amqp_ack_frame (self, frame);
+        check_amqp_ack_frame (frame);
 
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.connection, &frame, &timeout);
@@ -505,12 +482,12 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
         ack_c += 1;
     }
 
-    sam_log_tracef (self->logger, "handled %d acks", ack_c);
+    sam_log_tracef ("handled %d acks", ack_c);
 }
 
 
 //  --------------------------------------------------------------------------
-///
+/// Declare an exchange.
 void
 sam_msg_rabbitmq_exchange_declare (
     sam_msg_rabbitmq_t *self,
@@ -518,7 +495,7 @@ sam_msg_rabbitmq_exchange_declare (
     const char *type)
 {
     sam_log_infof (
-        self->logger, "declaring exchange '%s' (%s)", exchange, type);
+        "declaring exchange '%s' (%s)", exchange, type);
 
     amqp_exchange_declare (
         self->amqp.connection,         // connection state
@@ -529,12 +506,12 @@ sam_msg_rabbitmq_exchange_declare (
         0,                             // durable
         amqp_empty_table);             // arguments
 
-    try (self, "declare exchange", amqp_get_rpc_reply(self->amqp.connection));
+    try ("declare exchange", amqp_get_rpc_reply(self->amqp.connection));
 }
 
 
 //  --------------------------------------------------------------------------
-///
+/// Delete an exchange.
 void
 sam_msg_rabbitmq_exchange_delete (
     sam_msg_rabbitmq_t *self,
@@ -546,7 +523,7 @@ sam_msg_rabbitmq_exchange_delete (
         amqp_cstring_bytes (exchange),
         0);
 
-    try (self, "delete exchange", amqp_get_rpc_reply(self->amqp.connection));
+    try ("delete exchange", amqp_get_rpc_reply(self->amqp.connection));
 }
 
 
@@ -561,7 +538,7 @@ sam_msg_rabbitmq_start (
     sam_msg_rabbitmq_t **self,
     char *pll_endpoint)
 {
-    sam_log_trace ((*self)->logger, "starting message backend actor");
+    sam_log_trace ("starting message backend actor");
 
     sam_msg_backend_t *backend = malloc (sizeof (sam_msg_backend_t));
     zuuid_t *rep_endpoint_id = zuuid_new ();
@@ -570,12 +547,12 @@ sam_msg_rabbitmq_start (
     snprintf (rep_endpoint, 64, "inproc://%s", zuuid_str (rep_endpoint_id));
     zuuid_destroy (&rep_endpoint_id);
 
-    sam_log_tracef (
-        (*self)->logger, "generated req/rep endpoint: %s", rep_endpoint);
+    sam_log_trace ("generated internal req/rep endpoint");
 
     (*self)->rep = zsock_new_rep (rep_endpoint);
     assert ((*self)->rep);
 
+    sam_log_tracef ("connected push socket to '%s'", pll_endpoint);
     (*self)->psh = zsock_new_push (pll_endpoint);
     assert ((*self)->psh);
 
@@ -654,7 +631,7 @@ sam_msg_rabbitmq_test ()
     };
 
     // wait for ack to arrive
-    sam_log_trace (rabbit->logger, "waiting for ACK");
+    sam_log_trace ("waiting for ACK");
     rc = zmq_poll (&items, 1, 500);
     assert (rc == 1);
 

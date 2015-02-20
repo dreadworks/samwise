@@ -26,12 +26,27 @@
 #  error "sam needs at least CZMQ 2.2.0"
 #endif
 
+
 #include <amqp.h>
 #include <amqp_tcp_socket.h>
 
+// compiler macros
+#define UU __attribute__((unused))
+
+
+// don't define these to show all log levels
+// #define LOG_THRESHOLD_TRACE   // show info + error
+// #define LOG_THRESHOLD_INFO    // only show error
+// #define LOG_THRESHOLD_ERROR   // disable logging
+
+
+// TODO implement shared config (#32)
+#define SAM_LOG_ENDPOINT "inproc://log"
+#define SAM_PUBLIC_ENDPOINT "ipc://../sam_ipc"
+
+
 #include "sam_gen.h"
 #include "sam_log.h"
-#include "sam_logger.h"
 #include "sam_msg.h"
 #include "sam_msg_rabbitmq.h"
 #include "sam.h"

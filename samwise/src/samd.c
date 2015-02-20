@@ -20,47 +20,82 @@
 
 #include <czmq.h>
 #include "../include/sam.h"
+#include "../include/samd.h"
 
 
+
+//  --------------------------------------------------------------------------
+/// Handle external publishing/rpc requests. Checks the protocol
+/// number to decide if libsam can handle it and then either delegates
+/// or rejects the message.
 static int
-handle_req (zloop_t *loop UU, zsock_t *router, void *args)
+handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
 {
-    sam_t *sam = args;
-    zmsg_t *msg = zmsg_recv (router);
-    sam_log_trace (sam->logger, "received message on router socket");
+    samd_t *self = args;
+    zmsg_t *msg = zmsg_recv (client_rep);
+    sam_log_trace ("received message on public reply socket");
 
-    int delay = sam_publish (sam, msg);
-
-    // sleep and return to client
-    zclock_sleep (delay);
-    zsock_signal (router, 0);
-
+    int rc = sam_publish (self->sam, msg);
+    zsock_send (client_rep, "i", rc);
     return 0;
 }
 
 
-int main ()
+//  --------------------------------------------------------------------------
+/// Creates a new samd instance and binds the public endpoints socket.
+samd_t *
+samd_new (const char *endpoint)
 {
-    sam_logger_t *logger = sam_logger_new ("samd", SAM_LOG_ENDPOINT);
+    samd_t *self = malloc (sizeof (samd_t));
+    assert (self);
 
-    sam_t *sam = sam_new ();
-    assert (sam);
+    self->sam = sam_new ();
+    assert (self->sam);
 
-    zsock_t *router = zsock_new_router (SAM_PUBLIC_ENDPOINT);
-    assert (router);
+    self->client_rep = zsock_new_rep (endpoint);
+    assert (self->client_rep);
 
-    zloop_t *loop = zloop_new ();
-    zloop_reader (loop, router, handle_req, sam);
-
-    sam_log_info (logger, "starting main event loop");
-    zloop_start (loop);
-
-    sam_log_info (logger, "exiting");
-    zloop_destroy (&loop);
-    zsock_destroy (&router);
-    sam_logger_destroy (&logger);
-
-    zclock_sleep (100);
-    sam_destroy (&sam);
+    sam_init (self->sam, NULL);
+    sam_log_info ("created samd");
+    return self;
 }
 
+
+//  --------------------------------------------------------------------------
+/// Destroys the samd instance and free's all allocated memory.
+void
+samd_destroy (samd_t **self)
+{
+    sam_log_info ("destroying samd");
+
+    zsock_destroy (&(*self)->client_rep);
+    sam_destroy (&(*self)->sam);
+
+    free (*self);
+    *self = NULL;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Start a blocking loop for client requests.
+void
+samd_start (samd_t *self)
+{
+    zloop_t *loop = zloop_new ();
+    zloop_reader (loop, self->client_rep, handle_req, self);
+    zloop_start (loop);
+    zloop_destroy (&loop);
+    sam_log_info ("leaving main loop");
+}
+
+
+//  --------------------------------------------------------------------------
+/// Main entry point, initializes and starts samd.
+int
+main ()
+{
+    samd_t *samd = samd_new (SAM_PUBLIC_ENDPOINT);
+    samd_start (samd);
+    samd_destroy (&samd);
+    sam_log_info ("exiting");
+}

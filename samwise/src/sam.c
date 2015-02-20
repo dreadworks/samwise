@@ -20,44 +20,35 @@
 #include "../include/sam_prelude.h"
 
 
-// to be removed before shipping. for debugging
-static void
-sigabrt (int signo UU)
-{
-    sam_logger_t *logger = sam_logger_new ("sigabrt", SAM_LOG_ENDPOINT);
-    sam_log_error (logger, "catched SIGABRT");
-    sam_logger_destroy (&logger);
-    zclock_sleep (10);
-}
-
-
 //  --------------------------------------------------------------------------
+/// Create a new sam instance.
 sam_t *
 sam_new ()
 {
-    signal (SIGABRT, sigabrt); // for debug purposes
-
     sam_t *self = malloc (sizeof (sam_t));
     assert (self);
 
-    // logging
-    self->log = sam_log_new (SAM_LOG_ENDPOINT);
-    self->logger = sam_logger_new ("sam", SAM_LOG_ENDPOINT);
-    sam_log_add_handler (
-        self->log, SAM_LOG_LVL_TRACE, SAM_LOG_HANDLER_STD);
+    // request/response multiplexing
+    sam_log_infof (
+        "bound public endpoint: %s",
+        SAM_PUBLIC_ENDPOINT);
 
+    sam_log_info ("created sam");
     return self;
 }
 
 
 //  --------------------------------------------------------------------------
+/// Free's all allocated memory and destroys the sam_msg instance if
+/// initialized.
 void
 sam_destroy (sam_t **self)
 {
     assert (*self);
 
-    sam_logger_destroy (&(*self)->logger);
-    sam_log_destroy (&(*self)->log);
+    if ((*self)->backends) {
+        sam_msg_destroy (&(*self)->backends);
+    }
 
     free (*self);
     *self = NULL;
@@ -65,41 +56,53 @@ sam_destroy (sam_t **self)
 
 
 //  --------------------------------------------------------------------------
+/// Read from a configuration file (TODO #32). Currently just
+/// statically creates a sam_msg instance with one rabbitmq broker
+/// connection.
 int
-sam_config (sam_t *self, const char *conf UU)
+sam_init (sam_t *self, const char *conf UU)
 {
-    sam_log_error (self->logger, "sam_config is not yet implemented");
+    // TODO create shared config (#32)
+    // for now, create one backend pool
+    // containing one rabbitmq backend instance
+    self->backends = sam_msg_new ("rabbitmq");
+    assert (self->backends);
+
+    sam_msg_rabbitmq_opts_t rabbitmq_opts = {
+        .host = "localhost",
+        .port = 5672,
+        .user = "guest",
+        .pass = "guest",
+        .heartbeat = 3
+    };
+
+    int rc = sam_msg_create_backend (
+        self->backends, SAM_MSG_BE_RABBITMQ, &rabbitmq_opts);
+
+    if (rc != 0) {
+        sam_log_error ("could not create rabbitmq backend");
+    }
+
+    sam_log_info ("(re)loaded configuration");
     return 0;
 }
 
 
 //  --------------------------------------------------------------------------
+/// TODO analyze message content before passing it on, part of #7.
 int
-sam_publish (sam_t *self, zmsg_t *msg UU)
+sam_publish (sam_t *self, zmsg_t *msg)
 {
-    sam_log_trace (self->logger, "got publishing request");
-    return 0;
+    sam_log_trace ("got publishing request");
+    return sam_msg_publish (self->backends, msg);
 }
 
 
 //  --------------------------------------------------------------------------
-int
-sam_stats (sam_t *self)
-{
-    sam_log_error (self->logger, "sam_stats is not yet implemented!");
-    return 0;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Invokes the test functions of all components and finally tests itself.
+/// Self test this class.
 void
 sam_test ()
 {
-    sam_log_test ();
-    sam_msg_rabbitmq_test ();
-    sam_msg_test ();
-
     sam_t *sam = sam_new ();
     assert (sam);
 

@@ -13,8 +13,6 @@ src_libsam_la_SOURCES =					\
 	include/sam_gen.h							\
 	src/sam_gen.c									\
 \
-	include/sam_logger.h					\
-	src/sam_logger.c							\
 	include/sam_log.h							\
 	src/sam_log.c									\
 \
@@ -37,6 +35,9 @@ src_libsam_la_LDFLAGS = -lzmq -lczmq -lrabbitmq
 #  samd
 #
 bin_PROGRAMS = samd
-samd_SOURCES = src/samd.c
+samd_SOURCES =   \
+  include/samd.h \
+  src/samd.c
+
 samd_LDADD = src/libsam.la
 samd_LDFLAGS = -static

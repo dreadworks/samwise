@@ -140,7 +140,7 @@ rabbit_declare_exchange (
         self->chan,                    // virtual connection
         amqp_cstring_bytes (exchange), // exchange name
         amqp_cstring_bytes (type),     // type
-        0,                             // passive 
+        0,                             // passive
         0,                             // durable
         amqp_empty_table);             // arguments
 

@@ -2,14 +2,22 @@
 
 require 'ostruct'
 require 'optparse'
-require 'zmq'
+require 'rbczmq'
 
 
 class Publisher
 
-  def initialize (endpoint)
+  def initialize (endpoint, opts)
+    @opts = opts
     @ctx = ZMQ::Context.new
-    @req = @ctx.bind(:REQ, endpoint)
+
+    puts "connecting to #{endpoint}" unless @opts.quiet
+    @req = @ctx.socket(:REQ)
+    raise "could not create socket" unless @req
+
+    @req.connect(endpoint)
+    raise "could not connect" unless @req.state & ZMQ::Socket::CONNECTED
+
   end
 
   def destroy!
@@ -17,26 +25,39 @@ class Publisher
   end
 
   def publish (distribution, exchange, routing_key, message)
-    msg = ZMQ::Message("rabbitmq", distribution, exchange, routing_key, message)
-    @req.send msg
+    msg = ZMQ::Message.new
+
+    msg.push ZMQ::Frame("rabbitmq")
+    msg.push ZMQ::Frame(distribution)
+    msg.push ZMQ::Frame(exchange)
+    msg.push ZMQ::Frame(routing_key)
+    msg.push ZMQ::Frame(message)
+
+    puts "sending message" if @opts.verbose
+    @req.send_message msg
+    raise "message was not sent" unless msg.gone?
 
     # apply back pressure and comply with
     # the strict REQ/REP cycle
-    @req.recv
+    puts "expecting reply"
+    reply = @req.recv
+    puts "received #{reply}"
+
   end
 
 end
 
 
 def publish (opts)
-  puts("publishing {opts.n} messages" ) unless opts.verbose or opts.quiet
-  pub = Publisher.new
+  puts "publishing #{opts.n} messages" unless opts.quiet
+  pub = Publisher.new("ipc://../../sam_ipc", opts)
 
-  n.times do |i|
-    puts "publishing message {i}" unless opts.verbose
+  opts.n.times do |i|
+    puts "publishing message #{i}" if opts.verbose
     pub.publish("redundant", "amq.direct", "", "hi!")
   end
 
+  puts "done, exiting" unless opts.quiet
   pub.destroy!
 end
 
@@ -56,27 +77,29 @@ class OptionParser
       opts.banner = "Usage: publish.rb [options]"
       opts.separator ""
       opts.separator "Specific options:"
-    end
 
-    # mandatory
-    opts.on("-n NUMBER", Integer, "Number of messages to publish") do |n|
-      options.n = n
-    end
 
-    opts.separator ""
-    opts.separator "Common options:"
+      # mandatory
+      opts.on("-n NUMBER", Integer, "Number of messages to publish") do |n|
+        options.n = n
+      end
 
-    opts.on_tail("-h", "--help", "Show this message") do
-      puts opts
-      exit
-    end
+      opts.separator ""
+      opts.separator "Common options:"
 
-    opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
-      options.verbose = v
-    end
+      opts.on_tail("-h", "--help", "Show this message") do
+        puts opts
+        exit
+      end
 
-    opts.on("-q", "--quiet", "Completely suppress output") do |q|
-      options.quiet = q
+      opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+        options.verbose = v
+      end
+
+      opts.on("-q", "--quiet", "Completely suppress output") do |q|
+        options.quiet = q
+        options.verbose = q
+      end
     end
 
     opt_parser.parse!(args)
@@ -87,5 +110,4 @@ end
 
 
 options = OptionParser.parse(ARGV)
-pp options
-# publish(options)
+publish(options)
