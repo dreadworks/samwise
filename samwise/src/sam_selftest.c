@@ -50,7 +50,7 @@ rtfm (int rc)
     printf ("sam selftest\n");
     printf ("usage: sam_selftest [-h] [--only SAM_MODULE]\n");
     printf ("options:\n");
-    printf ("  -h: Print this message and exit\n");
+    printf ("  -h: Print this message and exit\np");
     printf ("  --only SAM_MODULE: run test only for SAM_MODULE\n");
     printf ("    where SAM_MODULE is one of:\n");
     printf ("    sam, sam_gen, sam_log, sam_msg, sam_msg_rabbitmq\n");

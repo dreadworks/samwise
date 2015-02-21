@@ -27,8 +27,8 @@
 #include <amqp_tcp_socket.h>
 
 #include <czmq.h>
-#if CZMQ_VERSION < 20200
-#  error "sam needs at least CZMQ 2.2.0"
+#if CZMQ_VERSION < 30000
+#  error "sam needs at least CZMQ 3.0.0"
 #endif
 
 
