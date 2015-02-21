@@ -110,3 +110,20 @@ sam_logf_ (
 
     sam_log_ (lvl, buf, filename, line);
 }
+
+
+//  --------------------------------------------------------------------------
+/// Self test this class.
+void
+sam_log_test ()
+{
+    printf ("\n** LOG **\n");
+
+    sam_log_trace ("trace");
+    sam_log_info ("info");
+    sam_log_error ("error");
+
+    sam_log_tracef ("%s formatted", "trace");
+    sam_log_infof ("%s formatted", "info");
+    sam_log_errorf ("%s formatted", "error");
+}

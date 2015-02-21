@@ -597,7 +597,7 @@ sam_msg_rabbitmq_stop (
 void
 sam_msg_rabbitmq_test ()
 {
-    printf ("\n** SAM_MSG_RABBIT **\n");
+    printf ("\n** RABBITMQ BACKEND **\n");
 
     int id = 0;
     sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new (id);

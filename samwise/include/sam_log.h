@@ -70,6 +70,12 @@ sam_logf_ (
     ...);
 
 
+//  --------------------------------------------------------------------------
+/// @brief Self test this class
+void
+sam_log_test ();
+
+
 //
 //   PREPROCESSOR MACROS
 //

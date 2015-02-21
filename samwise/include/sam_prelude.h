@@ -21,14 +21,16 @@
 #ifndef __SAM_PRELUDE_H__
 #define __SAM_PRELUDE_H__
 
+
+// external dependencies
+#include <amqp.h>
+#include <amqp_tcp_socket.h>
+
 #include <czmq.h>
 #if CZMQ_VERSION < 20200
 #  error "sam needs at least CZMQ 2.2.0"
 #endif
 
-
-#include <amqp.h>
-#include <amqp_tcp_socket.h>
 
 // compiler macros
 #define UU __attribute__((unused))
@@ -52,5 +54,6 @@
 #include "sam.h"
 
 #include "playground.h"  // to be removed (#40)
+
 
 #endif

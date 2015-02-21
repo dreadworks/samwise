@@ -231,6 +231,8 @@ sam_msg_publish (sam_msg_t *self, zmsg_t *msg)
 void
 sam_msg_test ()
 {
+    printf ("\n** MSG **\n");
+
     sam_msg_t *sms = sam_msg_new ("test");
     assert (sms);
 
@@ -247,28 +249,22 @@ sam_msg_test ()
 
     // construct publishing message
     zmsg_t *msg = zmsg_new ();
-    char *str;
     zframe_t *frame;
 
-    // action
-    str = "publish";
-    frame = zframe_new (str, strlen (str));
-    zmsg_append (msg, &frame);
+    char *pub_msg [] = {
+        "redundant",
+        "amq.direct",
+        "",
+        "hi!"
+    };
 
     // distribution type
-    str = "redundant";
-    frame = zframe_new (str, strlen (str));
-    zmsg_append (msg, &frame);
-
-    // exchange name
-    str = "amq.direct";
-    frame = zframe_new (str, strlen (str));
-    zmsg_append (msg, &frame);
-
-    // payload
-    str = "hi!";
-    frame = zframe_new (str, strlen (str));
-    zmsg_append (msg, &frame);
+    uint frame_c = 0;
+    for (; frame_c < sizeof (pub_msg) / sizeof (char *); frame_c++) {
+        char *str = pub_msg[frame_c];
+        frame = zframe_new (str, strlen (str));
+        zmsg_append (msg, &frame);
+    }
 
     sam_msg_publish (sms, msg);
     sam_msg_destroy (&sms);

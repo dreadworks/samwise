@@ -26,6 +26,7 @@ sam_t *
 sam_new ()
 {
     sam_t *self = malloc (sizeof (sam_t));
+    self->backends = NULL;
     assert (self);
 
     // request/response multiplexing
@@ -52,6 +53,7 @@ sam_destroy (sam_t **self)
 
     free (*self);
     *self = NULL;
+    sam_log_info ("destroyed sam");
 }
 
 
@@ -103,8 +105,12 @@ sam_publish (sam_t *self, zmsg_t *msg)
 void
 sam_test ()
 {
+    printf ("\n** SAM **\n");
+
     sam_t *sam = sam_new ();
     assert (sam);
+
+    // TODO sam_init
 
     sam_destroy (&sam);
     assert (!sam);

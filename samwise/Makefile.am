@@ -1,10 +1,12 @@
 
 AM_CFLAGS = -g -Wall -Wextra -pedantic -std=gnu99
 
+#
+#  LIBRARIES
+#
 
-#
+
 #  libsam
-#
 lib_LTLIBRARIES = src/libsam.la
 include_HEADERS = include/sam.h
 
@@ -32,12 +34,20 @@ src_libsam_la_LDFLAGS = -lzmq -lczmq -lrabbitmq
 
 
 #
-#  samd
+#  BINARIES
 #
-bin_PROGRAMS = samd
+bin_PROGRAMS = samd sam_selftest
+
+#  samd
 samd_SOURCES =   \
   include/samd.h \
   src/samd.c
 
 samd_LDADD = src/libsam.la
 samd_LDFLAGS = -static
+
+
+#  selftest
+sam_selftest_SOURCES = src/sam_selftest.c
+sam_selftest_LDADD = src/libsam.la
+sam_selftest_LDFLAGS = -static

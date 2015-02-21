@@ -29,4 +29,10 @@ sam_gen_handle_pipe (
     void *args);
 
 
+//  --------------------------------------------------------------------------
+/// @brief Self test this file
+void
+sam_gen_test ();
+
+
 #endif
