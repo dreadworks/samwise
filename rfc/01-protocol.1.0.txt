@@ -1,0 +1,228 @@
+SAMWISE RFC 01 - PROTOCOL VERSION 1.0
+
+name: 01-protocol_v1.0
+
+
+ABSTRACT
+
+  The samwise protocol describes how clients can communicate with
+  running samwise daemons (samd) over TCP/IPC or directly over Unix
+  Domain Sockets when using libsam. Every samd instance offers an
+  endpoint to pass either publishing requests or rpc calls to. The
+  libsam offers a function to accept messages. These are then
+  distributed to all or some connected brokers.
+
+  Since it is not important if samd or libsam get the data (since samd
+  passes the message on to libsam), in the scope of this document
+  clients simply communicate with "samwise".
+
+  All types correspond to the c types used by libzmq and czmq.
+
+  This document is subject to the terms of the MIT License. If a copy
+  of the MIT License was not distributed with this file, You can
+  obtain one at http://opensource.org/licenses/MIT
+
+  The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+  "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
+  document are to be interpreted as described in RFC 2119.
+
+
+GOALS
+
+  This document describes how clients written in arbitrary languages
+  can pass data in a meaningful way to samwise. They MUST speak the
+  ZeroMQ Message Transport Protocol (http://rfc.zeromq.org/spec:23) to
+  pass multi-framed data around. The following requirements must be
+  met:
+
+  - Publishing messages to 1..n brokers
+
+  - Making rpc calls to 1..n brokers
+
+  - Receiving meaningful answers from samwise
+
+
+VERSION NUMBER
+
+  This document describes version 1.0 of the samwise protocol. The
+  version number consists of a major (1) and minor (0) version
+  number. Future extensions of the protocol must increment the major
+  version number for changes breaking older implementations.
+
+
+GENERAL COMMUNICATION SEQUENCE
+
+  Client-samwise communication behaves in a strict request/response
+  cycle. The client initiates the communication by sending a request
+  message containing one of the layouts described later. It MUST then
+  wait for samwise to answer. The reply message describes how
+  successful handing over the message to samwise was.
+
+  Samwise offers one or more endpoints for 1..n clients. It MUST reply
+  to all client requests eventually.
+
+  If a message is malformed by having an unexpected frame count, the
+  message MUST NOT be accepted by samwise. A client receiving a
+  malformed message from samwise SHOULD assume that the request has
+  failed.
+
+
+GENERAL REQUEST MESSAGE LAYOUT
+
+  A message passed to samwise is parsed based on the frames it is
+  split into. It must be examined if this approach offers enough
+  performance or if the number of heap allocations per message are to
+  big. In future versions of the protocol, data may be bundled into
+  some parse-able data format (like protocol buffers) to reduce the
+  amount of heap allocations.
+
+  A message MUST consist of at least the following two frames:
+
+      property                type        value
+  0 | protocol version      | integer   | x > 0
+  1 | action                | char *    | "publish" or
+    |                       |           | "rpc"
+  ...
+
+  <protocol version>
+
+  This is a plain number describing the samwise protocol
+  version. Based on this number samwise MAY refuse requests from
+  clients implementing a too old protocol. The protocol version number
+  is determined by the following formula:
+
+  protocol version = major * 100 + minor
+
+  <action>
+
+  The action property describes what the clients intention is and what
+  the successive frames contain. The following actions are possible:
+
+
+    ACTION: PUBLISH
+
+    Publish a message to 1..n brokers. The message layout
+    for publishing requests look like this:
+
+        property                type        value
+    0 | protocol version      | integer   | 100
+    1 | action                | char *    | "publish"
+    2 | distribution          | char *    | "round robin" or
+      |                       |           | "redundant"
+    ...
+
+    <distribution>
+
+    The distribution strategy which is either "redundant" or "round
+    robin". If "redundant" is provided as an option, another frame is
+    expected to follow containing a number how many brokers must
+    acknowledge the message:
+
+        property                type        value
+    0 | protocol version      | integer   | 100
+    1 | action                | char *    | "publish"
+    2 | distribution          | char *    | "redundant"
+    3 | min. acknowledged     | integer   | x > 0
+    ...
+
+    The successive frames are message backend specific. A description
+    for RabbitMQ AMQP publishing requests follows.
+
+
+    ACTION: RPC
+
+    This is used to send control commands to 1..n brokers. The message
+    layout looks like this:
+
+        property                type        value
+    0 | protocol version      | integer   | 100
+    1 | action                | char *    | "rpc"
+    2 | broker                | char *    | -
+    ...
+
+    Frame 2 determines to which broker the rpc call must be send
+    to. If the frame is empty, the rpc call gets delegated to all
+    brokers.
+
+
+PROVIDING DEFAULTS
+
+  Except for some, frames MAY be empty. This is used to allow defaults
+  to be set. Providing the defaults to samwise instances is topic of
+  another specification. Samwise handles applying the defaults for
+  empty frames.
+
+  The following frames SHALL not be empty:
+
+  - protocol version (frame 0)
+  - rpc frames > 3
+
+
+REQUEST MESSAGES FOR RABBITMQ BACKENDS
+
+  The first version of samwise MUST accept publishing requests to pass
+  on to RabbitMQ brokers speaking AMQP. The message format for
+  publishing and rpc requests look like this:
+
+
+  PUBLISHING TO RABBITMQ
+
+    AMQP specific data comes after the 2nd frame for "round robin"
+    distribution or 3rd frame for "redundant" publishing (nth
+    frame). The format looks like this:
+
+            property            type       value
+    ...
+    n     | exchange          | char *   | -
+    n + 1 | routing key       | char *   | -
+    n + 2 | payload           | byte *   | -
+
+
+  RPC CALLS TO RABBITMQ
+
+    AMQP specific rpc request data comes after the 3rd frame. The
+    format looks like this:
+
+        property                type        value
+    ...
+    3 | action                | char *    | "exchange.declare" or
+      |                       | char *    | "exchange.delete"
+   ...
+
+   The successive frames are options for the rpc class. For
+   "exchange.declare" and "exchange.delete" one frame is expected
+   containing the exchange name.
+
+
+REPLY MESSAGES FROM SAMWISE
+
+  The client gets informed about the success of its publishing request
+  once after sending a request. This reply does not contain any
+  information about the actual publishing to the message backends, but
+  the success or failure of samwise to accept the request. In future
+  versions of the protocol, additional information about the current
+  state of the backends MAY be provided.
+
+  The layout of response messages look like this:
+
+      property                type        value
+  0 | state                 | integer   | 0 or
+    |                       |           | -1
+  ...
+
+  If <state> is 0, no further frames are expected. If <state> is -1,
+  another frame follows, describing the problem. Future versions of
+  this protocol may provide more frames (containing for example error
+  codes), to allow a client handling errors more gracefully.
+
+      property                type        value
+  0 | state                 | integer   | -1
+  1 | message               | char *    | -
+
+
+REASON FOR THIS KIND OF LAYOUT
+
+  This protocol enables a straight forward implementation of
+  samwise. Since it internally also uses ZeroMQ for comunication, a
+  message can be seen as a stack where every part of the system pops
+  all information it needs before passing it on.
