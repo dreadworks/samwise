@@ -27,11 +27,11 @@ class Publisher
   def publish (distribution, exchange, routing_key, message)
     msg = ZMQ::Message.new
 
-    msg.push ZMQ::Frame("rabbitmq")
-    msg.push ZMQ::Frame(distribution)
-    msg.push ZMQ::Frame(exchange)
-    msg.push ZMQ::Frame(routing_key)
+    # msg.push ZMQ::Frame("rabbitmq")
     msg.push ZMQ::Frame(message)
+    msg.push ZMQ::Frame(routing_key)
+    msg.push ZMQ::Frame(exchange)
+    msg.push ZMQ::Frame(distribution)
 
     puts "sending message" if @opts.verbose
     @req.send_message msg
@@ -39,9 +39,8 @@ class Publisher
 
     # apply back pressure and comply with
     # the strict REQ/REP cycle
-    puts "expecting reply"
     reply = @req.recv
-    puts "received #{reply}"
+    puts "received #{reply}" if @opts.verbose
 
   end
 
@@ -52,12 +51,14 @@ def publish (opts)
   puts "publishing #{opts.n} messages" unless opts.quiet
   pub = Publisher.new("ipc://../../sam_ipc", opts)
 
+  time_start = Time.now
   opts.n.times do |i|
     puts "publishing message #{i}" if opts.verbose
     pub.publish("redundant", "amq.direct", "", "hi!")
   end
+  time_end = Time.now
 
-  puts "done, exiting" unless opts.quiet
+  puts "done in #{time_end - time_start}, exiting" unless opts.quiet
   pub.destroy!
 end
 
@@ -98,7 +99,7 @@ class OptionParser
 
       opts.on("-q", "--quiet", "Completely suppress output") do |q|
         options.quiet = q
-        options.verbose = q
+        options.verbose = false
       end
     end
 
