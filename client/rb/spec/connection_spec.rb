@@ -2,6 +2,7 @@ require 'samwise'
 
 RSpec.describe Samwise::Connection do
 
+
   it "fails without explicit connect" do
     expect(Samwise::Connection.connected?)
       .to be false
@@ -9,10 +10,12 @@ RSpec.describe Samwise::Connection do
     Samwise::Connection.close!
   end
 
+
   it "fails for unknown endpoints" do
     expect { Samwise::Connection.connect "endpoint" }
       .to raise_error (Samwise::ConnectionFailure)
   end
+
 
   it "connects to a known endpoint" do
     # TODO negotiate endpoint via config
@@ -27,5 +30,7 @@ RSpec.describe Samwise::Connection do
       .to be false
   end
 
+
+  # TODO test send()
 
 end

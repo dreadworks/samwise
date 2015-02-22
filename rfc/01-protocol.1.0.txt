@@ -81,7 +81,8 @@ GENERAL REQUEST MESSAGE LAYOUT
       property                type        value
   0 | protocol version      | integer   | x > 0
   1 | action                | char *    | "publish" or
-    |                       |           | "rpc"
+    |                       |           | "rpc" or
+    |                       |           | "ping"
   ...
 
   <protocol version>
@@ -143,6 +144,13 @@ GENERAL REQUEST MESSAGE LAYOUT
     Frame 2 determines to which broker the rpc call must be send
     to. If the frame is empty, the rpc call gets delegated to all
     brokers.
+
+
+    ACTION: PING
+
+    This request SHALL not have any more frames. It is used to
+    determine if samwise is reachable, accepts the protocol and
+    answers properly.
 
 
 PROVIDING DEFAULTS

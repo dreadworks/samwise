@@ -3,11 +3,23 @@ require 'rbczmq'
 
 module Samwise
 
+  # protocol version
+  VERSION = 1 * 100 + 0
+
   # abstract superclass
   class Error < StandardError; end
 
   # if no connection to samwise could be established
   class ConnectionFailure < StandardError; end
+
+  # if a message request can not be sent because of errors
+  class RequestMalformed < StandardError; end
+
+  # if an answer can not be parsed
+  class ResponseMalformed < StandardError; end
+
+  # if samwise answered with an error code
+  class ResponseError < StandardError; end
 
   # if either send or recv run into a timeout
   class Timeout < StandardError; end
@@ -16,29 +28,4 @@ end
 
 
 require 'samwise/connection'
-
-
-
-# class Samwise
-
-#   def publish (distribution, exchange, routing_key, message)
-#     msg = ZMQ::Message.new
-
-#     # msg.push ZMQ::Frame("rabbitmq")
-#     msg.push ZMQ::Frame(message)
-#     msg.push ZMQ::Frame(routing_key)
-#     msg.push ZMQ::Frame(exchange)
-#     msg.push ZMQ::Frame(distribution)
-
-#     puts "sending message" if @opts.verbose
-#     @req.send_message msg
-#     raise "message was not sent" unless msg.gone?
-
-#     # apply back pressure and comply with
-#     # the strict REQ/REP cycle
-#     reply = @req.recv
-#     puts "received #{reply}" if @opts.verbose
-
-#   end
-
-# end
+require 'samwise/message'

@@ -35,6 +35,8 @@
 // compiler macros
 #define UU __attribute__((unused))
 
+// global configuration
+#define SAM_PROTOCOL_VERSION 100
 
 // don't define these to show all log levels
 // #define LOG_THRESHOLD_TRACE   // show info + error
@@ -45,7 +47,6 @@
 // TODO implement shared config (#32)
 #define SAM_LOG_ENDPOINT "inproc://log"
 #define SAM_PUBLIC_ENDPOINT "ipc://../sam_ipc"
-
 
 #include "sam_gen.h"
 #include "sam_log.h"

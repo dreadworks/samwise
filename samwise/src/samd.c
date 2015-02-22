@@ -23,6 +23,13 @@
 #include "../include/samd.h"
 
 
+static void
+send_error (zsock_t *client_rep, char *reason)
+{
+    zsock_send (client_rep, "is", -1, reason);
+}
+
+
 
 //  --------------------------------------------------------------------------
 /// Handle external publishing/rpc requests. Checks the protocol
@@ -35,8 +42,49 @@ handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
     zmsg_t *msg = zmsg_recv (client_rep);
     sam_log_trace ("received message on public reply socket");
 
-    int rc = sam_publish (self->sam, msg);
-    zsock_send (client_rep, "i", rc);
+    int version = zmsg_popint (msg);
+    char *action = zmsg_popstr (msg);
+
+    // check protocol version
+    if (version != SAM_PROTOCOL_VERSION) {
+        send_error (client_rep, "unsupported version");
+    }
+
+    // check action
+    else if (!action) {
+        send_error (client_rep, "malformed request");
+    }
+
+    // handle publish
+    else if (!strcmp ("publish", action)) {
+        if (zmsg_size (msg) < 2) {
+            send_error (client_rep, "no payload provided");
+        }
+
+        int rc = sam_publish (self->sam, msg);
+        if (rc) {
+            send_error (client_rep, "publishing failed");
+        }
+
+        zsock_send (client_rep, "i", 0);
+    }
+
+    // handle rpc
+    else if (!strcmp ("rpc", action)) {
+        send_error (client_rep, "not yet implemented");
+    }
+
+    // handle ping
+    else if (!strcmp ("ping", action)) {
+        zsock_send (client_rep, "i", 0);
+    }
+
+    // unknow method
+    else {
+        send_error (client_rep, "method not supported");
+    }
+
+    free (action);
     return 0;
 }
 

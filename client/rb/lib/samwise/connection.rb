@@ -39,6 +39,22 @@ module Samwise::Connection
   end
 
 
+  def send msg
+    raise Samwise::ConnectionFailure, "socket not connected" unless connected?
+
+    @req.send_message msg
+    raise Samwise::ConnectionFailure, "message was not sent" unless msg.gone?
+
+    rcode = @req.recv_frame().data.to_i
+    if rcode == -1
+      raise Samwise::ResponseError, @req.recv_frame().data
+    end
+
+    raise Samwise::ResponseMalformed unless rcode == 0
+    true
+  end
+
+
   # Test if the context is still alive and the connection to the
   # endpoint still exists.
   #
