@@ -13,13 +13,10 @@ module Samwise::Connection
   #
   def connect endpoint
     if connected?
-      puts "connected, closing connection"
       close!
     end
 
     @ctx ||= ZMQ::Context.new
-    puts "connecting to #{endpoint}"
-
     @req = @ctx.socket(:REQ)
     raise Samwise::ConnectionFailure, "create socket" unless @req
 
