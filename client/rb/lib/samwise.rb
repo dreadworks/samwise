@@ -29,3 +29,4 @@ end
 
 require 'samwise/connection'
 require 'samwise/message'
+require 'samwise/rabbitmq'

@@ -14,6 +14,7 @@ Gem::Specification.new do |s|
   s.email         = "felix.hamann@xing.com"
   s.files         = [
     "lib/samwise.rb",
+    'lib/samwise/connection.rb',
     "lib/samwise/message.rb",
     "lib/samwise/rabbitmq.rb"
   ]

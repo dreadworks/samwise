@@ -30,33 +30,17 @@ send_error (zsock_t *client_rep, char *reason)
 }
 
 
-
-//  --------------------------------------------------------------------------
-/// Handle external publishing/rpc requests. Checks the protocol
-/// number to decide if libsam can handle it and then either delegates
-/// or rejects the message.
-static int
-handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
+static void
+handle_action_req (
+    samd_t *self,
+    zsock_t *client_rep,
+    const char *action,
+    zmsg_t *msg)
 {
-    samd_t *self = args;
-    zmsg_t *msg = zmsg_recv (client_rep);
-    sam_log_trace ("received message on public reply socket");
-
-    int version = zmsg_popint (msg);
-    char *action = zmsg_popstr (msg);
-
-    // check protocol version
-    if (version != SAM_PROTOCOL_VERSION) {
-        send_error (client_rep, "unsupported version");
-    }
-
-    // check action
-    else if (!action) {
-        send_error (client_rep, "malformed request");
-    }
+    sam_log_tracef ("handling action request: %s", action);
 
     // handle publish
-    else if (!strcmp ("publish", action)) {
+    if (!strcmp ("publish", action)) {
         if (zmsg_size (msg) < 2) {
             send_error (client_rep, "no payload provided");
         }
@@ -82,6 +66,37 @@ handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
     // unknow method
     else {
         send_error (client_rep, "method not supported");
+    }
+}
+
+
+
+//  --------------------------------------------------------------------------
+/// Handle external publishing/rpc requests. Checks the protocol
+/// number to decide if libsam can handle it and then either delegates
+/// or rejects the message.
+static int
+handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
+{
+    samd_t *self = args;
+    zmsg_t *msg = zmsg_recv (client_rep);
+    sam_log_trace ("received message on public reply socket");
+
+    int version = zmsg_popint (msg);
+    char *action = zmsg_popstr (msg);
+
+    // check protocol version
+    if (version != SAM_PROTOCOL_VERSION) {
+        send_error (client_rep, "unsupported version");
+    }
+
+    // check action frame
+    else if (!action) {
+        send_error (client_rep, "malformed request");
+    }
+
+    else {
+        handle_action_req (self, client_rep, action, msg);
     }
 
     free (action);
