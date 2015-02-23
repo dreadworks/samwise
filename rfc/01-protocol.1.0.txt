@@ -192,7 +192,9 @@ REQUEST MESSAGES FOR RABBITMQ BACKENDS
     format looks like this:
 
         property                type        value
-    ...
+    0 | version               | integer   | 100
+    1 | action                | char *    | "rpc"
+    2 | broker                | char *    | -
     3 | action                | char *    | "exchange.declare" or
       |                       | char *    | "exchange.delete"
    ...
