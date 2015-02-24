@@ -23,6 +23,17 @@
 #include "../include/samd.h"
 
 
+static sam_ret_t *
+create_error (char *msg)
+{
+    sam_ret_t *ret = malloc (sizeof (sam_ret_t));
+    ret->rc = -1;
+    ret->msg = msg;
+    return ret;
+}
+
+
+
 //  --------------------------------------------------------------------------
 /// Handle external publishing/rpc requests. Checks the protocol
 /// number to decide if libsam can handle it and then either delegates
@@ -32,22 +43,24 @@ handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
 {
     samd_t *self = args;
     sam_ret_t *ret;
-    sam_ret_t ret_;
 
     zmsg_t *msg = zmsg_new ();
     int version = -1;
 
     zsock_recv (client_rep, "im", &version, &msg);
     if (version == -1) {
-        ret_.rc = -1;
-        ret_.msg = "malformed request";
-        ret = &ret_;
+        ret = create_error ("malformed request");
+        zmsg_destroy (&msg);
     }
 
     else if (version != SAM_PROTOCOL_VERSION) {
-        ret_.rc = -1;
-        ret_.msg = "wrong protocol version";
-        ret = &ret_;
+        ret = create_error ("wrong protocol version");
+        zmsg_destroy (&msg);
+    }
+
+    else if (zmsg_size (msg) < 1) {
+        ret = create_error ("no payload");
+        zmsg_destroy (&msg);
     }
 
     else {
@@ -55,12 +68,13 @@ handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
     }
 
     if (!ret->rc) {
+        sam_log_trace ("success, sending reply to client");
         zsock_send (client_rep, "i", 0);
     }
 
     else {
+        sam_log_trace ("error, sending reply to client");
         zsock_send (client_rep, "is", ret->rc, ret->msg);
-        free (ret->msg);
     }
 
     free (ret);
@@ -118,11 +132,67 @@ samd_start (samd_t *self)
 
 //  --------------------------------------------------------------------------
 /// Self test the daemon.
+static void
+test_actor (zsock_t *pipe, void *args UU)
+{
+    samd_t *samd = samd_new (SAM_PUBLIC_ENDPOINT);
+    zloop_t *loop = zloop_new ();
+
+    zloop_reader (loop, samd->client_rep, handle_req, samd);
+    zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
+
+    zsock_signal (pipe, 0);
+    zloop_start (loop);
+
+    zloop_destroy (&loop);
+    samd_destroy (&samd);
+}
+
+
+static void
+assert_error (zmsg_t **msg)
+{
+    assert (zmsg_size (*msg) == 2);
+    assert (zmsg_popint (*msg) == -1);
+
+    char *error_msg = zmsg_popstr (*msg);
+    sam_log_tracef ("got error: %s", error_msg);
+
+    free (error_msg);
+    zmsg_destroy (msg);
+}
+
+
+
+//  --------------------------------------------------------------------------
+/// Self test the daemon.
 void
 samd_test ()
 {
     printf ("\n** SAMD **\n");
+    zactor_t *actor = zactor_new (test_actor, NULL);
+    zsock_t *req = zsock_new_req (SAM_PUBLIC_ENDPOINT);
 
+    // ping
+    zsock_send (req, "is", SAM_PROTOCOL_VERSION, "ping");
+    zmsg_t *msg = zmsg_recv (req);
+    assert (zmsg_size (msg) == 1);
+    assert (zmsg_popint (msg) == 0);
+    zmsg_destroy (&msg);
+
+    // wrong protocol version
+    zsock_send (req, "is", 0, "ping");
+    msg = zmsg_recv (req);
+    assert_error (&msg);
+
+    // malformed request
+    zsock_send (req, "z");
+    msg = zmsg_recv (req);
+    assert_error (&msg);
+
+    // tear down
+    zactor_destroy (&actor);
+    zsock_destroy (&req);
 }
 
 

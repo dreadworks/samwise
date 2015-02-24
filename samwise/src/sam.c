@@ -57,6 +57,7 @@ handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
         return 0;
     }
 
+    // publish
     sam_log_tracef ("request %s", action);
     if (!strcmp (action, "publish")) {
         char *distribution = zmsg_popstr (msg);
@@ -78,12 +79,19 @@ handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
         free (distribution);
     }
 
+    // rpc
     else if (
         !strcmp (action, "exchange.declare") ||
         !strcmp (action, "exchange.delete")) {
 
         char *broker = zmsg_popstr (msg);
         free (broker);
+    }
+
+    // ping
+    else if (!strcmp (action, "ping")) {
+        zsock_send (rep, "p", ret);
+        goto clean;
     }
 
     else {
