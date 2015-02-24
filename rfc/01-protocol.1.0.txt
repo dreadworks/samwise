@@ -192,14 +192,29 @@ REQUEST MESSAGES FOR RABBITMQ BACKENDS
     format looks like this:
 
         property                type        value
-    ...
+    0 | version               | integer   | 100
+    1 | action                | char *    | "rpc"
+    2 | broker                | char *    | -
     3 | action                | char *    | "exchange.declare" or
       |                       | char *    | "exchange.delete"
    ...
 
    The successive frames are options for the rpc class. For
-   "exchange.declare" and "exchange.delete" one frame is expected
-   containing the exchange name.
+   "exchange.declare" two frames and "exchange.delete" one frame is
+   expected containing the exchange options.
+
+   To declare exchanges:
+        property                type        value
+   ...
+    3 | action                | char *    | "exchange.declare"
+    4 | name                  | char *    | -
+    5 | type                  | char *    | -
+
+    To delete exchanges
+        property                type        value
+   ...
+    3 | action                | char *    | "exchange.delete"
+    4 | name                  | char *    | -
 
 
 REPLY MESSAGES FROM SAMWISE

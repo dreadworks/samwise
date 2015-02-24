@@ -19,14 +19,17 @@
 
 
 #include <czmq.h>
-#include "../include/sam.h"
+#include "../include/sam_prelude.h"
 #include "../include/samd.h"
 
 
-static void
-send_error (zsock_t *client_rep, char *reason)
+static sam_ret_t *
+create_error (char *msg)
 {
-    zsock_send (client_rep, "is", -1, reason);
+    sam_ret_t *ret = malloc (sizeof (sam_ret_t));
+    ret->rc = -1;
+    ret->msg = msg;
+    return ret;
 }
 
 
@@ -39,52 +42,42 @@ static int
 handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
 {
     samd_t *self = args;
-    zmsg_t *msg = zmsg_recv (client_rep);
-    sam_log_trace ("received message on public reply socket");
+    sam_ret_t *ret;
 
-    int version = zmsg_popint (msg);
-    char *action = zmsg_popstr (msg);
+    zmsg_t *msg = zmsg_new ();
+    int version = -1;
 
-    // check protocol version
-    if (version != SAM_PROTOCOL_VERSION) {
-        send_error (client_rep, "unsupported version");
+    zsock_recv (client_rep, "im", &version, &msg);
+    if (version == -1) {
+        ret = create_error ("malformed request");
+        zmsg_destroy (&msg);
     }
 
-    // check action
-    else if (!action) {
-        send_error (client_rep, "malformed request");
+    else if (version != SAM_PROTOCOL_VERSION) {
+        ret = create_error ("wrong protocol version");
+        zmsg_destroy (&msg);
     }
 
-    // handle publish
-    else if (!strcmp ("publish", action)) {
-        if (zmsg_size (msg) < 2) {
-            send_error (client_rep, "no payload provided");
-        }
-
-        int rc = sam_publish (self->sam, msg);
-        if (rc) {
-            send_error (client_rep, "publishing failed");
-        }
-
-        zsock_send (client_rep, "i", 0);
+    else if (zmsg_size (msg) < 1) {
+        ret = create_error ("no payload");
+        zmsg_destroy (&msg);
     }
 
-    // handle rpc
-    else if (!strcmp ("rpc", action)) {
-        send_error (client_rep, "not yet implemented");
-    }
-
-    // handle ping
-    else if (!strcmp ("ping", action)) {
-        zsock_send (client_rep, "i", 0);
-    }
-
-    // unknow method
     else {
-        send_error (client_rep, "method not supported");
+        ret = sam_send_action (self->sam, &msg);
     }
 
-    free (action);
+    if (!ret->rc) {
+        sam_log_trace ("success, sending reply to client");
+        zsock_send (client_rep, "i", 0);
+    }
+
+    else {
+        sam_log_trace ("error, sending reply to client");
+        zsock_send (client_rep, "is", ret->rc, ret->msg);
+    }
+
+    free (ret);
     return 0;
 }
 
@@ -138,6 +131,73 @@ samd_start (samd_t *self)
 
 
 //  --------------------------------------------------------------------------
+/// Self test the daemon.
+static void
+test_actor (zsock_t *pipe, void *args UU)
+{
+    samd_t *samd = samd_new (SAM_PUBLIC_ENDPOINT);
+    zloop_t *loop = zloop_new ();
+
+    zloop_reader (loop, samd->client_rep, handle_req, samd);
+    zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
+
+    zsock_signal (pipe, 0);
+    zloop_start (loop);
+
+    zloop_destroy (&loop);
+    samd_destroy (&samd);
+}
+
+
+static void
+assert_error (zmsg_t **msg)
+{
+    assert (zmsg_size (*msg) == 2);
+    assert (zmsg_popint (*msg) == -1);
+
+    char *error_msg = zmsg_popstr (*msg);
+    sam_log_tracef ("got error: %s", error_msg);
+
+    free (error_msg);
+    zmsg_destroy (msg);
+}
+
+
+
+//  --------------------------------------------------------------------------
+/// Self test the daemon.
+void
+samd_test ()
+{
+    printf ("\n** SAMD **\n");
+    zactor_t *actor = zactor_new (test_actor, NULL);
+    zsock_t *req = zsock_new_req (SAM_PUBLIC_ENDPOINT);
+
+    // ping
+    zsock_send (req, "is", SAM_PROTOCOL_VERSION, "ping");
+    zmsg_t *msg = zmsg_recv (req);
+    assert (zmsg_size (msg) == 1);
+    assert (zmsg_popint (msg) == 0);
+    zmsg_destroy (&msg);
+
+    // wrong protocol version
+    zsock_send (req, "is", 0, "ping");
+    msg = zmsg_recv (req);
+    assert_error (&msg);
+
+    // malformed request
+    zsock_send (req, "z");
+    msg = zmsg_recv (req);
+    assert_error (&msg);
+
+    // tear down
+    zactor_destroy (&actor);
+    zsock_destroy (&req);
+}
+
+
+#ifndef __SAM_TEST
+//  --------------------------------------------------------------------------
 /// Main entry point, initializes and starts samd.
 int
 main ()
@@ -147,3 +207,4 @@ main ()
     samd_destroy (&samd);
     sam_log_info ("exiting");
 }
+#endif

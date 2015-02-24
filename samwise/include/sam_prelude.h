@@ -48,9 +48,18 @@
 #define SAM_LOG_ENDPOINT "inproc://log"
 #define SAM_PUBLIC_ENDPOINT "ipc://../sam_ipc"
 
+
+/// return type for "start" functions
+/// of different message backends
+typedef struct sam_backend_t {
+    void *self;         ///< reference used by stop() give back control
+    zsock_t *req;       ///< request channel to the backend
+    zactor_t *actor;    ///< thread handling the broker connection
+} sam_backend_t;
+
+
 #include "sam_gen.h"
 #include "sam_log.h"
-#include "sam_msg.h"
 #include "sam_msg_rabbitmq.h"
 #include "sam.h"
 

@@ -28,7 +28,7 @@
 
 
 typedef struct state_t {
-    sam_msg_backend_t *backend;
+    sam_backend_t *backend;
     zactor_t *burster;
 } state_t;
 
@@ -46,12 +46,7 @@ publishing_burst (zsock_t *pipe, void *args)
     int64_t start_time = zclock_mono ();
     int p_c = 0;
     for (; p_c < BURST; p_c++) {
-
-        zsock_send (
-            req, "iss",
-            SAM_MSG_REQ_PUBLISH,
-            "amq.direct", "",
-            "hi!");
+        zsock_send (req, "iss", "publish", "amq.direct", "", "hi!");
 
         int seq;
         zsock_recv (req, "i", &seq);
@@ -93,7 +88,7 @@ handle_stdin (zloop_t *loop UU, zmq_pollitem_t *poll_stdin UU, void *args)
 static int
 handle_pll (zloop_t *loop UU, zsock_t *pll, void *args UU)
 {
-    sam_msg_res_t res;
+    sam_res_t res;
     zmsg_t *msg = zmsg_new ();
 
     zsock_recv (pll, "im", &res, &msg);
@@ -101,7 +96,7 @@ handle_pll (zloop_t *loop UU, zsock_t *pll, void *args UU)
     char *seq;
 
     switch (res) {
-    case SAM_MSG_RES_ACK:
+    case SAM_RES_ACK:
 
         seq = zmsg_popstr (msg);
         sam_log_tracef ("received ACK %s", seq);
@@ -110,7 +105,7 @@ handle_pll (zloop_t *loop UU, zsock_t *pll, void *args UU)
         break;
 
 
-    case SAM_MSG_RES_CONNECTION_LOSS:
+    case SAM_RES_CONNECTION_LOSS:
         sam_log_error ("received CONNECTION LOSS");
         break;
 

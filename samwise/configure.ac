@@ -8,9 +8,16 @@ AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
 AM_INIT_AUTOMAKE
-AC_PROG_CC
-
 LT_INIT
+AC_CONFIG_MACRO_DIR([m4])
+AC_PROG_CXX
+AC_PROG_AWK
+AM_PROG_CC_C_O
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
+
 # Checks for libraries.
 # FIXME: Replace `main' with a function in `-lczmq':
 AC_CHECK_LIB([czmq], [main])
@@ -28,7 +35,6 @@ AC_TYPE_SIZE_T
 
 # Checks for library functions.
 AC_FUNC_MALLOC
-AC_CHECK_FUNCS([strdup])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
