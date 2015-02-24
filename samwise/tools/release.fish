@@ -29,12 +29,17 @@ function __release_change_configure \
 
   sed \
     -e "s/\[FULL-PACKAGE-NAME\]/$pkg_name/" \
-    -e "s/\[VERSION\]/$vers/" \
-    -e "s|\[BUG-REPORT-ADDRESS\]|$addr|" \
+    -e "s/\[VERSION\]/$vers/"               \
+    -e "s|\[BUG-REPORT-ADDRESS\]|$addr|"    \
+    -e "s|\[BUG-REPORT-ADDRESS\]|$addr|"    \
+    -e "s/AC_PROG_CC/AM_PROG_CC_C_O/"       \
+    -e "/AC_PROG_RANLIB/d"                  \
     -e '10i\
 AM_INIT_AUTOMAKE' \
-    -e '12i\
+    -e '10i\
 LT_INIT' \
+    -e '10i\
+AC_CONFIG_MACRO_DIR([m4])' \
   < configure.scan > configure.ac
 
 end

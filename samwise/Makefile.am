@@ -1,4 +1,5 @@
 
+ACLOCAL_AMFLAGS = -I m4
 AM_CFLAGS = -g -Wall -Wextra -pedantic -std=gnu99
 
 #
@@ -44,8 +45,11 @@ samd_SOURCES =   \
 samd_LDADD = src/libsam.la
 samd_LDFLAGS = -static
 
-
 #  selftest
-sam_selftest_SOURCES = src/sam_selftest.c
+sam_selftest_SOURCES = \
+	src/samd.c           \
+	src/sam_selftest.c
+
 sam_selftest_LDADD = src/libsam.la
 sam_selftest_LDFLAGS = -static
+sam_selftest_CFLAGS = -D__SAM_TEST

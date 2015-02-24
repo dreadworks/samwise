@@ -23,55 +23,48 @@
 #include "../include/samd.h"
 
 
-static void
-send_error (zsock_t *client_rep, char *reason)
-{
-    zsock_send (client_rep, "is", -1, reason);
-}
-
-
 //  --------------------------------------------------------------------------
 /// Handle external publishing/rpc requests. Checks the protocol
 /// number to decide if libsam can handle it and then either delegates
 /// or rejects the message.
 static int
-handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args UU)
+handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
 {
-    zmsg_t *msg = zmsg_recv (client_rep);
-    zmsg_destroy (&msg);
+    samd_t *self = args;
+    sam_ret_t *ret;
+    sam_ret_t ret_;
 
-    zsock_send (client_rep, "i", 0);
+    zmsg_t *msg = zmsg_new ();
+    int version = -1;
+
+    zsock_recv (client_rep, "im", &version, &msg);
+    if (version == -1) {
+        ret_.rc = -1;
+        ret_.msg = "malformed request";
+        ret = &ret_;
+    }
+
+    else if (version != SAM_PROTOCOL_VERSION) {
+        ret_.rc = -1;
+        ret_.msg = "wrong protocol version";
+        ret = &ret_;
+    }
+
+    else {
+        ret = sam_send_action (self->sam, &msg);
+    }
+
+    if (!ret->rc) {
+        zsock_send (client_rep, "i", 0);
+    }
+
+    else {
+        zsock_send (client_rep, "is", ret->rc, ret->msg);
+        free (ret->msg);
+    }
+
+    free (ret);
     return 0;
-
-    // samd_t *self = args;
-    /* zmsg_t *msg = zmsg_recv (client_rep); */
-    /* sam_log_trace ("received message on public reply socket"); */
-
-    /* int version = zmsg_popint (msg); */
-    /* char *action = (char *) zframe_data (zmsg_first (msg)); */
-
-    /* // check protocol version */
-    /* if (version != SAM_PROTOCOL_VERSION) { */
-    /*     send_error (client_rep, "unsupported version"); */
-    /* } */
-
-    /* // check action frame */
-    /* else if (!action) { */
-    /*     send_error (client_rep, "malformed request"); */
-    /* } */
-
-    /* else { */
-    /*     int rc = 0; //sam_handle (self->sam, msg); */
-    /*     if (rc) { */
-    /*         send_error (client_rep, "request failed"); */
-    /*     } */
-    /*     else { */
-    /*         zsock_send (client_rep, "i", 0); */
-    /*     } */
-    /* } */
-
-    /* free (action); */
-    /* return 0; */
 }
 
 
@@ -124,6 +117,17 @@ samd_start (samd_t *self)
 
 
 //  --------------------------------------------------------------------------
+/// Self test the daemon.
+void
+samd_test ()
+{
+    printf ("\n** SAMD **\n");
+
+}
+
+
+#ifndef __SAM_TEST
+//  --------------------------------------------------------------------------
 /// Main entry point, initializes and starts samd.
 int
 main ()
@@ -133,3 +137,4 @@ main ()
     samd_destroy (&samd);
     sam_log_info ("exiting");
 }
+#endif

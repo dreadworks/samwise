@@ -109,14 +109,12 @@ sam_init (
 //  --------------------------------------------------------------------------
 /// @brief Instruct sam to analyze and act according to a message
 /// @param self A sam instance
-/// @param action Action as a string
 /// @param msg Message containing some <action>
-/// @return 0 for success, -1 for error
-int
-sam_handle (
+/// @return Some sam_ret_t
+sam_ret_t *
+sam_send_action (
     sam_t *self,
-    const char *action,
-    zmsg_t *msg);
+    zmsg_t **msg);
 
 
 //  --------------------------------------------------------------------------

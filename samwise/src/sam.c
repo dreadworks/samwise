@@ -241,16 +241,16 @@ sam_init (sam_t *self, const char *conf UU)
 
 //  --------------------------------------------------------------------------
 /// TODO analyze message content before passing it on, part of #52.
-int
-sam_send_action (sam_t *self UU, zmsg_t **msg)
+sam_ret_t *
+sam_send_action (sam_t *self, zmsg_t **msg)
 {
     zmsg_send (msg, self->actor_req);
+    zmsg_destroy (msg);
 
-    int rc = -1;
-    zsock_recv (self->actor_req, "i", &rc);
-    assert (rc != -1);
+    sam_ret_t *ret;
+    zsock_recv (self->actor_req, "p", &ret);
 
-    return rc;
+    return ret;
 }
 
 
@@ -304,7 +304,9 @@ sam_test ()
 
     size_t char_s = sizeof (char *);
     zmsg_t *msg = create_zmsg (sizeof (pub_msg) / char_s, pub_msg);
-    sam_send_action (sam, &msg);
+    sam_ret_t *ret = sam_send_action (sam, &msg);
+    assert (!ret->rc);
+    free (ret);
 
     // testing rpc calls
     char *exch_decl_msg [] = {
@@ -315,7 +317,9 @@ sam_test ()
     };
 
     msg = create_zmsg (sizeof (exch_decl_msg) / char_s, exch_decl_msg);
-    sam_send_action (sam, &msg);
+    ret = sam_send_action (sam, &msg);
+    assert (!ret->rc);
+    free (ret);
 
     char *exch_del_msg [] = {
         "exchange.delete", // action
@@ -324,7 +328,9 @@ sam_test ()
     };
 
     msg = create_zmsg (sizeof (exch_del_msg) / char_s, exch_del_msg);
-    sam_send_action (sam, &msg);
+    ret = sam_send_action (sam, &msg);
+    assert (!ret->rc);
+    free (ret);
 
     sam_destroy (&sam);
     assert (!sam);
