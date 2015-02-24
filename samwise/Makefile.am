@@ -1,6 +1,6 @@
 
 ACLOCAL_AMFLAGS = -I m4
-AM_CFLAGS = -g -Wall -Wextra -pedantic -std=gnu99
+AM_CFLAGS = -g -Werror -Wall -Wextra -pedantic -std=gnu99
 
 #
 #  LIBRARIES

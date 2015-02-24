@@ -118,6 +118,11 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
     // publish
     if (!strcmp (action, "publish")) {
         sam_log_trace ("publishing message");
+        if (zmsg_size (msg) != 3) {
+            rc = -1;
+            goto clean;
+        }
+
         char *exchange = zmsg_popstr (msg);
         char *routing_key = zmsg_popstr (msg);
         zframe_t *payload = zmsg_pop (msg);
@@ -139,41 +144,65 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
     else if (!strcmp (action, "exchange.declare")) {
         sam_log_info ("declare exchange");
 
+        if (zmsg_size (msg) != 2) {
+            rc = -1;
+            goto clean;
+        }
+
         char
             *exchange = zmsg_popstr (msg),
             *type = zmsg_popstr (msg);
 
-        sam_msg_rabbitmq_exchange_declare (self, exchange, type);
-        zsock_send (rep, "i", self->id);
+        if (!strlen (exchange) || !strlen (type)) {
+            rc = -1;
+        }
+
+        else {
+            sam_msg_rabbitmq_exchange_declare (self, exchange, type);
+            zsock_send (rep, "i", self->id);
+        }
 
         free (exchange);
         free (type);
-        rc = handle_amqp (loop, self->amqp_pollitem, self);
+        handle_amqp (loop, self->amqp_pollitem, self);
     }
 
     // exchange.delete
     else if (!strcmp (action, "exchange.delete")) {
         sam_log_info ("delete exchange");
+        if (zmsg_size (msg) != 1) {
+            rc = -1;
+            goto clean;
+        }
+
         char *exchange = zmsg_popstr (msg);
 
-        sam_msg_rabbitmq_exchange_delete (self, exchange);
-        zsock_send (rep, "i", self->id);
+        if (!strlen (exchange)) {
+            rc = -1;
+        }
+
+        else {
+            sam_msg_rabbitmq_exchange_delete (self, exchange);
+            zsock_send (rep, "i", self->id);
+        }
 
         free(exchange);
-        rc = handle_amqp (loop, self->amqp_pollitem, self);
+        handle_amqp (loop, self->amqp_pollitem, self);
     }
 
     else {
-        sam_log_errorf (
-            "req: received unknown command %d",
-            action);
-
+        sam_log_errorf ("req: received unknown command %d", action);
         rc = -1;
+    }
+
+clean:
+    if (rc == -1) {
+        zsock_send (rep, "i", -1);
     }
 
     free (action);
     zmsg_destroy (&msg);
-    return rc;
+    return 0;
 }
 
 

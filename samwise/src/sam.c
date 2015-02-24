@@ -20,6 +20,18 @@
 
 #include "../include/sam_prelude.h"
 
+
+//  --------------------------------------------------------------------------
+/// Send a reference of a proper sam_ret_t via INPROC.
+static void
+send_error (zsock_t *sock, sam_ret_t *ret, char *msg)
+{
+    ret->rc = -1;
+    ret->msg = msg;
+    zsock_send (sock, "p", ret);
+}
+
+
 //  --------------------------------------------------------------------------
 /// Callback for events on the internally used req/rep
 /// connection. This function accepts messages crafted as defined by
@@ -28,12 +40,24 @@
 static int
 handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
 {
-    sam_state_t *state = args;
-    zmsg_t *msg = zmsg_new ();
-    char *action;
-    zsock_recv (rep, "sm", &action, &msg);
-    sam_log_tracef ("request %s", action);
+    sam_ret_t *ret = malloc (sizeof (sam_ret_t));
+    assert (ret);
+    ret->rc = 0;
 
+    sam_state_t *state = args;
+    assert (state->backend);
+
+    zmsg_t *msg = zmsg_new ();
+    char *action = NULL;
+
+    zsock_recv (rep, "sm", &action, &msg);
+
+    if (action == NULL) {
+        send_error(rep, ret, "malformed request: action required");
+        return 0;
+    }
+
+    sam_log_tracef ("request %s", action);
     if (!strcmp (action, "publish")) {
         char *distribution = zmsg_popstr (msg);
 
@@ -43,6 +67,14 @@ handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
         }
 
         sam_log_tracef ("publish %s(%d)", distribution, n);
+
+        if (n <= 0 ||
+            (strcmp (distribution, "redundant") &&
+             strcmp (distribution, "round robin"))) {
+                send_error (rep, ret, "unknown distribution method");
+                free (distribution);
+                goto clean;
+        }
         free (distribution);
     }
 
@@ -54,15 +86,24 @@ handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
         free (broker);
     }
 
+    else {
+        send_error (rep, ret, "unknown method");
+        goto clean;
+    }
+
     zsock_send (state->backend->req, "sm", action, msg);
 
     int rc = -1;
     zsock_recv (state->backend->req, "i", &rc);
-    assert (rc != -1);
+    if (rc == -1) {
+        ret->rc = -1;
+        ret->msg = "could not publish message, maybe wrong format";
+    }
 
     sam_log_tracef ("received seqno %d", rc);
-    zsock_send (rep, "i", 0);
+    zsock_send (rep, "p", ret);
 
+clean:
     free (action);
     zmsg_destroy (&msg);
     return 0;
@@ -138,6 +179,7 @@ sam_new ()
     self->actor = zactor_new (actor, state);
     sam_log_info ("created msg instance");
 
+    state->backend = NULL;
     self->state = state;
     return self;
 }
@@ -244,12 +286,18 @@ sam_init (sam_t *self, const char *conf UU)
 sam_ret_t *
 sam_send_action (sam_t *self, zmsg_t **msg)
 {
-    zmsg_send (msg, self->actor_req);
-    zmsg_destroy (msg);
-
     sam_ret_t *ret;
-    zsock_recv (self->actor_req, "p", &ret);
+    if (zmsg_size (*msg) < 1) {
+        ret = malloc (sizeof (sam_ret_t));
+        ret->rc = -1;
+        ret->msg = "malformed request: action required";
+    }
+    else {
+        zmsg_send (msg, self->actor_req);
+        zsock_recv (self->actor_req, "p", &ret);
+    }
 
+    zmsg_destroy (msg);
     return ret;
 }
 
@@ -269,6 +317,16 @@ create_zmsg (uint arg_c, char **arg_v)
     }
 
     return msg;
+}
+
+
+static void
+assert_error (sam_t *sam, zmsg_t *msg)
+{
+    sam_ret_t *ret = sam_send_action (sam, &msg);
+    assert (ret->rc == -1);
+    sam_log_tracef ("got error: %s", ret->msg);
+    free (ret);
 }
 
 
@@ -293,6 +351,7 @@ sam_test ()
 
     sam_be_create (sam, SAM_BE_RABBITMQ, &rabbitmq_opts);
 
+
     // testing rabbitmq publish
     char *pub_msg [] = {
         "publish",        // action
@@ -308,7 +367,8 @@ sam_test ()
     assert (!ret->rc);
     free (ret);
 
-    // testing rpc calls
+
+    // rpc: exchange declare
     char *exch_decl_msg [] = {
         "exchange.declare", // action
         "",                 // broker name
@@ -321,6 +381,8 @@ sam_test ()
     assert (!ret->rc);
     free (ret);
 
+
+    // rpc: exchange delete
     char *exch_del_msg [] = {
         "exchange.delete", // action
         "",                // broker name
@@ -331,6 +393,75 @@ sam_test ()
     ret = sam_send_action (sam, &msg);
     assert (!ret->rc);
     free (ret);
+
+
+    // wrong formats
+    // empty message
+    msg = zmsg_new ();
+    assert_error (sam, msg);
+
+    // unknown method
+    char *a_unknwn_meth [] = {
+        "consume", "amq.direct", ""
+    };
+    msg = create_zmsg (sizeof (a_unknwn_meth) / char_s, a_unknwn_meth);
+    assert_error (sam, msg);
+
+    // missing distribution type
+    char *a_miss_distr [] = {
+        "publish", "amq.direct", "", "hi!"
+    };
+    msg = create_zmsg (sizeof (a_miss_distr) / char_s, a_miss_distr);
+    assert_error (sam, msg);
+
+    // missing distribution count for "redundant"
+    char *a_miss_red_c [] = {
+        "publish", "redundant", "amq.direct", "", "hi!"
+    };
+    msg = create_zmsg (sizeof (a_miss_red_c) / char_s, a_miss_red_c);
+    assert_error (sam, msg);
+
+    // wrong publish
+    char *a_pub_wrong [] = {
+        "publish", "round robin", "amq.direct"
+    };
+    msg = create_zmsg (sizeof (a_pub_wrong) / char_s, a_pub_wrong);
+    assert_error (sam, msg);
+
+
+    // wrong exchange.declare
+    char *a_xdcl_wrong1 [] = {
+        "exchange.declare"
+    };
+    msg = create_zmsg (sizeof (a_xdcl_wrong1) / char_s, a_xdcl_wrong1);
+    assert_error (sam, msg);
+
+    char *a_xdcl_wrong2 [] = {
+        "exchange.declare", "", ""
+    };
+    msg = create_zmsg (sizeof (a_xdcl_wrong2) / char_s, a_xdcl_wrong2);
+    assert_error (sam, msg);
+
+    char *a_xdcl_wrong3 [] = {
+        "exchange.declare", "foo"
+    };
+    msg = create_zmsg (sizeof (a_xdcl_wrong3) / char_s, a_xdcl_wrong3);
+    assert_error (sam, msg);
+
+
+    // wrong exchange.delete
+    char *a_xdel_wrong1 [] = {
+        "exchange.delete"
+    };
+    msg = create_zmsg (sizeof (a_xdel_wrong1) / char_s, a_xdel_wrong1);
+    assert_error (sam, msg);
+
+    char *a_xdel_wrong2 [] = {
+        "exchange.delete", ""
+    };
+    msg = create_zmsg (sizeof (a_xdel_wrong2) / char_s, a_xdel_wrong2);
+    assert_error (sam, msg);
+
 
     sam_destroy (&sam);
     assert (!sam);
