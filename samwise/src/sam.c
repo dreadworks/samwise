@@ -80,11 +80,28 @@ handle_actor_req (zloop_t *loop UU, zsock_t *rep, void *args)
     }
 
     // rpc
-    else if (
-        !strcmp (action, "exchange.declare") ||
-        !strcmp (action, "exchange.delete")) {
+    else if (!strcmp (action, "rpc")) {
+        if (zmsg_size (msg) < 2) {
+            send_error (rep, ret, "rpc type and broker required");
+            goto clean;
+        }
 
         char *broker = zmsg_popstr (msg);
+        char *type = zmsg_popstr (msg);
+
+        if (
+            strcmp (type, "exchange.declare") &&
+            strcmp (type, "exchange.delete")) {
+
+            send_error (rep, ret, "rpc type not known");
+            free (broker);
+            free (type);
+            goto clean;
+        }
+
+        free (action);
+        action = type;
+
         free (broker);
     }
 
@@ -378,8 +395,9 @@ sam_test ()
 
     // rpc: exchange declare
     char *exch_decl_msg [] = {
-        "exchange.declare", // action
+        "rpc",
         "",                 // broker name
+        "exchange.declare", // action
         "test-x",           // exchange name
         "direct"            // type
     };
@@ -392,8 +410,9 @@ sam_test ()
 
     // rpc: exchange delete
     char *exch_del_msg [] = {
-        "exchange.delete", // action
+        "rpc",
         "",                // broker name
+        "exchange.delete", // action
         "test-x"           // exchange name
     };
 
@@ -439,19 +458,19 @@ sam_test ()
 
     // wrong exchange.declare
     char *a_xdcl_wrong1 [] = {
-        "exchange.declare"
+        "rpc", "exchange.declare"
     };
     msg = create_zmsg (sizeof (a_xdcl_wrong1) / char_s, a_xdcl_wrong1);
     assert_error (sam, msg);
 
     char *a_xdcl_wrong2 [] = {
-        "exchange.declare", "", ""
+        "rpc", "exchange.declare", "", ""
     };
     msg = create_zmsg (sizeof (a_xdcl_wrong2) / char_s, a_xdcl_wrong2);
     assert_error (sam, msg);
 
     char *a_xdcl_wrong3 [] = {
-        "exchange.declare", "foo"
+        "rpc", "exchange.declare", "foo"
     };
     msg = create_zmsg (sizeof (a_xdcl_wrong3) / char_s, a_xdcl_wrong3);
     assert_error (sam, msg);
@@ -459,13 +478,13 @@ sam_test ()
 
     // wrong exchange.delete
     char *a_xdel_wrong1 [] = {
-        "exchange.delete"
+        "rpc", "exchange.delete"
     };
     msg = create_zmsg (sizeof (a_xdel_wrong1) / char_s, a_xdel_wrong1);
     assert_error (sam, msg);
 
     char *a_xdel_wrong2 [] = {
-        "exchange.delete", ""
+        "rpc", "exchange.delete", ""
     };
     msg = create_zmsg (sizeof (a_xdel_wrong2) / char_s, a_xdel_wrong2);
     assert_error (sam, msg);

@@ -108,12 +108,23 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
 {
     sam_msg_rabbitmq_t *self = args;
 
-    char *action;
-    zmsg_t *msg = zmsg_new ();
-
-    zsock_recv (rep, "sm", &action, &msg);
-    sam_log_tracef ("handling %s request", action);
     int rc = 0;
+    char *action = NULL;
+    zmsg_t *msg = zmsg_new ();
+    zsock_recv (rep, "sm", &action, &msg);
+
+    if (action == NULL) {
+        zsock_send (rep, "i", -1);
+        zmsg_destroy (&msg);
+        return 0;
+    }
+
+    if (zmsg_size (msg) <= 0) {
+        rc = -1;
+        goto clean;
+    }
+
+    sam_log_tracef ("handling %s request", action);
 
     // publish
     if (!strcmp (action, "publish")) {
@@ -158,12 +169,16 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
         }
 
         else {
-            sam_msg_rabbitmq_exchange_declare (self, exchange, type);
-            zsock_send (rep, "i", self->id);
+            rc = sam_msg_rabbitmq_exchange_declare (self, exchange, type);
         }
 
         free (exchange);
         free (type);
+
+        if (!rc) {
+            zsock_send (rep, "i", self->id);
+        }
+
         handle_amqp (loop, self->amqp_pollitem, self);
     }
 
@@ -182,11 +197,14 @@ handle_req (zloop_t *loop, zsock_t *rep, void *args)
         }
 
         else {
-            sam_msg_rabbitmq_exchange_delete (self, exchange);
-            zsock_send (rep, "i", self->id);
+            rc = sam_msg_rabbitmq_exchange_delete (self, exchange);
         }
 
         free(exchange);
+        if (!rc) {
+            zsock_send (rep, "i", self->id);
+        }
+
         handle_amqp (loop, self->amqp_pollitem, self);
     }
 
@@ -242,14 +260,14 @@ actor (zsock_t *pipe, void *args)
 /// This helper function analyses the return value of an AMQP rpc
 /// call. If the return code is anything other than
 /// AMQP_RESPONSE_NORMAL, an assertion fails.
-static void
+static int
 try (char const *ctx, amqp_rpc_reply_t x)
 {
 
     switch (x.reply_type) {
 
     case AMQP_RESPONSE_NORMAL:
-        return;
+        return 0;
 
     case AMQP_RESPONSE_NONE:
         sam_log_errorf (
@@ -307,7 +325,7 @@ try (char const *ctx, amqp_rpc_reply_t x)
         break;
     }
 
-    assert (false);
+    return -1;
 }
 
 
@@ -522,7 +540,7 @@ sam_msg_rabbitmq_handle_ack (sam_msg_rabbitmq_t *self)
 
 //  --------------------------------------------------------------------------
 /// Declare an exchange.
-void
+int
 sam_msg_rabbitmq_exchange_declare (
     sam_msg_rabbitmq_t *self,
     const char *exchange,
@@ -540,13 +558,14 @@ sam_msg_rabbitmq_exchange_declare (
         0,                             // durable
         amqp_empty_table);             // arguments
 
-    try ("declare exchange", amqp_get_rpc_reply(self->amqp.connection));
+    return try (
+        "declare exchange", amqp_get_rpc_reply(self->amqp.connection));
 }
 
 
 //  --------------------------------------------------------------------------
 /// Delete an exchange.
-void
+int
 sam_msg_rabbitmq_exchange_delete (
     sam_msg_rabbitmq_t *self,
     const char *exchange UU)
@@ -557,7 +576,8 @@ sam_msg_rabbitmq_exchange_delete (
         amqp_cstring_bytes (exchange),
         0);
 
-    try ("delete exchange", amqp_get_rpc_reply(self->amqp.connection));
+    return try (
+        "delete exchange", amqp_get_rpc_reply(self->amqp.connection));
 }
 
 
@@ -646,15 +666,18 @@ sam_msg_rabbitmq_test ()
     };
 
     sam_msg_rabbitmq_connect (rabbit, &opts);
-    sam_msg_rabbitmq_exchange_declare (rabbit, "x-test", "direct");
-    sam_msg_rabbitmq_exchange_delete (rabbit, "x-test");
+
+    int rc = sam_msg_rabbitmq_exchange_declare (rabbit, "x-test", "direct");
+    assert (!rc);
+
+    rc = sam_msg_rabbitmq_exchange_delete (rabbit, "x-test");
+    assert (!rc);
 
     //
     //   SYNCHRONOUS COMMUNICATION
     //
-    int rc = sam_msg_rabbitmq_publish (
+    rc = sam_msg_rabbitmq_publish (
         rabbit, "amq.direct", "", (byte *) "hi!", 3);
-
     assert (rc == 0);
 
     zmq_pollitem_t items = {

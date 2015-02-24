@@ -110,7 +110,8 @@ sam_msg_rabbitmq_handle_ack (
 /// @param self A msg_rabbitmq instance
 /// @param exchange Name of the exchange
 /// @param type One of the AMQ-exchange types
-void
+/// @return 0 for success, -1 for error
+int
 sam_msg_rabbitmq_exchange_declare (
     sam_msg_rabbitmq_t *self,
     const char *exchange,
@@ -121,7 +122,8 @@ sam_msg_rabbitmq_exchange_declare (
 /// @brief Delete an exchange
 /// @param self A msg_rabbitmq instance
 /// @param exchange Name of the exchange
-void
+/// @return 0 for success, -1 for error
+int
 sam_msg_rabbitmq_exchange_delete (
     sam_msg_rabbitmq_t *self,
     const char *exchange);

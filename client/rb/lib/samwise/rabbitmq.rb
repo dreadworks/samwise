@@ -9,14 +9,14 @@
 
     def self.publish_redundant n, exch, rkey, payload
       msg = Samwise::Message.new
-      msg.add "publish", "redundant", n, exch, rkey, payload
+      msg.add "publish", "redundant", n.inspect, exch, rkey, payload
       msg.send
     end
 
 
-    def self.exchange_declare name
+    def self.exchange_declare name, type
       msg = Samwise::Message.new
-      msg.add "rpc", "", "exchange.declare", name
+      msg.add "rpc", "", "exchange.declare", name, type
       msg.send
     end
 

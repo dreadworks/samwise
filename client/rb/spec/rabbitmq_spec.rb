@@ -24,7 +24,7 @@ RSpec.describe Samwise::RabbitMQ do
 
 
   it "handles exchange.declare" do
-    Samwise::RabbitMQ.exchange_declare "test-x"
+    Samwise::RabbitMQ.exchange_declare "test-x", "direct"
   end
 
 
