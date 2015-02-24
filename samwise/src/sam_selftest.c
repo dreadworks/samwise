@@ -35,7 +35,6 @@ typedef enum {
     FN_ALL = 0,           ///< run all functions
     FN_SAM_LOG,           ///< for src/sam_log.c
     FN_SAM_GEN,           ///< for src/sam_gen.c
-    FN_SAM_MSG,           ///< for src/sam_msg.c
     FN_SAM_MSG_RABBITMQ,  ///< for src/sam_msg_rabbitmq.c
     FN_SAM                ///< for src/sam.c
 } test_fn;
@@ -53,7 +52,7 @@ rtfm (int rc)
     printf ("  -h: Print this message and exit\np");
     printf ("  --only SAM_MODULE: run test only for SAM_MODULE\n");
     printf ("    where SAM_MODULE is one of:\n");
-    printf ("    sam, sam_gen, sam_log, sam_msg, sam_msg_rabbitmq\n");
+    printf ("    sam, sam_gen, sam_log, sam_msg_rabbitmq\n");
     printf ("\n");
     exit (rc);
 }
@@ -72,9 +71,6 @@ get_test_fn (test_fn fn)
 
     case FN_SAM_GEN:
         return sam_gen_test;
-
-    case FN_SAM_MSG:
-        return sam_msg_test;
 
     case FN_SAM_MSG_RABBITMQ:
         return sam_msg_rabbitmq_test;
@@ -99,10 +95,6 @@ get_fn_repr (char *name)
 
     if (!strcmp ("sam_gen", name)) {
         return FN_SAM_GEN;
-    }
-
-    if (!strcmp ("sam_msg", name)) {
-        return FN_SAM_MSG;
     }
 
     if (!strcmp ("sam_msg_rabbitmq", name)) {
@@ -150,7 +142,7 @@ int main (int arg_c, char **arg_v)
     if (fn == FN_ALL) {
         printf ("running all tests\n");
         test_fn fn_c = FN_ALL + 1;
-        for (; fn_c < FN_SAM; fn_c ++) {
+        for (; fn_c <= FN_SAM; fn_c ++) {
             get_test_fn (fn_c) ();
         }
     } else {

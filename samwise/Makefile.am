@@ -18,8 +18,6 @@ src_libsam_la_SOURCES =					\
 	include/sam_log.h							\
 	src/sam_log.c									\
 \
-	include/sam_msg.h							\
-	src/sam_msg.c									\
 	include/sam_msg_rabbitmq.h		\
 	src/sam_msg_rabbitmq.c				\
 \

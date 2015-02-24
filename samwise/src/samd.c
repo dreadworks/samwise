@@ -19,7 +19,7 @@
 
 
 #include <czmq.h>
-#include "../include/sam.h"
+#include "../include/sam_prelude.h"
 #include "../include/samd.h"
 
 
@@ -30,77 +30,48 @@ send_error (zsock_t *client_rep, char *reason)
 }
 
 
-static void
-handle_action_req (
-    samd_t *self,
-    zsock_t *client_rep,
-    const char *action,
-    zmsg_t *msg)
-{
-    sam_log_tracef ("handling action request: %s", action);
-
-    // handle publish
-    if (!strcmp ("publish", action)) {
-        if (zmsg_size (msg) < 2) {
-            send_error (client_rep, "no payload provided");
-        }
-
-        int rc = sam_publish (self->sam, msg);
-        if (rc) {
-            send_error (client_rep, "publishing failed");
-        }
-
-        zsock_send (client_rep, "i", 0);
-    }
-
-    // handle rpc
-    else if (!strcmp ("rpc", action)) {
-        send_error (client_rep, "not yet implemented");
-    }
-
-    // handle ping
-    else if (!strcmp ("ping", action)) {
-        zsock_send (client_rep, "i", 0);
-    }
-
-    // unknow method
-    else {
-        send_error (client_rep, "method not supported");
-    }
-}
-
-
-
 //  --------------------------------------------------------------------------
 /// Handle external publishing/rpc requests. Checks the protocol
 /// number to decide if libsam can handle it and then either delegates
 /// or rejects the message.
 static int
-handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
+handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args UU)
 {
-    samd_t *self = args;
     zmsg_t *msg = zmsg_recv (client_rep);
-    sam_log_trace ("received message on public reply socket");
+    zmsg_destroy (&msg);
 
-    int version = zmsg_popint (msg);
-    char *action = zmsg_popstr (msg);
-
-    // check protocol version
-    if (version != SAM_PROTOCOL_VERSION) {
-        send_error (client_rep, "unsupported version");
-    }
-
-    // check action frame
-    else if (!action) {
-        send_error (client_rep, "malformed request");
-    }
-
-    else {
-        handle_action_req (self, client_rep, action, msg);
-    }
-
-    free (action);
+    zsock_send (client_rep, "i", 0);
     return 0;
+
+    // samd_t *self = args;
+    /* zmsg_t *msg = zmsg_recv (client_rep); */
+    /* sam_log_trace ("received message on public reply socket"); */
+
+    /* int version = zmsg_popint (msg); */
+    /* char *action = (char *) zframe_data (zmsg_first (msg)); */
+
+    /* // check protocol version */
+    /* if (version != SAM_PROTOCOL_VERSION) { */
+    /*     send_error (client_rep, "unsupported version"); */
+    /* } */
+
+    /* // check action frame */
+    /* else if (!action) { */
+    /*     send_error (client_rep, "malformed request"); */
+    /* } */
+
+    /* else { */
+    /*     int rc = 0; //sam_handle (self->sam, msg); */
+    /*     if (rc) { */
+    /*         send_error (client_rep, "request failed"); */
+    /*     } */
+    /*     else { */
+    /*         zsock_send (client_rep, "i", 0); */
+    /*     } */
+    /* } */
+
+    /* free (action); */
+    /* return 0; */
 }
 
 

@@ -52,14 +52,6 @@ typedef struct sam_msg_rabbitmq_opts_t {
 } sam_msg_rabbitmq_opts_t;
 
 
-/// request types
-typedef enum {
-    SAM_MSG_REQ_PUBLISH,
-    SAM_MSG_REQ_EXCH_DECLARE,
-    SAM_MSG_REQ_EXCH_DELETE
-} sam_msg_req_t;
-
-
 //  --------------------------------------------------------------------------
 /// @brief Returns the underlying socket of the broker connection
 /// @return The TCP socket's file descriptor
@@ -139,7 +131,7 @@ sam_msg_rabbitmq_exchange_delete (
 /// @brief Start an actor handling requests asynchronously
 /// @param self A msg_rabbitmq instance
 /// @return Actor handling the internal loop
-sam_msg_backend_t *
+sam_backend_t *
 sam_msg_rabbitmq_start (
     sam_msg_rabbitmq_t **self,
     char *pll_endpoint);
@@ -151,7 +143,7 @@ sam_msg_rabbitmq_start (
 /// @return Reclaimed msg_rabbitmq instance
 sam_msg_rabbitmq_t *
 sam_msg_rabbitmq_stop (
-    sam_msg_backend_t **backend);
+    sam_backend_t **backend);
 
 
 //  --------------------------------------------------------------------------

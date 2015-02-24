@@ -34,29 +34,66 @@
                      SAM_VERSION_PATCH)
 
 
-// necessary includes
-#include "sam_prelude.h"
+/// response types
+typedef enum {
+    SAM_RES_ACK,                ///< acknowledgement from be[i]
+    SAM_RES_CONNECTION_LOSS     ///< connection loss registered in be[i]
+} sam_res_t;
 
 
-/// sam instance
+/// backend types
+typedef enum {
+    SAM_BE_RABBITMQ     ///< RabbitMQ message backend
+} sam_be_t;
+
+
+/// return type for client responses
+typedef struct sam_ret_t {
+    int rc;    ///< return code
+    char *msg; ///< set for sam_ret_t.rc != 0
+} sam_ret_t;
+
+/// state used by the sam actor
+typedef struct sam_state_t {
+    zsock_t *actor_rep;      ///< reply socket for the internal actor
+    zsock_t *backend_pull;   ///< back channel for backend acknowledgments
+    sam_backend_t *backend;  ///< reference to a backend (TODO #44)
+} sam_state_t;
+
+
+/// a sam instance
 typedef struct sam_t {
-    sam_msg_t *backends;  ///< @see sam_msg.c
+    zsock_t *actor_req;           ///< request socket for the internal actor
+    char *backend_pull_endpoint;  ///< pull endpoint name for backends to bind
+    zactor_t *actor;              ///< thread maintaining broker connections
+    sam_state_t *state;           ///< ref to the state object for destroy()
 } sam_t;
 
 
 //  --------------------------------------------------------------------------
-/// @brief Create a new instance of samwise
-/// @return A freshly allocated sam instance
+/// @brief Creates a new sam instance
+/// @return Handle for inter thread communication
 sam_t *
 sam_new ();
 
 
 //  --------------------------------------------------------------------------
-/// @brief Ends all processes and free's all allocated memory
-/// @return A freshly allocated sam instance
+/// @brief Destroy an instance, tears down the thread and free's all memory
 void
 sam_destroy (
     sam_t **self);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Create a new message backend
+/// @param self A sam instance
+/// @param be_type Type of the backend to create
+/// @return The calculated delay in ms or -1 in case of error
+int
+sam_be_create (
+    sam_t *self,
+    sam_be_t be_type,
+    void *opts);
 
 
 //  --------------------------------------------------------------------------
@@ -70,13 +107,15 @@ sam_init (
 
 
 //  --------------------------------------------------------------------------
-/// @brief Publish a (content/method) -message to some backend
+/// @brief Instruct sam to analyze and act according to a message
 /// @param self A sam instance
-/// @param msg Message containing backend type, distribution etc.
-/// @return The calculated delay in ms or -1 in case of error
+/// @param action Action as a string
+/// @param msg Message containing some <action>
+/// @return 0 for success, -1 for error
 int
-sam_publish (
+sam_handle (
     sam_t *self,
+    const char *action,
     zmsg_t *msg);
 
 
