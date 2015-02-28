@@ -223,8 +223,8 @@ sam_destroy (sam_t **self)
     // TODO generic tear down
     sam_backend_t *backend = (*self)->state->backend;
     if (backend) {
-        sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_stop (&backend);
-        sam_msg_rabbitmq_destroy (&rabbit);
+        sam_be_rmq_t *rabbit = sam_be_rmq_stop (&backend);
+        sam_be_rmq_destroy (&rabbit);
     }
 
     zsock_destroy (&(*self)->state->backend_pull);
@@ -240,21 +240,21 @@ sam_destroy (sam_t **self)
 
 
 //  --------------------------------------------------------------------------
-/// Function to create a sam_msg_rabbitmq instance and transform it
+/// Function to create a sam_be_rmq instance and transform it
 /// into a generic backend.
 static int
-create_be_rabbitmq (sam_t *self, sam_msg_rabbitmq_opts_t *opts)
+create_be_rabbitmq (sam_t *self, sam_be_rmq_opts_t *opts)
 {
-    sam_msg_rabbitmq_opts_t *rabbit_opts = opts;
-    sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new (0); // TODO id
+    sam_be_rmq_opts_t *rabbit_opts = opts;
+    sam_be_rmq_t *rabbit = sam_be_rmq_new (0); // TODO id
     assert (rabbit);
 
-    sam_msg_rabbitmq_connect (rabbit, rabbit_opts);
+    sam_be_rmq_connect (rabbit, rabbit_opts);
 
     // TODO state MUST NOT be accessed from outside the running thread.
     // this is part of #44.
     self->state->backend =
-        sam_msg_rabbitmq_start (&rabbit, self->backend_pull_endpoint);
+        sam_be_rmq_start (&rabbit, self->backend_pull_endpoint);
 
     return 0;
 }
@@ -287,7 +287,7 @@ int
 sam_init (sam_t *self, const char *conf UU)
 {
     // TODO create shared config (#32)
-    sam_msg_rabbitmq_opts_t rabbitmq_opts = {
+    sam_be_rmq_opts_t rabbitmq_opts = {
         .host = "localhost",
         .port = 5672,
         .user = "guest",
@@ -366,7 +366,7 @@ sam_test ()
     assert (sam);
 
     // testing rabbitmq
-    sam_msg_rabbitmq_opts_t rabbitmq_opts = {
+    sam_be_rmq_opts_t rabbitmq_opts = {
         .host = "localhost",
         .port = 5672,
         .user = "guest",

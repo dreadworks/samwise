@@ -128,19 +128,19 @@ playground_publish_loop ()
         .backend = NULL
     };
 
-    sam_msg_rabbitmq_t *rabbit = sam_msg_rabbitmq_new ();
-    sam_msg_rabbitmq_opts_t opts = {
+    sam_be_rmq_t *rabbit = sam_be_rmq_new ();
+    sam_be_rmq_opts_t opts = {
         .host = "localhost",
         .port = 5672,
         .user = "guest",
         .pass = "guest",
         .heartbeat = 5
     };
-    sam_msg_rabbitmq_connect (rabbit, &opts);
+    sam_be_rmq_connect (rabbit, &opts);
 
     char *endpoint = "inproc://test-pll";
     zsock_t *pll = zsock_new_pull (endpoint);
-    state.backend = sam_msg_rabbitmq_start (&rabbit, endpoint);
+    state.backend = sam_be_rmq_start (&rabbit, endpoint);
 
     zmq_pollitem_t poll_stdin = {
         .socket = NULL, .fd = fileno(stdin), .events = ZMQ_POLLIN, .revents = 0
@@ -154,8 +154,8 @@ playground_publish_loop ()
     zloop_start (loop);
     zloop_destroy (&loop);
 
-    rabbit = sam_msg_rabbitmq_stop (&state.backend);
+    rabbit = sam_be_rmq_stop (&state.backend);
     zsock_destroy (&pll);
 
-    sam_msg_rabbitmq_destroy (&rabbit);
+    sam_be_rmq_destroy (&rabbit);
 }

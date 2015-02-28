@@ -60,7 +60,7 @@ typedef struct sam_backend_t {
 
 #include "sam_gen.h"
 #include "sam_log.h"
-#include "sam_msg_rabbitmq.h"
+#include "sam_be_rmq.h"
 #include "sam.h"
 
 #include "playground.h"  // to be removed (#40)
