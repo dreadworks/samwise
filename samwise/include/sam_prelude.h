@@ -59,6 +59,7 @@ typedef struct sam_backend_t {
 
 
 #include "sam_gen.h"
+#include "sam_msg.h"
 #include "sam_log.h"
 #include "sam_be_rmq.h"
 #include "sam.h"

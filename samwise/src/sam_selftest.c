@@ -36,6 +36,7 @@ typedef enum {
     FN_ALL = 0,           ///< run all functions
     FN_SAM_LOG,           ///< for src/sam_log.c
     FN_SAM_GEN,           ///< for src/sam_gen.c
+    FN_SAM_MSG,           ///< for src/sam_msg.c
     FN_SAM_BE_RMQ,        ///< for src/sam_be_rmq.c
     FN_SAM,               ///< for src/sam.c
     FN_SAMD               ///< for src/samd.c
@@ -54,7 +55,7 @@ rtfm (int rc)
     printf ("  -h: Print this message and exit\np");
     printf ("  --only SAM_MODULE: run test only for SAM_MODULE\n");
     printf ("    where SAM_MODULE is one of:\n");
-    printf ("    samd, sam, sam_gen, sam_log, sam_be_rmq\n");
+    printf ("    samd, sam, sam_gen, sam_msg, sam_log, sam_be_rmq\n");
     printf ("\n");
     exit (rc);
 }
@@ -73,6 +74,9 @@ get_test_fn (test_fn fn)
 
     case FN_SAM_GEN:
         return sam_gen_test;
+
+    case FN_SAM_MSG:
+        return sam_msg_test;
 
     case FN_SAM_BE_RMQ:
         return sam_be_rmq_test;
@@ -100,6 +104,10 @@ get_fn_repr (char *name)
 
     if (!strcmp ("sam_gen", name)) {
         return FN_SAM_GEN;
+    }
+
+    if (!strcmp ("sam_msg", name)) {
+        return FN_SAM_MSG;
     }
 
     if (!strcmp ("sam_be_rmq", name)) {

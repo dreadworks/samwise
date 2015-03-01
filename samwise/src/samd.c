@@ -18,7 +18,6 @@
 */
 
 
-#include <czmq.h>
 #include "../include/sam_prelude.h"
 #include "../include/samd.h"
 
