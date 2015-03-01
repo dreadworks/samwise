@@ -37,14 +37,23 @@ sam_msg_new (zmsg_t **zmsg);
 
 //  --------------------------------------------------------------------------
 /// @brief Destroy a sam_msg, free's all recently allocated memory
-/// @param self Pointer to a sam_msg instance
+/// @param self A sam_msg instance
 void
 sam_msg_destroy (
     sam_msg_t **self);
 
 
 //  --------------------------------------------------------------------------
+/// @brief Destroy a sam_msg, free's all recently allocated memory
+/// @param self A sam_msg instance
+int
+sam_msg_size (
+    sam_msg_t *self);
+
+
+//  --------------------------------------------------------------------------
 /// @brief Free's all memory allocated by the last pop() calls
+/// @param self A sam_msg instance
 void
 sam_msg_free (sam_msg_t *self);
 

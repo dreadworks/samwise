@@ -70,6 +70,17 @@ sam_msg_destroy (sam_msg_t **self)
 }
 
 
+
+//  --------------------------------------------------------------------------
+/// Returns the number of remaining frames.
+int
+sam_msg_size (sam_msg_t *self)
+{
+    return zmsg_size (self->zmsg);
+}
+
+
+
 //  --------------------------------------------------------------------------
 /// Free's all recently allocated memory. Everytime the pop ()
 /// function is called with one or more 's' in the picture, the
@@ -154,6 +165,7 @@ sam_msg_test ()
     sam_msg_t *msg = sam_msg_new (&zmsg);
     assert (msg);
     assert (!zmsg);
+    assert (sam_msg_size (msg) == 0);
 
     sam_msg_destroy (&msg);
     assert (!msg);
@@ -174,7 +186,10 @@ sam_msg_test ()
     int pic_nbr;
     char *pic_str;
     msg = sam_msg_new (&zmsg);
+    assert (sam_msg_size (msg) == 2);
+
     rc = sam_msg_pop (msg, "si", &pic_str, &pic_nbr);
+    assert (sam_msg_size (msg) == 0);
 
     assert (rc == 0);
     assert (pic_nbr == atoi (nbr));
