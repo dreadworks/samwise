@@ -114,7 +114,7 @@ sam_init (
 sam_ret_t *
 sam_send_action (
     sam_t *self,
-    zmsg_t **msg);
+    sam_msg_t **msg);
 
 
 //  --------------------------------------------------------------------------
