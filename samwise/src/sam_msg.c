@@ -27,9 +27,16 @@
 static void
 refs_destructor (void **item)
 {
-    char **ref =  (char **) item;
-    free (*ref);
-    *ref = NULL;
+    if (zframe_is (*item)) {
+        zframe_t **frame = (zframe_t **) item;
+        zframe_destroy (frame);
+        *frame = NULL;
+    }
+    else {
+        char **ref =  (char **) item;
+        free (*ref);
+        *ref = NULL;
+    }
 }
 
 
@@ -101,6 +108,7 @@ sam_msg_free (sam_msg_t *self)
 ///
 ///   'i': for int
 ///   's': for char *
+///   'f': for zframe_t *
 int
 sam_msg_pop (sam_msg_t *self, const char *pic, ...)
 {
@@ -112,12 +120,36 @@ sam_msg_pop (sam_msg_t *self, const char *pic, ...)
     va_start (arg_p, pic);
 
     while (*pic) {
+
+        // frame
+        if (*pic == 'f') {
+            zframe_t *frame = zmsg_pop (self->zmsg);
+            if (!frame) {
+                rc = -1;
+                break;
+            }
+
+            zframe_t **va_p = va_arg (arg_p, zframe_t **);
+            if (va_p) {
+                *va_p = frame;
+                zlist_append (self->refs, *va_p);
+                pic += 1;
+                continue;
+            }
+            else {
+                rc = -1;
+                zframe_destroy (&frame);
+                break;
+            }
+        }
+
         char *str = zmsg_popstr (self->zmsg);
         if (!str) {
             rc = -1;
             break;
         }
 
+        // char *
         if (*pic == 's') {
             char **va_p = va_arg (arg_p, char **);
             if (va_p) {
@@ -129,6 +161,7 @@ sam_msg_pop (sam_msg_t *self, const char *pic, ...)
             }
         }
 
+        // integer
         else if (*pic == 'i') {
             int nbr = atoi (str);
             int *va_p = va_arg (arg_p, int *);
@@ -176,6 +209,8 @@ sam_msg_test ()
 
     char *nbr = "17";
     char *str = "test";
+    char a = 'a';
+    zframe_t *frame = zframe_new (&a, sizeof (a));
 
     int rc = zmsg_pushstr (zmsg, nbr);
     assert (!rc);
@@ -183,15 +218,21 @@ sam_msg_test ()
     rc = zmsg_pushstr (zmsg, str);
     assert (!rc);
 
+    rc = zmsg_push (zmsg, frame);
+    assert (!rc);
+
     int pic_nbr;
     char *pic_str;
-    msg = sam_msg_new (&zmsg);
-    assert (sam_msg_size (msg) == 2);
+    zframe_t *pic_frame;
 
-    rc = sam_msg_pop (msg, "si", &pic_str, &pic_nbr);
+    msg = sam_msg_new (&zmsg);
+    assert (sam_msg_size (msg) == 3);
+
+    rc = sam_msg_pop (msg, "fsi", &pic_frame, &pic_str, &pic_nbr);
     assert (sam_msg_size (msg) == 0);
 
     assert (rc == 0);
+    assert (zframe_eq (frame, pic_frame));
     assert (pic_nbr == atoi (nbr));
     assert (!strcmp (pic_str, str));
     sam_msg_destroy (&msg);
