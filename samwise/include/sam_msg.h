@@ -23,8 +23,14 @@
 
 /// a zmsg wrapper
 typedef struct sam_msg_t {
-    zmsg_t *zmsg;  ///< the wrapped message
-    zlist_t *refs; ///< all allocated heap memory of pop ()'d strings
+    zmsg_t *zmsg;       ///< the wrapped message
+    zlist_t *container; ///< reference list for contained () calls
+
+    struct refs {
+        zlist_t *s;     ///< for allocated strings
+        zlist_t *f;     ///< for allocated frames
+    } refs;
+
 } sam_msg_t;
 
 
@@ -66,6 +72,22 @@ sam_msg_free (sam_msg_t *self);
 /// @return 0 if okay, -1 for errors
 int
 sam_msg_pop (sam_msg_t *self, const char *pic, ...);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Contain some data internally
+/// @param self A sam_msg instance
+/// @param pic Describes the frame contents
+/// @return 0 if okay, -1 for errors
+int
+sam_msg_contain (sam_msg_t *self, const char *pic);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Retrieve a shallow copy of the currently contained items
+/// @param self A sam_msg instance
+int
+sam_msg_contained (sam_msg_t *self, const char *pic, ...);
 
 
 //  --------------------------------------------------------------------------
