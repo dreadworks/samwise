@@ -102,126 +102,111 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 
 
 //  --------------------------------------------------------------------------
+/// Handle publishing request. The frame format contained in the
+/// sam_msg must look like this:
+///
+///    0 | s | <destination exchange>
+///    1 | s | <routing key>
+///    2 | f | zframe_t * containing the payload
+///
+static int
+handle_req_publish (sam_be_rmq_t *self, sam_msg_t *msg)
+{
+    char
+        *exchange,
+        *routing_key;
+    zframe_t *payload;
+
+    int rc = sam_msg_contained (
+        msg, "ssf", &exchange, &routing_key, &payload);
+
+    assert (!rc);
+
+    rc = sam_be_rmq_publish (
+        self,
+        exchange,
+        routing_key,
+        zframe_data (payload),
+        zframe_size (payload));
+
+    return self->amqp.seq - 1;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Handle rpc request. The frame format contained in the sam_msg must
+/// look like this:
+///
+///    0 | s | "exchange.declare", "exchange.delete"
+///    1 | s | <exchange name>
+///    2 | s | <type> for "exchange.declare"
+///
+static int
+handle_req_rpc (sam_be_rmq_t *self, sam_msg_t *msg UU)
+{
+    char *action;
+    int rc = sam_msg_contained (msg, "s", &action);
+    assert (!rc);
+
+    if (!strcmp (action, "exchange.declare")) {
+        char *exchange, *type;
+        rc = sam_msg_contained (msg, "sss", &action, &exchange, &type);
+        assert (!rc);
+        rc = sam_be_rmq_exchange_declare (self, exchange, type);
+    }
+
+    else if (!strcmp (action, "exchange.delete")) {
+        char *exchange;
+        rc = sam_msg_contained (msg, "ss", &action, &exchange);
+        assert (!rc);
+        rc = sam_be_rmq_exchange_delete (self, exchange);
+    }
+
+    else {
+        assert (false);
+    }
+
+    return rc;
+}
+
+//  --------------------------------------------------------------------------
 /// Callback for communication arriving on the REP socket. Most of the
 /// time, these are publishing requests. It also handles RPC calls.
+/// This handler assumes that the arriving pointer, referencing a sam_msg
+/// contains the correct parameters - otherwise it's going to fail.
 static int
 handle_req (zloop_t *loop, zsock_t *rep, void *args)
 {
     sam_be_rmq_t *self = args;
+    sam_msg_t *msg;
 
-    int rc = 0;
-    char *action = NULL;
-    zmsg_t *msg = zmsg_new ();
-    zsock_recv (rep, "sm", &action, &msg);
-
-    if (action == NULL) {
-        zsock_send (rep, "i", -1);
-        zmsg_destroy (&msg);
-        return 0;
+    char *action;
+    int rc = zsock_recv (rep, "sp", &action, &msg);
+    if (rc) {
+        sam_log_error ("recv failed");
+        return rc;
     }
 
-    if (zmsg_size (msg) <= 0) {
-        rc = -1;
-        goto clean;
-    }
-
-    sam_log_tracef ("handling %s request", action);
+    sam_log_tracef ("received request with action '%s'", action);
 
     // publish
     if (!strcmp (action, "publish")) {
-        sam_log_trace ("publishing message");
-        if (zmsg_size (msg) != 3) {
-            rc = -1;
-            goto clean;
-        }
-
-        char *exchange = zmsg_popstr (msg);
-        char *routing_key = zmsg_popstr (msg);
-        zframe_t *payload = zmsg_pop (msg);
-
-        zsock_send (rep, "i", self->amqp.seq);
-        rc = sam_be_rmq_publish (
-            self,
-            exchange,
-            routing_key,
-            zframe_data (payload),
-            zframe_size (payload));
-
-        free (exchange);
-        free (routing_key);
-        zframe_destroy (&payload);
+        rc = handle_req_publish (self, msg);
     }
 
-    // exchange.declare
-    else if (!strcmp (action, "exchange.declare")) {
-        sam_log_info ("declare exchange");
-
-        if (zmsg_size (msg) != 2) {
-            rc = -1;
-            goto clean;
-        }
-
-        char
-            *exchange = zmsg_popstr (msg),
-            *type = zmsg_popstr (msg);
-
-        if (!strlen (exchange) || !strlen (type)) {
-            rc = -1;
-        }
-
-        else {
-            rc = sam_be_rmq_exchange_declare (self, exchange, type);
-        }
-
-        free (exchange);
-        free (type);
-
-        if (!rc) {
-            zsock_send (rep, "i", self->id);
-        }
-
-        handle_amqp (loop, self->amqp_pollitem, self);
-    }
-
-    // exchange.delete
-    else if (!strcmp (action, "exchange.delete")) {
-        sam_log_info ("delete exchange");
-        if (zmsg_size (msg) != 1) {
-            rc = -1;
-            goto clean;
-        }
-
-        char *exchange = zmsg_popstr (msg);
-
-        if (!strlen (exchange)) {
-            rc = -1;
-        }
-
-        else {
-            rc = sam_be_rmq_exchange_delete (self, exchange);
-        }
-
-        free(exchange);
-        if (!rc) {
-            zsock_send (rep, "i", self->id);
-        }
-
+    // rpc
+    else if (!strcmp (action, "rpc")) {
+        rc = handle_req_rpc (self,  msg);
         handle_amqp (loop, self->amqp_pollitem, self);
     }
 
     else {
-        sam_log_errorf ("req: received unknown command %d", action);
-        rc = -1;
-    }
-
-clean:
-    if (rc == -1) {
-        zsock_send (rep, "i", -1);
+        assert (false);
     }
 
     free (action);
-    zmsg_destroy (&msg);
-    return 0;
+    rc = zsock_send (rep, "i", rc);
+    return rc;
 }
 
 
@@ -654,7 +639,9 @@ sam_be_rmq_test ()
 {
     printf ("\n** RABBITMQ BACKEND **\n");
 
-    int id = 0;
+    int
+        id = 0,
+        seq_ref = 1;
     sam_be_rmq_t *rabbit = sam_be_rmq_new (id);
     assert (rabbit);
 
@@ -680,6 +667,7 @@ sam_be_rmq_test ()
     rc = sam_be_rmq_publish (
         rabbit, "amq.direct", "", (byte *) "hi!", 3);
     assert (rc == 0);
+    seq_ref += 1;
 
     zmq_pollitem_t items = {
         .socket = NULL,
@@ -711,47 +699,64 @@ sam_be_rmq_test ()
     assert (backend);
     assert (!rabbit);
 
-    // send method request
-    zsock_send (
-        backend->req, "sss",
-        "exchange.declare",  // action
-        "x-test-async",      // exchange name
-        "direct");           // type
 
-    int backend_id;
-    zsock_recv (backend->req, "i", &backend_id);
-    assert (backend_id == id);
+    // send rpc request: exchange.declare
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "direct");
+    zmsg_pushstr (zmsg, "x-test-async");
+    zmsg_pushstr (zmsg, "exchange.declare");
 
-    zsock_send (
-        backend->req, "ss",
-        "exchange.delete",  // action
-        "x-test-async");    // exchange name
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    sam_msg_contain (msg, "sss");
+    zsock_send (backend->req, "sp", "rpc", msg);
 
-    backend_id = -1;
-    zsock_recv (backend->req, "i", &backend_id);
-    assert (backend_id == id);
+    zsock_recv (backend->req, "i", &rc);
+    assert (!rc);
+    sam_msg_destroy (&msg);
 
-    zsock_send (
-        backend->req, "ssss",
-        "publish",     // action
-        "amq.direct",  // exchange
-        "",            // routing key
-        "hi!");        // payload
 
-    // wait for sequence number
-    int seq;
+    // send rpc request: exchange.delete
+    zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "x-test-async");
+    zmsg_pushstr (zmsg, "exchange.delete");
+
+    msg = sam_msg_new (&zmsg);
+    sam_msg_contain (msg, "ss");
+    zsock_send (backend->req, "sp", "rpc", msg);
+
+    zsock_recv (backend->req, "i", &rc);
+    assert (!rc);
+    sam_msg_destroy (&msg);
+
+
+    // send publishing request
+    zmsg = zmsg_new ();
+    char *str_payload = "hi!";
+    zframe_t *payload = zframe_new (str_payload, strlen (str_payload));
+
+    zmsg_push (zmsg, payload);
+    zmsg_pushstr (zmsg, "");           // routing key
+    zmsg_pushstr (zmsg, "amq.direct"); // exchange
+
+    msg = sam_msg_new (&zmsg);
+    sam_msg_contain (msg, "ssf");
+    zsock_send (backend->req, "sp", "publish", msg);
+
+    int seq = -1;
     zsock_recv (backend->req, "i", &seq);
-    assert (seq == 2);
+    assert (seq == seq_ref);
+    sam_msg_destroy (&msg);
 
     // wait for ack
     int ack_seq;
     sam_res_t res_t;
 
-    backend_id = -1;
+    int backend_id = -1;
     zsock_recv (pll, "iii", &backend_id, &res_t, &ack_seq);
     assert (backend_id == id);
     assert (res_t == SAM_RES_ACK);
     assert (ack_seq == seq);
+
 
     // reclaim ownership
     rabbit = sam_be_rmq_stop (&backend);
@@ -760,4 +765,5 @@ sam_be_rmq_test ()
     // mr gorbachev tear down this wall
     zsock_destroy (&pll);
     sam_be_rmq_destroy (&rabbit);
+
 }
