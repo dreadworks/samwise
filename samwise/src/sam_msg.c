@@ -11,7 +11,7 @@
 /**
 
    @brief wrapper for zmsg
-   @file samd.c
+   @file sam_msg.c
 
    This is a wrapper around zmsg to enable convenient frame access,
    some memory management help and general error handling.

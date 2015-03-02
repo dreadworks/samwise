@@ -13,7 +13,7 @@
 
    @brief Wrapper for zmsg
 
-   TODO: description
+   Wraps zmsg instances and offers garbage collection.
 
 */
 
