@@ -34,6 +34,14 @@ send_error (zsock_t *sock, sam_ret_t *ret, char *msg)
 }
 
 
+static int
+prepare_publish_rmq (sam_msg_t *msg)
+{
+    int rc = sam_msg_contain (msg, "ssf");
+    return rc;
+}
+
+
 //  --------------------------------------------------------------------------
 /// Publish a message to the backends (TODO: multiple backends #44)
 static int
@@ -70,8 +78,15 @@ publish_to_backends (
             "unknown distribution method");
     }
 
-    sam_log_trace ("send request to backend");
-    zsock_send (state->backend->req, "sm", "publish", msg->zmsg);
+    rc = prepare_publish_rmq (msg);
+    if (rc) {
+        return send_error (state->actor_rep, ret, "malformed request");
+    }
+
+    // all necessary information is now "contained"
+    sam_log_trace ("send publishing request backend");
+    zsock_send (state->backend->req, "sp", "publish", msg);
+    distribution = NULL;
 
     int seqno = -1;
     sam_log_trace ("recv on the backend req socket");
@@ -82,6 +97,7 @@ publish_to_backends (
         return rc;
     }
 
+    // should never occur, maybe make an assert out of it
     if (seqno == -1) {
         ret->rc = -1;
         ret->msg = "could not publish message, maybe wrong format";
@@ -98,6 +114,37 @@ publish_to_backends (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Checks if the protocol for the incoming message is obeyed.
+static int
+prepare_rpc_rmq (sam_msg_t *msg)
+{
+    int rc = sam_msg_contain (msg, "s");
+    if (rc) {
+        return rc;
+    }
+
+    char *type;
+    rc = sam_msg_contained (msg, "s", &type);
+    if (rc == -1) {
+        return rc;
+    }
+
+    if (!strcmp (type, "exchange.declare")) {
+        rc = sam_msg_contain (msg, "ss");
+    }
+
+    else if (!strcmp (type, "exchange.delete")) {
+        rc = sam_msg_contain (msg, "s");
+    }
+
+    else {
+        return -1;
+    }
+
+    return rc;
+}
+
 
 //  --------------------------------------------------------------------------
 /// Make an rpc call to one or multiple backends.
@@ -107,29 +154,26 @@ make_rpc_call (
     sam_msg_t *msg,
     sam_ret_t *ret)
 {
-    char *broker, *type;
-    int rc = sam_msg_pop (msg, "ss", &broker, &type);
-    if (rc == -1) {
-        return send_error (
-            state->actor_rep, ret,
-            "rpc type and broker required");
+    char *broker;
+    int rc = sam_msg_pop (msg, "s", &broker);
+    if (rc) {
+        return send_error (state->actor_rep, ret, "broker required");
     }
 
-    if (
-        strcmp (type, "exchange.declare") &&
-        strcmp (type, "exchange.delete")) {
-
-        return send_error (
-            state->actor_rep, ret,
-            "rpc type not known");
+    rc = prepare_rpc_rmq (msg);
+    if (rc) {
+        return send_error (state->actor_rep, ret, "malformed request");
     }
 
-    rc = zsock_send (state->backend->req, "sm", type, msg->zmsg);
+    // the sam_msg instance now holds the appropriate
+    // values through _contain (), TODO distribute #44
+    rc = zsock_send (state->backend->req, "sp", "rpc", msg);
     if (rc) {
         sam_log_error ("send failed");
         return rc;
     }
 
+    // TODO as part of #44: gather all replies
     int status = -1;
     rc = zsock_recv (state->backend->req, "i", &status);
     if (rc) {
