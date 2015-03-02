@@ -165,4 +165,6 @@ int main (int arg_c, char **arg_v)
     } else {
         get_test_fn (fn) ();
     }
+
+    printf ("\nran all tests, exiting.\n");
 }
