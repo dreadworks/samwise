@@ -1,6 +1,6 @@
 /*  =========================================================================
 
-    sam_msg_rabbit - message backend for RabbitMQ
+    sam_be_rmq - message backend for RabbitMQ
 
     This Source Code Form is subject to the terms of the MIT
     License. If a copy of the MIT License was not distributed with
@@ -19,12 +19,12 @@
 
 */
 
-#ifndef __SAM_MSG_RABBIT_H__
-#define __SAM_MSG_RABBIT_H__
+#ifndef __SAM_BE_RMQ_H__
+#define __SAM_BE_RMQ_H__
 
 
-/// the msg_rabbitmq state
-typedef struct sam_msg_rabbitmq_t {
+/// the be_rmq state
+typedef struct sam_be_rmq_t {
     unsigned int id;
 
     struct {                                ///< amqp connection
@@ -39,58 +39,58 @@ typedef struct sam_msg_rabbitmq_t {
     zsock_t *psh;                  ///< pushing ack's as a generic backend
     zmq_pollitem_t *amqp_pollitem; ///< amqp tcp socket wrapped as pollitem
 
-} sam_msg_rabbitmq_t;
+} sam_be_rmq_t;
 
 
 /// option set to pass for backend creation
-typedef struct sam_msg_rabbitmq_opts_t {
+typedef struct sam_be_rmq_opts_t {
     char *host;     ///< hostname, mostly some ip address
     int  port;      ///< port the broker listens to
     char *user;     ///< username
     char *pass;     ///< password
     int heartbeat;  ///< heartbeat interval in seconds
-} sam_msg_rabbitmq_opts_t;
+} sam_be_rmq_opts_t;
 
 
 //  --------------------------------------------------------------------------
 /// @brief Returns the underlying socket of the broker connection
 /// @return The TCP socket's file descriptor
 int
-sam_msg_rabbitmq_sockfd (
-    sam_msg_rabbitmq_t *self);
+sam_be_rmq_sockfd (
+    sam_be_rmq_t *self);
 
 
 //  --------------------------------------------------------------------------
 /// @brief Create a new RabbitMQ connection
-/// @return New msg_rabbitmq instance
-sam_msg_rabbitmq_t *
-sam_msg_rabbitmq_new ();
+/// @return New be_rmq instance
+sam_be_rmq_t *
+sam_be_rmq_new ();
 
 
 //  --------------------------------------------------------------------------
 /// @brief Destroy a RabbitMQ connection
-/// @param self A msg_rabbitmq instance
+/// @param self A be_rmq instance
 void
-sam_msg_rabbitmq_destroy (
-    sam_msg_rabbitmq_t **self);
+sam_be_rmq_destroy (
+    sam_be_rmq_t **self);
 
 
 //  --------------------------------------------------------------------------
 /// @brief Connect to a RabbitMQ broker
 /// @param opts The connection parameters
 void
-sam_msg_rabbitmq_connect (
-    sam_msg_rabbitmq_t *self,
-    sam_msg_rabbitmq_opts_t *opts);
+sam_be_rmq_connect (
+    sam_be_rmq_t *self,
+    sam_be_rmq_opts_t *opts);
 
 
 //  --------------------------------------------------------------------------
 /// @brief Publish a message to the broker
-/// @param self A msg_rabbitmq instance
+/// @param self A be_rmq instance
 /// @param msg  The message as structured data
 int
-sam_msg_rabbitmq_publish (
-    sam_msg_rabbitmq_t *self,
+sam_be_rmq_publish (
+    sam_be_rmq_t *self,
     const char *exchange,
     const char *routing_key,
     byte *payload,
@@ -99,59 +99,59 @@ sam_msg_rabbitmq_publish (
 
 //  --------------------------------------------------------------------------
 /// @brief Read all buffered confirm.select acknowledgements
-/// @param self A msg_rabbitmq instance
+/// @param self A be_rmq instance
 void
-sam_msg_rabbitmq_handle_ack (
-    sam_msg_rabbitmq_t *self);
+sam_be_rmq_handle_ack (
+    sam_be_rmq_t *self);
 
 
 //  --------------------------------------------------------------------------
 /// @brief Declare an exchange
-/// @param self A msg_rabbitmq instance
+/// @param self A be_rmq instance
 /// @param exchange Name of the exchange
 /// @param type One of the AMQ-exchange types
 /// @return 0 for success, -1 for error
 int
-sam_msg_rabbitmq_exchange_declare (
-    sam_msg_rabbitmq_t *self,
+sam_be_rmq_exchange_declare (
+    sam_be_rmq_t *self,
     const char *exchange,
     const char *type);
 
 
 //  --------------------------------------------------------------------------
 /// @brief Delete an exchange
-/// @param self A msg_rabbitmq instance
+/// @param self A be_rmq instance
 /// @param exchange Name of the exchange
 /// @return 0 for success, -1 for error
 int
-sam_msg_rabbitmq_exchange_delete (
-    sam_msg_rabbitmq_t *self,
+sam_be_rmq_exchange_delete (
+    sam_be_rmq_t *self,
     const char *exchange);
 
 
 //  --------------------------------------------------------------------------
 /// @brief Start an actor handling requests asynchronously
-/// @param self A msg_rabbitmq instance
+/// @param self A be_rmq instance
 /// @return Actor handling the internal loop
 sam_backend_t *
-sam_msg_rabbitmq_start (
-    sam_msg_rabbitmq_t **self,
+sam_be_rmq_start (
+    sam_be_rmq_t **self,
     char *pll_endpoint);
 
 
 //  --------------------------------------------------------------------------
 /// @brief Stop the actor and free all allocated memory
-/// @param self A msg_rabbitmq msg_backend instance
-/// @return Reclaimed msg_rabbitmq instance
-sam_msg_rabbitmq_t *
-sam_msg_rabbitmq_stop (
+/// @param self A be_rmq msg_backend instance
+/// @return Reclaimed be_rmq instance
+sam_be_rmq_t *
+sam_be_rmq_stop (
     sam_backend_t **backend);
 
 
 //  --------------------------------------------------------------------------
 /// @brief Self test this class
 void
-sam_msg_rabbitmq_test ();
+sam_be_rmq_test ();
 
 
 #endif

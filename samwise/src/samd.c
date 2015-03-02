@@ -18,7 +18,6 @@
 */
 
 
-#include <czmq.h>
 #include "../include/sam_prelude.h"
 #include "../include/samd.h"
 
@@ -44,27 +43,29 @@ handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
     samd_t *self = args;
     sam_ret_t *ret;
 
-    zmsg_t *msg = zmsg_new ();
+    zmsg_t *zmsg = zmsg_new ();
     int version = -1;
 
-    zsock_recv (client_rep, "im", &version, &msg);
+    zsock_recv (client_rep, "im", &version, &zmsg);
     if (version == -1) {
         ret = create_error ("malformed request");
-        zmsg_destroy (&msg);
+        zmsg_destroy (&zmsg);
     }
 
     else if (version != SAM_PROTOCOL_VERSION) {
         ret = create_error ("wrong protocol version");
-        zmsg_destroy (&msg);
+        zmsg_destroy (&zmsg);
     }
 
-    else if (zmsg_size (msg) < 1) {
+    else if (zmsg_size (zmsg) < 1) {
         ret = create_error ("no payload");
-        zmsg_destroy (&msg);
+        zmsg_destroy (&zmsg);
     }
 
     else {
+        sam_msg_t *msg = sam_msg_new (&zmsg);
         ret = sam_send_action (self->sam, &msg);
+        assert (!msg);
     }
 
     if (!ret->rc) {
