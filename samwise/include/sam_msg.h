@@ -23,12 +23,14 @@
 
 /// a zmsg wrapper
 typedef struct sam_msg_t {
-    zmsg_t *zmsg;       ///< the wrapped message
-    zlist_t *container; ///< reference list for contained () calls
+    pthread_mutex_t lock;  ///< used in sam_msg_contained ()
+
+    zmsg_t *zmsg;          ///< the wrapped message
+    zlist_t *container;    ///< reference list for contained () calls
 
     struct refs {
-        zlist_t *s;     ///< for allocated strings
-        zlist_t *f;     ///< for allocated frames
+        zlist_t *s;        ///< for allocated strings
+        zlist_t *f;        ///< for allocated frames
     } refs;
 
 } sam_msg_t;

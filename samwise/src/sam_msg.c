@@ -69,6 +69,10 @@ sam_msg_new (zmsg_t **zmsg)
     // store for contained values
     self->container = zlist_new ();
 
+    // mutex to allow thread-safe access to contained values
+    int rc = pthread_mutex_init (&self->lock, NULL);
+    assert (!rc);
+
     return self;
 }
 
@@ -82,9 +86,12 @@ sam_msg_destroy (sam_msg_t **self)
     assert (*self);
 
     zmsg_destroy (&(*self)->zmsg);
+
     zlist_destroy (&(*self)->refs.s);
     zlist_destroy (&(*self)->refs.f);
     zlist_destroy (&(*self)->container);
+
+    pthread_mutex_destroy (&(*self)->lock);
 
     free (*self);
     *self = NULL;
@@ -247,8 +254,9 @@ sam_msg_contain (sam_msg_t *self, const char *pic)
 int
 sam_msg_contained (sam_msg_t *self, const char *pic, ...)
 {
-    // TODO #55 zlist_dup () is not thread safe
+    pthread_mutex_lock (&self->lock);
     zlist_t *container = zlist_dup (self->container);
+    pthread_mutex_unlock (&self->lock);
 
     int rc = 0;
     va_list arg_p;
