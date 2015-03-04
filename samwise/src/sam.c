@@ -85,17 +85,18 @@ publish_to_backends (
         return send_error (state->frontend_rep, ret, "malformed request");
     }
 
-    // all necessary information is now "contained"
-    sam_log_trace ("send publishing request backend");
-
     // this is not distributing optimally; if redundant publishing is
     // not needed, replace with fair queuing through zeromq sockets.
-    sam_backend_t *backend = zhash_next (state->backends);
+    sam_backend_t *backend = zlist_next (state->backends);
     if (backend == NULL) {
-        backend = zhash_first (state->backends);
+        backend = zlist_first (state->backends);
     }
 
     if (backend != NULL) {
+        // all necessary information is now "contained"
+        sam_log_tracef ("send publishing request to '%s'", backend->name);
+
+
         zsock_send (backend->req, "sp", "publish", msg);
         distribution = NULL;
 
@@ -186,7 +187,7 @@ make_rpc_call (
             state->frontend_rep, ret, "unknown backend type");
     }
 
-    sam_backend_t *backend = zhash_first (state->backends);
+    sam_backend_t *backend = zlist_first (state->backends);
     while (backend != NULL) {
         rc = zsock_send (backend->req, "sp", "rpc", msg);
         if (rc) {
@@ -201,7 +202,7 @@ make_rpc_call (
             return rc;
         }
 
-        backend = zhash_next (state->backends);
+        backend = zlist_next (state->backends);
     }
 
     rc = zsock_send (state->frontend_rep, "p", ret);
@@ -282,6 +283,7 @@ static int
 handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
 {
     sam_state_t *state = args;
+    int rc = 0;
 
     char *cmd;
     zmsg_t *zmsg = zmsg_new ();
@@ -295,12 +297,31 @@ handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
     // add a new backend
     if (!strcmp (cmd, "be.add")) {
         sam_backend_t *be;
-        int rc = sam_msg_pop (msg, "p", &be);
-        assert (!rc);
-        assert (be);
+        rc = sam_msg_pop (msg, "p", &be);
+        if (!rc) {
+            sam_log_infof ("inserting backend '%s'", be->name);
+            rc = zlist_append (state->backends, be);
+        }
+    }
 
-        sam_log_infof ("inserting backend '%s'", be->name);
-        zhash_insert (state->backends, be->name, be);
+    // remove a backend
+    else if (!strcmp (cmd, "be.rm")) {
+        char *name;
+        rc = sam_msg_pop (msg, "s", &name);
+        if (!rc) {
+
+            rc = -1;
+            sam_backend_t *be = zlist_first (state->backends);
+            while (be != NULL) {
+                if (!strcmp (name, be->name)) {
+                    sam_log_infof ("removing backend %s", name);
+                    zlist_remove (state->backends, be);
+                    sam_be_rmq_t *rabbit = sam_be_rmq_stop (&be);
+                    sam_be_rmq_destroy (&rabbit);
+                    rc = 0;
+                }
+            }
+        }
     }
 
     else {
@@ -311,7 +332,7 @@ handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
     free (cmd);
     sam_msg_destroy (&msg);
 
-    zsock_send (rep, "i", 0);
+    zsock_send (rep, "i", rc);
     return 0;
 }
 
@@ -385,7 +406,7 @@ sam_new (sam_be_t be_type)
     state->be_type = be_type;
     self->be_type = be_type;
 
-    state->backends = zhash_new ();
+    state->backends = zlist_new ();
     self->state = state;
     return self;
 }
@@ -403,7 +424,7 @@ sam_destroy (sam_t **self)
 
     // destroy backends
     sam_state_t *state = (*self)->state;
-    sam_backend_t *backend = zhash_first (state->backends);
+    sam_backend_t *backend = zlist_first (state->backends);
     while (backend != NULL) {
         sam_log_tracef ("trying to delete backend %s", backend->name);
 
@@ -416,9 +437,13 @@ sam_destroy (sam_t **self)
         else {
             assert (false);
         }
-    }
-    zhash_destroy (&state->backends);
 
+        backend = zlist_next (state->backends);
+    }
+
+    zlist_destroy (&state->backends);
+
+    // destroy sockets
     zsock_destroy (&(*self)->state->backend_pull);
     free ((*self)->backend_pull_endpoint);
 
@@ -478,6 +503,22 @@ sam_be_create (
 
 
 //  --------------------------------------------------------------------------
+/// Create a new backend instance based on sam_be_t.
+int
+sam_be_remove (
+    sam_t *self,
+    const char *name)
+{
+    sam_log_infof ("removing backend '%s'", name);
+    zsock_send (self->ctl_req, "ss", "be.rm", name);
+
+    int rc = -1;
+    zsock_recv (self->ctl_req, "i", &rc);
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
 /// Read from a configuration file (TODO #32). Currently just
 /// statically creates a sam_msg instance with one rabbitmq broker
 /// connection.
@@ -499,8 +540,23 @@ sam_init (sam_t *self, const char *conf UU)
 
     int rc = -1;
     zsock_recv (self->ctl_req, "i", &rc);
-    if (!rc) {
+    if (rc) {
         sam_log_error ("could not create backend");
+        return -1;
+    }
+
+    // second backend
+    sam_log_trace ("adding a second backend");
+    be_name = "be2";
+    rmq_opts.port = 5673;
+    be = sam_be_create (self, be_name, &rmq_opts);
+    zsock_send (self->ctl_req, "sp", "be.add", be);
+
+    rc = -1;
+    zsock_recv (self->ctl_req, "i", &rc);
+    if (rc) {
+        sam_log_error ("could not create backend");
+        return -1;
     }
 
     sam_log_info ("(re)loaded configuration");

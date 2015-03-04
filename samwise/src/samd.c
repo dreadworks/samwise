@@ -98,6 +98,7 @@ samd_new (const char *endpoint)
     assert (self->client_rep);
 
     sam_init (self->sam, NULL);
+
     sam_log_info ("created samd");
     return self;
 }

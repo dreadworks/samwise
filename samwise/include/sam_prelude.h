@@ -53,7 +53,7 @@
 /// of different message backends
 typedef struct sam_backend_t {
     // public interface
-    const char *name;   ///< name of the backend
+    char *name;         ///< name of the backend
     zsock_t *req;       ///< request channel to the backend
 
     // privates

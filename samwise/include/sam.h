@@ -60,7 +60,7 @@ typedef struct sam_state_t {
     zsock_t *ctl_rep;        ///< reply socket for control commands
     zsock_t *frontend_rep;   ///< reply socket for the internal actor
     zsock_t *backend_pull;   ///< back channel for backend acknowledgments
-    zhash_t *backends;       ///< maintains request sockets
+    zlist_t *backends;       ///< maintains request sockets
 } sam_state_t;
 
 
@@ -103,6 +103,17 @@ sam_be_create (
     sam_t *self,
     const char *name,
     void *opts);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Remove a message backend
+/// @param self A sam instance
+/// @param be_type Type of the backend to create
+/// @return The calculated delay in ms or -1 in case of error
+int
+sam_be_remove (
+    sam_t *self,
+    const char *name);
 
 
 //  --------------------------------------------------------------------------
