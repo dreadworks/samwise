@@ -34,6 +34,8 @@ send_error (zsock_t *sock, sam_ret_t *ret, char *msg)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Prepare a rabbitmq publishing request.
 static int
 prepare_publish_rmq (sam_msg_t *msg)
 {
@@ -43,7 +45,7 @@ prepare_publish_rmq (sam_msg_t *msg)
 
 
 //  --------------------------------------------------------------------------
-/// Publish a message to the backends (TODO: multiple backends #44)
+/// Publish a message to the backends.
 static int
 publish_to_backends (
     sam_state_t *state,
