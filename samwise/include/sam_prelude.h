@@ -52,9 +52,13 @@
 /// return type for "start" functions
 /// of different message backends
 typedef struct sam_backend_t {
-    void *self;         ///< reference used by stop() give back control
+    // public interface
+    const char *name;   ///< name of the backend
     zsock_t *req;       ///< request channel to the backend
-    zactor_t *actor;    ///< thread handling the broker connection
+
+    // privates
+    zactor_t *_actor;   ///< thread handling the broker connection
+    void *_self;        ///< reference used by stop() give back control
 } sam_backend_t;
 
 

@@ -25,7 +25,7 @@
 
 /// the be_rmq state
 typedef struct sam_be_rmq_t {
-    unsigned int id;
+    char *name;
 
     struct {                                ///< amqp connection
         amqp_connection_state_t connection; ///< internal connection state
@@ -64,7 +64,7 @@ sam_be_rmq_sockfd (
 /// @brief Create a new RabbitMQ connection
 /// @return New be_rmq instance
 sam_be_rmq_t *
-sam_be_rmq_new ();
+sam_be_rmq_new (const char *name);
 
 
 //  --------------------------------------------------------------------------

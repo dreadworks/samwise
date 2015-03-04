@@ -43,7 +43,7 @@ typedef enum {
 
 /// backend types
 typedef enum {
-    SAM_BE_RABBITMQ     ///< RabbitMQ message backend
+    SAM_BE_RMQ     ///< RabbitMQ message backend
 } sam_be_t;
 
 
@@ -53,28 +53,37 @@ typedef struct sam_ret_t {
     char *msg; ///< set for sam_ret_t.rc != 0
 } sam_ret_t;
 
+
 /// state used by the sam actor
 typedef struct sam_state_t {
-    zsock_t *actor_rep;      ///< reply socket for the internal actor
+    sam_be_t be_type;        ///< backend type, used to parse the protocol
+    zsock_t *ctl_rep;        ///< reply socket for control commands
+    zsock_t *frontend_rep;   ///< reply socket for the internal actor
     zsock_t *backend_pull;   ///< back channel for backend acknowledgments
-    sam_backend_t *backend;  ///< reference to a backend (TODO #44)
+    zhash_t *backends;       ///< maintains request sockets
 } sam_state_t;
 
 
 /// a sam instance
 typedef struct sam_t {
-    zsock_t *actor_req;           ///< request socket for the internal actor
+    sam_be_t be_type;             ///< backend type, used to init backends
+    zsock_t *ctl_req;             ///< request socket for control commands
+    zsock_t *frontend_req;        ///< request socket for the internal actor
     char *backend_pull_endpoint;  ///< pull endpoint name for backends to bind
     zactor_t *actor;              ///< thread maintaining broker connections
-    sam_state_t *state;           ///< ref to the state object for destroy()
+
+    // this reference must be handled with care
+    // because it is shared between threads.
+    sam_state_t *state;           ///< ref to the state object for destroy ()
 } sam_t;
 
 
 //  --------------------------------------------------------------------------
 /// @brief Creates a new sam instance
+/// @param be_type Backend type
 /// @return Handle for inter thread communication
 sam_t *
-sam_new ();
+sam_new (sam_be_t be_type);
 
 
 //  --------------------------------------------------------------------------
@@ -89,10 +98,10 @@ sam_destroy (
 /// @param self A sam instance
 /// @param be_type Type of the backend to create
 /// @return The calculated delay in ms or -1 in case of error
-int
+sam_backend_t *
 sam_be_create (
     sam_t *self,
-    sam_be_t be_type,
+    const char *name,
     void *opts);
 
 
