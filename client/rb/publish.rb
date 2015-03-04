@@ -1,65 +1,27 @@
 #!/usr/bin/env ruby
 
+$LOAD_PATH.unshift(File.dirname(__FILE__) + '/lib')
+
 require 'ostruct'
 require 'optparse'
-require 'rbczmq'
+require 'samwise'
 
 
-class Publisher
-
-  def initialize (endpoint, opts)
-    @opts = opts
-    @ctx = ZMQ::Context.new
-
-    puts "connecting to #{endpoint}" unless @opts.quiet
-    @req = @ctx.socket(:REQ)
-    raise "could not create socket" unless @req
-
-    @req.connect(endpoint)
-    raise "could not connect" unless @req.state & ZMQ::Socket::CONNECTED
-
-  end
-
-  def destroy!
-    @ctx.destroy
-  end
-
-  def publish (distribution, exchange, routing_key, message)
-    msg = ZMQ::Message.new
-
-    # msg.push ZMQ::Frame("rabbitmq")
-    msg.push ZMQ::Frame(message)
-    msg.push ZMQ::Frame(routing_key)
-    msg.push ZMQ::Frame(exchange)
-    msg.push ZMQ::Frame(distribution)
-
-    puts "sending message" if @opts.verbose
-    @req.send_message msg
-    raise "message was not sent" unless msg.gone?
-
-    # apply back pressure and comply with
-    # the strict REQ/REP cycle
-    reply = @req.recv
-    puts "received #{reply}" if @opts.verbose
-
-  end
-
-end
+endpoint = "ipc://../../sam_ipc"
+Samwise::Connection.connect endpoint
 
 
 def publish (opts)
-  puts "publishing #{opts.n} messages" unless opts.quiet
-  pub = Publisher.new("ipc://../../sam_ipc", opts)
+    puts "publishing #{opts.n} messages" unless opts.quiet
 
   time_start = Time.now
   opts.n.times do |i|
     puts "publishing message #{i}" if opts.verbose
-    pub.publish("redundant", "amq.direct", "", "hi!")
+    Samwise::RabbitMQ.publish_roundrobin "amq.direct", "", "hi!"
   end
   time_end = Time.now
 
   puts "done in #{time_end - time_start}, exiting" unless opts.quiet
-  pub.destroy!
 end
 
 
@@ -112,3 +74,5 @@ end
 
 options = OptionParser.parse(ARGV)
 publish(options)
+
+Samwise::Connection.close!

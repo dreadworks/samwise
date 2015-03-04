@@ -91,7 +91,7 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 
         sam_log_trace ("received ack");
         zsock_send (
-            self->psh, "iii", self->id, SAM_RES_ACK, props->delivery_tag);
+            self->psh, "sii", self->name, SAM_RES_ACK, props->delivery_tag);
 
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.connection, &frame, &timeout);
@@ -330,13 +330,17 @@ sam_be_rmq_sockfd (sam_be_rmq_t *self)
 /// function creates an AMQP connection state and initializes a TCP
 /// socket for the broker connection.
 sam_be_rmq_t *
-sam_be_rmq_new (unsigned int id)
+sam_be_rmq_new (const char *name)
 {
     sam_log_infof (
-        "creating rabbitmq message backend (%d)", id);
+        "creating rabbitmq message backend (%s)", name);
 
     sam_be_rmq_t *self = malloc (sizeof (sam_be_rmq_t));
     assert (self);
+
+    self->name = malloc (strlen (name) * sizeof (char) + 1);
+    assert (self->name);
+    strcpy (self->name, name);
 
     // init amqp
     self->amqp.seq = 1;
@@ -345,7 +349,6 @@ sam_be_rmq_new (unsigned int id)
     self->amqp.connection = amqp_new_connection ();
     self->amqp.socket = amqp_tcp_socket_new (self->amqp.connection);
 
-    self->id = id;
     return self;
 }
 
@@ -376,6 +379,7 @@ sam_be_rmq_destroy (sam_be_rmq_t **self)
     int rc = amqp_destroy_connection ((*self)->amqp.connection);
     assert (rc >= 0);
 
+    free ((*self)->name);
     free (*self);
     *self = NULL;
 }
@@ -596,12 +600,14 @@ sam_be_rmq_start (
     (*self)->psh = zsock_new_push (pll_endpoint);
     assert ((*self)->psh);
 
-    // change ownership
-    backend->self = *self;
+    backend->name = (*self)->name;
     backend->req = zsock_new_req (rep_endpoint);
-    backend->actor = zactor_new (actor, *self);
 
+    // change ownership
+    backend->_self = *self;
+    backend->_actor = zactor_new (actor, *self);
     *self = NULL;
+
     return backend;
 }
 
@@ -616,10 +622,10 @@ sam_be_rmq_t *
 sam_be_rmq_stop (
     sam_backend_t **backend)
 {
-    sam_be_rmq_t *self = (*backend)->self;
+    sam_be_rmq_t *self = (*backend)->_self;
 
     zsock_destroy (&(*backend)->req);
-    zactor_destroy (&(*backend)->actor);
+    zactor_destroy (&(*backend)->_actor);
 
     free (*backend);
     *backend = NULL;
@@ -642,7 +648,7 @@ sam_be_rmq_test ()
     int
         id = 0,
         seq_ref = 1;
-    sam_be_rmq_t *rabbit = sam_be_rmq_new (id);
+    sam_be_rmq_t *rabbit = sam_be_rmq_new ("test-backend");
     assert (rabbit);
 
     sam_be_rmq_opts_t opts = {
@@ -697,6 +703,11 @@ sam_be_rmq_test ()
         sam_be_rmq_start (&rabbit, pll_endpoint);
 
     assert (backend);
+
+    // check public properties
+    assert (backend->name);
+    assert (backend->req);
+
     assert (!rabbit);
 
 

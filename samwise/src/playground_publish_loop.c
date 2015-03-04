@@ -128,7 +128,7 @@ playground_publish_loop ()
         .backend = NULL
     };
 
-    sam_be_rmq_t *rabbit = sam_be_rmq_new ();
+    sam_be_rmq_t *rabbit = sam_be_rmq_new ("playground-be");
     sam_be_rmq_opts_t opts = {
         .host = "localhost",
         .port = 5672,

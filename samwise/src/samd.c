@@ -91,13 +91,14 @@ samd_new (const char *endpoint)
     samd_t *self = malloc (sizeof (samd_t));
     assert (self);
 
-    self->sam = sam_new ();
+    self->sam = sam_new (SAM_BE_RMQ);
     assert (self->sam);
 
     self->client_rep = zsock_new_rep (endpoint);
     assert (self->client_rep);
 
     sam_init (self->sam, NULL);
+
     sam_log_info ("created samd");
     return self;
 }
