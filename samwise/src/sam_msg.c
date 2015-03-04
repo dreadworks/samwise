@@ -134,6 +134,12 @@ sam_msg_free (sam_msg_t *self)
 ///   'i': for int
 ///   's': for char *
 ///   'f': for zframe_t *
+///   'p': for void *
+///
+/// Pop'd or contained 's' and 'f' are automatically garbage collected
+/// with sam_msg_destroy () or manually by invoking sam_msg_free ()
+/// Proper destruction of 'p' must be handled by the
+/// caller. Obviously, 'i' must not be garbage collected.
 int
 sam_msg_pop (sam_msg_t *self, const char *pic, ...)
 {
@@ -164,6 +170,33 @@ sam_msg_pop (sam_msg_t *self, const char *pic, ...)
             else {
                 rc = -1;
                 zframe_destroy (&frame);
+                break;
+            }
+        }
+
+        // pointer
+        if (*pic == 'p') {
+            zframe_t *frame = zmsg_pop (self->zmsg);
+            if (!frame) {
+                rc = -1;
+                break;
+            }
+
+            void **va_p = va_arg (arg_p, void **);
+            if (va_p) {
+                if (zframe_size (frame) == sizeof (void *)) {
+                    *va_p = *((void **) zframe_data (frame));
+                    pic += 1;
+                    zframe_destroy (&frame);
+                    continue;
+                }
+                else {
+                    rc = -1;
+                }
+            }
+            zframe_destroy (&frame);
+
+            if (rc == -1) {
                 break;
             }
         }
@@ -230,8 +263,9 @@ sam_msg_contain (sam_msg_t *self, const char *pic)
         if (*pic == 'i' || *pic == 's') {
             rc = sam_msg_pop (self, "s", &item);
         }
-        else if (*pic == 'f') {
-            rc = sam_msg_pop (self, "f", &item);
+        else if (*pic == 'f' || *pic == 'p') {
+            char buf [2] = { *pic, '\0' };
+            rc = sam_msg_pop (self, buf, &item);
         }
         else {
             rc = -1;
@@ -296,6 +330,15 @@ sam_msg_contained (sam_msg_t *self, const char *pic, ...)
                     rc = -1;
                 }
             }
+            else if (*pic == 'p') {
+                void **va_p = va_arg (arg_p, void **);
+                if (va_p) {
+                    *va_p = (void *) item;
+                }
+                else {
+                    rc = -1;
+                }
+            }
             else {
                 rc = -1;
             }
@@ -339,8 +382,12 @@ sam_msg_test ()
 
     char *nbr = "17";
     char *str = "test";
+
     char a = 'a';
-    zframe_t *frame = zframe_new (&a, sizeof (a));
+    zframe_t *char_frame = zframe_new (&a, sizeof (a));
+
+    void *ptr = (void *) 0xbadc0de;
+    zframe_t *ptr_frame = zframe_new (&ptr, sizeof (ptr));
 
     int rc = zmsg_pushstr (zmsg, nbr);
     assert (!rc);
@@ -348,23 +395,35 @@ sam_msg_test ()
     rc = zmsg_pushstr (zmsg, str);
     assert (!rc);
 
-    rc = zmsg_push (zmsg, frame);
+    zframe_t *frame_dup = zframe_dup (char_frame);
+    rc = zmsg_prepend (zmsg, &frame_dup);
+    assert (!rc);
+
+    frame_dup = zframe_dup (ptr_frame);
+    rc = zmsg_prepend (zmsg, &frame_dup);
     assert (!rc);
 
     int pic_nbr;
     char *pic_str;
     zframe_t *pic_frame;
+    void *pic_ptr;
 
     msg = sam_msg_new (&zmsg);
-    assert (sam_msg_size (msg) == 3);
+    assert (sam_msg_size (msg) == 4);
 
-    rc = sam_msg_pop (msg, "fsi", &pic_frame, &pic_str, &pic_nbr);
+    rc = sam_msg_pop (msg, "pfsi", &pic_ptr, &pic_frame, &pic_str, &pic_nbr);
     assert (sam_msg_size (msg) == 0);
 
     assert (rc == 0);
-    assert (zframe_eq (frame, pic_frame));
+    assert (zframe_eq (char_frame, pic_frame));
     assert (pic_nbr == atoi (nbr));
     assert (!strcmp (pic_str, str));
+    assert (pic_ptr == ptr);
+
+
+    // clean up
+    zframe_destroy (&char_frame);
+    zframe_destroy (&ptr_frame);
     sam_msg_destroy (&msg);
 
 
@@ -425,41 +484,56 @@ sam_msg_test ()
         char1 = 'a',
         char2 = 'b';
 
+    void
+        *ptr1 = (void *) 0xbadc0de,
+        *ptr2 = (void *) 0xf00baa;
+
     zframe_t
         *frame1 = zframe_new (&char1, sizeof (char1)),
-        *frame2 = zframe_new (&char2, sizeof (char2));
+        *frame2 = zframe_new (&char2, sizeof (char2)),
+        *ptr_f1 = zframe_new (&ptr1, sizeof (ptr1)),
+        *ptr_f2 = zframe_new (&ptr2, sizeof (ptr2));
 
     // add first chunk
     zmsg_addstr (zmsg, str1);
     zmsg_addstr (zmsg, nbr1);
-    zmsg_add (zmsg, frame1);
+
+    frame_dup = zframe_dup (frame1);
+    zmsg_append (zmsg, &frame_dup);
+    frame_dup = zframe_dup (ptr_f1);
+    zmsg_append (zmsg, &frame_dup);
 
     // add second chunk
     zmsg_addstr (zmsg, str2);
     zmsg_addstr (zmsg, nbr2);
-    zmsg_add (zmsg, frame2);
+    frame_dup = zframe_dup (frame2);
+    zmsg_append (zmsg, &frame_dup);
+    frame_dup = zframe_dup (ptr_f2);
+    zmsg_append (zmsg, &frame_dup);
 
     msg = sam_msg_new (&zmsg);
     assert (!zmsg);
-    assert (sam_msg_size (msg) == 6);
+    assert (sam_msg_size (msg) == 8);
 
-    sam_msg_contain (msg, "sif");
-    assert (sam_msg_size (msg) == 3);
+    sam_msg_contain (msg, "sifp");
+    assert (sam_msg_size (msg) == 4);
 
     int round_c;
     char *pic_str1;
     int pic_nbr1;
     zframe_t *pic_frame1;
+    void *pic_ptr1;
 
-    // test initial 3
+    // test initial 4
     for (round_c = 0; round_c < 2; round_c++) {
         rc = sam_msg_contained (
-            msg, "sif", &pic_str1, &pic_nbr1, &pic_frame1);
+            msg, "sifp", &pic_str1, &pic_nbr1, &pic_frame1, &pic_ptr1);
         assert (!rc);
 
         assert (!strcmp (pic_str1, str1));
         assert (pic_nbr1 == atoi (nbr1));
         assert (zframe_eq (pic_frame1, frame1));
+        assert (pic_ptr1 == ptr1);
     }
 
     // pop one more
@@ -467,33 +541,45 @@ sam_msg_test ()
     pic_str1 = NULL;
     pic_nbr1 = -1;
     pic_frame1 = NULL;
+    pic_ptr1 = NULL;
 
     rc = sam_msg_contain (msg, "s");
     assert (!rc);
+    assert (sam_msg_size (msg) == 3);
 
     rc = sam_msg_contained (
-        msg, "sifs", &pic_str1, &pic_nbr1, &pic_frame1, &pic_str2);
+        msg, "sifps", &pic_str1, &pic_nbr1, &pic_frame1, &pic_ptr1, &pic_str2);
     assert (!rc);
 
     assert (!strcmp (pic_str1, str1));
     assert (pic_nbr1 == atoi (nbr1));
     assert (zframe_eq (pic_frame1, frame1));
+    assert (pic_ptr1 == ptr1);
     assert (!strcmp (pic_str2, str2));
 
-    // clear current and pop last two
+    // clear current and pop last three
     int pic_nbr2;
     zframe_t *pic_frame2;
+    void *pic_ptr2;
 
     sam_msg_free (msg);
-    rc = sam_msg_contain (msg, "if");
+    rc = sam_msg_contain (msg, "ifp");
     assert (!rc);
 
     rc = sam_msg_contained (
-        msg, "if", &pic_nbr2, &pic_frame2);
+        msg, "ifp", &pic_nbr2, &pic_frame2, &pic_ptr2);
     assert (!rc);
 
     assert (pic_nbr2 == atoi (nbr2));
     assert (zframe_eq (pic_frame2, frame2));
+    assert (pic_ptr2 == ptr2);
+
+
+    // clean up
+    zframe_destroy (&frame1);
+    zframe_destroy (&frame2);
+    zframe_destroy (&ptr_f1);
+    zframe_destroy (&ptr_f2);
 
 
     // check that no more can be popped
