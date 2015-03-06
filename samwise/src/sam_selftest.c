@@ -35,7 +35,7 @@ typedef void *(*test_fn_t) ();
 typedef enum {
     FN_SAM_LOG,           ///< for src/sam_log.c
     FN_SAM_GEN,           ///< for src/sam_gen.c
-    /* FN_SAM_MSG,           ///< for src/sam_msg.c */
+    FN_SAM_MSG,           ///< for src/sam_msg.c
     /* FN_SAM_BE_RMQ,        ///< for src/sam_be_rmq.c */
     /* FN_SAM,               ///< for src/sam.c */
     /* FN_SAMD               ///< for src/samd.c */
@@ -74,8 +74,8 @@ get_test_fn (test_fn fn)
     case FN_SAM_GEN:
         return sam_gen_test;
 
-    /* case FN_SAM_MSG: */
-    /*     return sam_msg_test; */
+    case FN_SAM_MSG:
+         return sam_msg_test;
 
     /* case FN_SAM_BE_RMQ: */
     /*     return sam_be_rmq_test; */
@@ -100,7 +100,7 @@ int main (int arg_c, char **arg_v)
     SRunner *sr = srunner_create (s);
 
     test_fn fn_c = 1;
-    for (; fn_c <= FN_SAM_GEN; fn_c ++) {
+    for (; fn_c <= FN_SAM_MSG; fn_c ++) {
         s = get_test_fn (fn_c) ();
         srunner_add_suite (sr, s);
     }

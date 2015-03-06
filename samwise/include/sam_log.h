@@ -81,7 +81,11 @@ sam_log_test ();
 //
 
 // trace logging
-#if defined(LOG_THRESHOLD_TRACE) || defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_ERROR)
+#if                                             \
+    defined(LOG_THRESHOLD_TRACE) ||             \
+    defined(LOG_THRESHOLD_INFO)  ||             \
+    defined(LOG_THRESHOLD_ERROR)
+
     #define sam_log_trace(msg)
     #define sam_log_tracef(msg, ...)
 
