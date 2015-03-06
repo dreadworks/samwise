@@ -69,9 +69,15 @@ sam_msg_new (zmsg_t **zmsg)
     // store for contained values
     self->container = zlist_new ();
 
-    // mutex to allow thread-safe access to contained values
-    int rc = pthread_mutex_init (&self->lock, NULL);
+    // mutexes
+    int rc = pthread_mutex_init (&self->owner_lock, NULL);
     assert (!rc);
+
+    rc = pthread_mutex_init (&self->contain_lock, NULL);
+    assert (!rc);
+
+    // reference counting
+    self->owner_refs = 1;
 
     return self;
 }
@@ -85,19 +91,59 @@ sam_msg_destroy (sam_msg_t **self)
 {
     assert (*self);
 
+    // please make sure no one tries to _own after the first
+    // _destroys, @see sam_msg_own
+    pthread_mutex_lock (&(*self)->owner_lock);
+    (*self)->owner_refs -= 1;
+    sam_log_tracef ("destroy with reference count: %d", (*self)->owner_refs);
+    pthread_mutex_unlock (&(*self)->owner_lock);
+
+    if ((*self)->owner_refs) {
+        return;
+    }
+
     zmsg_destroy (&(*self)->zmsg);
 
     zlist_destroy (&(*self)->refs.s);
     zlist_destroy (&(*self)->refs.f);
     zlist_destroy (&(*self)->container);
 
-    pthread_mutex_destroy (&(*self)->lock);
+    pthread_mutex_destroy (&(*self)->owner_lock);
+    pthread_mutex_destroy (&(*self)->contain_lock);
 
     free (*self);
     *self = NULL;
 }
 
 
+//  --------------------------------------------------------------------------
+/// Own a sam_msg instance. This is used for reference counting. If
+/// many entities work with a reference to a message, nobody can tell
+/// when it is safe to destroy the message. So every try to destroy
+/// the message is used to decrement the reference counter until only
+/// one instance holds a reference and the msg objects memoray can be
+/// free'd.
+///
+/// You have to take care to not introduce race conditions. Assume two
+/// threads: t1 and t2.
+///
+/// t1: create msg
+/// t1: fork and hand msg over to t2
+/// t2: own
+/// t1: destroy msg
+/// t2: destroy msg
+///
+/// The behaviour here is obviously undefined. This function can be
+/// used in safe way by own the messages as many times it gets
+/// destroyed independently before handing it to other threads.
+void
+sam_msg_own (sam_msg_t *self)
+{
+    pthread_mutex_lock (&self->owner_lock);
+    self->owner_refs += 1;
+    sam_log_tracef ("own, reference count: %d", self->owner_refs);
+    pthread_mutex_unlock (&self->owner_lock);
+}
 
 //  --------------------------------------------------------------------------
 /// Returns the number of remaining frames.
@@ -288,9 +334,9 @@ sam_msg_contain (sam_msg_t *self, const char *pic)
 int
 sam_msg_contained (sam_msg_t *self, const char *pic, ...)
 {
-    pthread_mutex_lock (&self->lock);
+    pthread_mutex_lock (&self->contain_lock);
     zlist_t *container = zlist_dup (self->container);
-    pthread_mutex_unlock (&self->lock);
+    pthread_mutex_unlock (&self->contain_lock);
 
     int rc = 0;
     va_list arg_p;
@@ -593,6 +639,18 @@ sam_msg_test ()
         msg, "if", &pic_nbr2, &pic_frame2);
     assert (rc == -1);
 
+    sam_msg_destroy (&msg);
+
+
+    // try reference counting
+    zmsg = zmsg_new ();
+    msg = sam_msg_new (&zmsg);
+    sam_msg_own (msg);
 
     sam_msg_destroy (&msg);
+    assert (msg);
+
+    sam_msg_destroy (&msg);
+    assert (!msg);
+
 }

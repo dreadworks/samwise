@@ -23,14 +23,16 @@
 
 /// a zmsg wrapper
 typedef struct sam_msg_t {
-    pthread_mutex_t lock;  ///< used in sam_msg_contained ()
+    int owner_refs;                ///< reference counting by _own ()
+    pthread_mutex_t owner_lock;    ///< used in _own ()
+    pthread_mutex_t contain_lock;  ///< used in _contained ()
 
-    zmsg_t *zmsg;          ///< the wrapped message
-    zlist_t *container;    ///< reference list for contained () calls
+    zmsg_t *zmsg;                  ///< the wrapped message
+    zlist_t *container;            ///< reference list for contained () calls
 
     struct refs {
-        zlist_t *s;        ///< for allocated strings
-        zlist_t *f;        ///< for allocated frames
+        zlist_t *s;                ///< for allocated strings
+        zlist_t *f;                ///< for allocated frames
     } refs;
 
 } sam_msg_t;
@@ -49,6 +51,14 @@ sam_msg_new (zmsg_t **zmsg);
 void
 sam_msg_destroy (
     sam_msg_t **self);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Become one owner of the msg instance, used for reference counting
+/// @param self A sam_msg_instance
+void
+sam_msg_own (
+    sam_msg_t *self);
 
 
 //  --------------------------------------------------------------------------
