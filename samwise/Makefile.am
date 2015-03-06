@@ -40,7 +40,10 @@ src_libsam_la_LDFLAGS = -lzmq -lczmq -lrabbitmq
 #
 bin_PROGRAMS = samd sam_selftest
 
+
+#
 #  samd
+#
 samd_SOURCES =   \
   include/samd.h \
   src/samd.c
@@ -48,11 +51,15 @@ samd_SOURCES =   \
 samd_LDADD = src/libsam.la
 samd_LDFLAGS = -static
 
+
+#
 #  selftest
+#
 sam_selftest_SOURCES = \
 	src/samd.c           \
+	test/sam_gen_test.c  \
 	src/sam_selftest.c
 
 sam_selftest_LDADD = src/libsam.la
-sam_selftest_LDFLAGS = -static
+sam_selftest_LDFLAGS = -static -lcheck
 sam_selftest_CFLAGS = -D__SAM_TEST

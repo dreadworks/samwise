@@ -50,30 +50,3 @@ sam_gen_handle_pipe (zloop_t *loop UU, zsock_t *pipe, void *args UU)
 
     return 0;
 }
-
-
-
-static void
-test_actor (zsock_t *pipe, void *args UU)
-{
-    zloop_t *loop = zloop_new ();
-    zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
-    zsock_signal (pipe, 0);
-    zloop_start (loop);
-    zloop_destroy (&loop);
-}
-
-
-//  --------------------------------------------------------------------------
-/// Self test this file.
-void
-sam_gen_test ()
-{
-    printf ("\n** SAM GEN **\n");
-    zactor_t *actor = zactor_new (test_actor, NULL);
-    assert (actor);
-
-    zactor_destroy (&actor);
-    assert (!actor);
-}
-
