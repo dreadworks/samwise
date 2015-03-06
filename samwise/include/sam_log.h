@@ -72,7 +72,7 @@ sam_logf_ (
 
 //  --------------------------------------------------------------------------
 /// @brief Self test this class
-void
+void *
 sam_log_test ();
 
 

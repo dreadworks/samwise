@@ -33,7 +33,7 @@ typedef void *(*test_fn_t) ();
 
 /// all possible functions
 typedef enum {
-    /* FN_SAM_LOG,           ///< for src/sam_log.c */
+    FN_SAM_LOG,           ///< for src/sam_log.c
     FN_SAM_GEN,           ///< for src/sam_gen.c
     /* FN_SAM_MSG,           ///< for src/sam_msg.c */
     /* FN_SAM_BE_RMQ,        ///< for src/sam_be_rmq.c */
@@ -68,8 +68,8 @@ get_test_fn (test_fn fn)
 {
     switch (fn) {
 
-    /* case FN_SAM_LOG: */
-    /*     return sam_log_test; */
+    case FN_SAM_LOG:
+        return sam_log_test;
 
     case FN_SAM_GEN:
         return sam_gen_test;
@@ -105,8 +105,11 @@ int main (int arg_c, char **arg_v)
         srunner_add_suite (sr, s);
     }
 
+    srunner_set_fork_status (sr, CK_NOFORK);
     srunner_run_all (sr, CK_NORMAL);
+
     int failed = srunner_ntests_failed (sr);
     srunner_free (sr);
+
     return (failed) ? 2 : 0;
 }
