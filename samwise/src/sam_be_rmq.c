@@ -89,9 +89,11 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
         amqp_basic_ack_t *props = frame.payload.method.decoded;
         assert (props);
 
-        sam_log_trace ("received ack");
+        sam_log_tracef (
+            "'%s' received ack no %d", self->name, props->delivery_tag);
+
         zsock_send (
-            self->psh, "sii", self->name, SAM_RES_ACK, props->delivery_tag);
+            self->psh, "si", self->name, SAM_RES_ACK);
 
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.connection, &frame, &timeout);
@@ -110,16 +112,21 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 ///    2 | f | zframe_t * containing the payload
 ///
 static int
-handle_req_publish (sam_be_rmq_t *self, sam_msg_t *msg)
+handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
 {
-    char
-        *exchange,
-        *routing_key;
+    sam_be_rmq_t *self = args;
+    sam_msg_t *msg;
+
+    int rc = zsock_recv (pll, "p", &msg);
+    if (!rc) {
+        sam_log_error ("receive failed");
+    }
+
+    char *exchange, *routing_key;
     zframe_t *payload;
 
-    int rc = sam_msg_contained (
+    rc = sam_msg_contained (
         msg, "ssf", &exchange, &routing_key, &payload);
-
     assert (!rc);
 
     rc = sam_be_rmq_publish (
@@ -129,7 +136,8 @@ handle_req_publish (sam_be_rmq_t *self, sam_msg_t *msg)
         zframe_data (payload),
         zframe_size (payload));
 
-    return self->amqp.seq - 1;
+    sam_msg_destroy (&msg);
+    return 0;
 }
 
 
@@ -142,10 +150,20 @@ handle_req_publish (sam_be_rmq_t *self, sam_msg_t *msg)
 ///    2 | s | <type> for "exchange.declare"
 ///
 static int
-handle_req_rpc (sam_be_rmq_t *self, sam_msg_t *msg UU)
+handle_rpc_req (zloop_t *loop UU, zsock_t *rep, void *args)
 {
+    sam_be_rmq_t *self = args;
+
     char *action;
-    int rc = sam_msg_contained (msg, "s", &action);
+    sam_msg_t *msg;
+
+    int rc = zsock_recv (rep, "p", &msg);
+    if (rc) {
+        sam_log_error ("receive failed");
+        return -1;
+    }
+
+    rc = sam_msg_contained (msg, "s", &action);
     assert (!rc);
 
     if (!strcmp (action, "exchange.declare")) {
@@ -166,45 +184,6 @@ handle_req_rpc (sam_be_rmq_t *self, sam_msg_t *msg UU)
         assert (false);
     }
 
-    return rc;
-}
-
-//  --------------------------------------------------------------------------
-/// Callback for communication arriving on the REP socket. Most of the
-/// time, these are publishing requests. It also handles RPC calls.
-/// This handler assumes that the arriving pointer, referencing a sam_msg
-/// contains the correct parameters - otherwise it's going to fail.
-static int
-handle_req (zloop_t *loop, zsock_t *rep, void *args)
-{
-    sam_be_rmq_t *self = args;
-    sam_msg_t *msg;
-
-    char *action;
-    int rc = zsock_recv (rep, "sp", &action, &msg);
-    if (rc) {
-        sam_log_error ("recv failed");
-        return rc;
-    }
-
-    sam_log_tracef ("received request with action '%s'", action);
-
-    // publish
-    if (!strcmp (action, "publish")) {
-        rc = handle_req_publish (self, msg);
-    }
-
-    // rpc
-    else if (!strcmp (action, "rpc")) {
-        rc = handle_req_rpc (self,  msg);
-        handle_amqp (loop, self->amqp_pollitem, self);
-    }
-
-    else {
-        assert (false);
-    }
-
-    free (action);
     rc = zsock_send (rep, "i", rc);
     return rc;
 }
@@ -230,7 +209,9 @@ actor (zsock_t *pipe, void *args)
     self->amqp_pollitem = &amqp_pollitem;
 
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
-    zloop_reader (loop, self->rep, handle_req, self);
+    zloop_reader (loop, self->publish_pll, handle_publish_req, self);
+    zloop_reader (loop, self->rpc_rep, handle_rpc_req, self);
+
     zloop_poller (loop, &amqp_pollitem, handle_amqp, self);
 
     sam_log_trace ("send ready signal");
@@ -582,26 +563,45 @@ sam_be_rmq_start (
     sam_be_rmq_t **self,
     char *pll_endpoint)
 {
+    char buf [64];
     sam_log_trace ("starting message backend actor");
 
+
+    // create backend
     sam_backend_t *backend = malloc (sizeof (sam_backend_t));
-    zuuid_t *rep_endpoint_id = zuuid_new ();
-    char rep_endpoint [64];
+    assert (backend);
+    backend->name = (*self)->name;
 
-    snprintf (rep_endpoint, 64, "inproc://%s", zuuid_str (rep_endpoint_id));
-    zuuid_destroy (&rep_endpoint_id);
 
-    sam_log_trace ("generated internal req/rep endpoint");
+    // publish PUSH/PULL
+    snprintf (buf, 64, "inproc://be_rmq-%s-publish", (*self)->name);
 
-    (*self)->rep = zsock_new_rep (rep_endpoint);
-    assert ((*self)->rep);
+    (*self)->publish_pll = zsock_new_pull (buf);
+    assert ((*self)->publish_pll);
 
-    sam_log_tracef ("connected push socket to '%s'", pll_endpoint);
+    backend->publish_psh = zsock_new_push (buf);
+    assert (backend->publish_psh);
+
+    sam_log_tracef ("generated rmq psh/pull publishing endpoint '%s'", buf);
+
+
+    // rpc REQ/REP
+    snprintf (buf, 64, "inproc://be_rmq-%s-rpc", (*self)->name);
+
+    (*self)->rpc_rep = zsock_new_rep (buf);
+    assert ((*self)->rpc_rep);
+
+    backend->rpc_req = zsock_new_req (buf);
+    assert (backend->rpc_req);
+
+    sam_log_tracef ("generated rmq req/rep rpc endpoints '%s'", buf);
+
+
+    // feedback PUSH
     (*self)->psh = zsock_new_push (pll_endpoint);
     assert ((*self)->psh);
+    sam_log_tracef ("connected push socket to '%s'", pll_endpoint);
 
-    backend->name = (*self)->name;
-    backend->req = zsock_new_req (rep_endpoint);
 
     // change ownership
     backend->_self = *self;
@@ -623,15 +623,21 @@ sam_be_rmq_stop (
     sam_backend_t **backend)
 {
     sam_be_rmq_t *self = (*backend)->_self;
-
-    zsock_destroy (&(*backend)->req);
     zactor_destroy (&(*backend)->_actor);
+
+    // publish PUSH/PULL
+    zsock_destroy (&(*backend)->publish_psh);
+    zsock_destroy (&self->publish_pll);
+
+    // rpc REQ/REP
+    zsock_destroy (&(*backend)->rpc_req);
+    zsock_destroy (&self->rpc_rep);
+
+    // feedback PUSH
+    zsock_destroy (&self->psh);
 
     free (*backend);
     *backend = NULL;
-
-    zsock_destroy (&self->rep);
-    zsock_destroy (&self->psh);
 
     return self;
 }
@@ -645,10 +651,8 @@ sam_be_rmq_test ()
 {
     printf ("\n** RABBITMQ BACKEND **\n");
 
-    int
-        id = 0,
-        seq_ref = 1;
-    sam_be_rmq_t *rabbit = sam_be_rmq_new ("test-backend");
+    char *be_name = "test";
+    sam_be_rmq_t *rabbit = sam_be_rmq_new (be_name);
     assert (rabbit);
 
     sam_be_rmq_opts_t opts = {
@@ -673,7 +677,6 @@ sam_be_rmq_test ()
     rc = sam_be_rmq_publish (
         rabbit, "amq.direct", "", (byte *) "hi!", 3);
     assert (rc == 0);
-    seq_ref += 1;
 
     zmq_pollitem_t items = {
         .socket = NULL,
@@ -703,12 +706,12 @@ sam_be_rmq_test ()
         sam_be_rmq_start (&rabbit, pll_endpoint);
 
     assert (backend);
+    assert (!rabbit);
 
     // check public properties
     assert (backend->name);
-    assert (backend->req);
-
-    assert (!rabbit);
+    assert (backend->publish_psh);
+    assert (backend->rpc_req);
 
 
     // send rpc request: exchange.declare
@@ -719,11 +722,12 @@ sam_be_rmq_test ()
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
     sam_msg_contain (msg, "sss");
-    zsock_send (backend->req, "sp", "rpc", msg);
 
-    zsock_recv (backend->req, "i", &rc);
-    assert (!rc);
+    zsock_send (backend->rpc_req, "p", msg);
+    zsock_recv (backend->rpc_req, "i", &rc);
+
     sam_msg_destroy (&msg);
+    assert (!rc);
 
 
     // send rpc request: exchange.delete
@@ -733,11 +737,12 @@ sam_be_rmq_test ()
 
     msg = sam_msg_new (&zmsg);
     sam_msg_contain (msg, "ss");
-    zsock_send (backend->req, "sp", "rpc", msg);
 
-    zsock_recv (backend->req, "i", &rc);
-    assert (!rc);
+    zsock_send (backend->rpc_req, "p", msg);
+    zsock_recv (backend->rpc_req, "i", &rc);
+
     sam_msg_destroy (&msg);
+    assert (!rc);
 
 
     // send publishing request
@@ -745,29 +750,22 @@ sam_be_rmq_test ()
     char *str_payload = "hi!";
     zframe_t *payload = zframe_new (str_payload, strlen (str_payload));
 
-    zmsg_push (zmsg, payload);
-    zmsg_pushstr (zmsg, "");           // routing key
-    zmsg_pushstr (zmsg, "amq.direct"); // exchange
+    zmsg_push (zmsg, payload);         // 3. payload
+    zmsg_pushstr (zmsg, "");           // 2. routing key
+    zmsg_pushstr (zmsg, "amq.direct"); // 1. exchange
 
     msg = sam_msg_new (&zmsg);
     sam_msg_contain (msg, "ssf");
-    zsock_send (backend->req, "sp", "publish", msg);
-
-    int seq = -1;
-    zsock_recv (backend->req, "i", &seq);
-    assert (seq == seq_ref);
-    sam_msg_destroy (&msg);
+    zsock_send (backend->publish_psh, "p", msg);
 
     // wait for ack
-    int ack_seq;
     sam_res_t res_t;
 
-    int backend_id = -1;
-    zsock_recv (pll, "iii", &backend_id, &res_t, &ack_seq);
-    assert (backend_id == id);
+    char *returned_name;
+    zsock_recv (pll, "si", &returned_name, &res_t);
+    assert (!strcmp (returned_name, be_name));
     assert (res_t == SAM_RES_ACK);
-    assert (ack_seq == seq);
-
+    free (returned_name);
 
     // reclaim ownership
     rabbit = sam_be_rmq_stop (&backend);

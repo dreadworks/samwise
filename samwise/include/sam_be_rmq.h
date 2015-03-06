@@ -35,7 +35,8 @@ typedef struct sam_be_rmq_t {
         int seq;                            ///< incremented number for acks
     } amqp;
 
-    zsock_t *rep;                  ///< accepting publish/rpc requests
+    zsock_t *publish_pll;          ///< accepting publishing requests
+    zsock_t *rpc_rep;              ///< accepting rpc requests
     zsock_t *psh;                  ///< pushing ack's as a generic backend
     zmq_pollitem_t *amqp_pollitem; ///< amqp tcp socket wrapped as pollitem
 

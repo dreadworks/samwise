@@ -53,8 +53,9 @@
 /// of different message backends
 typedef struct sam_backend_t {
     // public interface
-    char *name;         ///< name of the backend
-    zsock_t *req;       ///< request channel to the backend
+    char *name;            ///< name of the backend
+    zsock_t *publish_psh;  ///< push messages to be published
+    zsock_t *rpc_req;      ///< request an rpc call
 
     // privates
     zactor_t *_actor;   ///< thread handling the broker connection

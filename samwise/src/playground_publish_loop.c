@@ -40,17 +40,13 @@ static void
 publishing_burst (zsock_t *pipe, void *args)
 {
     zsock_signal (pipe, 0);
-    zsock_t *req = args;
+    zsock_t *psh = args;
 
     sam_log_info ("starting publishing burst");
     int64_t start_time = zclock_mono ();
     int p_c = 0;
     for (; p_c < BURST; p_c++) {
-        zsock_send (req, "iss", "publish", "amq.direct", "", "hi!");
-
-        int seq;
-        zsock_recv (req, "i", &seq);
-        sam_log_tracef ("received seq %d", seq);
+        zsock_send (psh, "iss", "amq.direct", "", "hi!");
     }
 
     sam_log_infof (
@@ -78,7 +74,8 @@ handle_stdin (zloop_t *loop UU, zmq_pollitem_t *poll_stdin UU, void *args)
         return -1;
     }
 
-    state->burster = zactor_new (publishing_burst, state->backend->req);
+    state->burster = zactor_new (
+        publishing_burst, state->backend->publish_psh);
     return 0;
 }
 

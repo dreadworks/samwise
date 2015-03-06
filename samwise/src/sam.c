@@ -44,6 +44,17 @@ prepare_publish_rmq (sam_msg_t *msg)
 }
 
 
+static int
+prepare_publish (sam_be_t be_type, sam_msg_t *msg)
+{
+    if (be_type == SAM_BE_RMQ) {
+        return prepare_publish_rmq (msg);
+    }
+
+    assert (false);
+}
+
+
 //  --------------------------------------------------------------------------
 /// Publish a message to the backends.
 static int
@@ -80,13 +91,13 @@ publish_to_backends (
             "unknown distribution method");
     }
 
-    rc = prepare_publish_rmq (msg);
+    // check if the message is correctly formatted
+    // and contain necessary data
+    rc = prepare_publish (state->be_type, msg);
     if (rc) {
         return send_error (state->frontend_rep, ret, "malformed request");
     }
 
-    // this is not distributing optimally; if redundant publishing is
-    // not needed, replace with fair queuing through zeromq sockets.
     sam_backend_t *backend = zlist_next (state->backends);
     if (backend == NULL) {
         backend = zlist_first (state->backends);
@@ -95,27 +106,8 @@ publish_to_backends (
     if (backend != NULL) {
         // all necessary information is now "contained"
         sam_log_tracef ("send publishing request to '%s'", backend->name);
-
-
-        zsock_send (backend->req, "sp", "publish", msg);
-        distribution = NULL;
-
-        int seqno = -1;
-        sam_log_trace ("recv on the backend req socket");
-        rc = zsock_recv (backend->req, "i", &seqno);
-
-        if (rc == -1) {
-            sam_log_error ("recv failed");
-            return rc;
-        }
-
-        // should never occur, maybe make an assert out of it
-        if (seqno == -1) {
-            ret->rc = -1;
-            ret->msg = "could not publish message, maybe wrong format";
-        }
-
-        sam_log_tracef ("backend req socket read, received seqno %d", seqno);
+        sam_msg_own (msg); // the backend is trying to destroy it
+        zsock_send (backend->publish_psh, "p", msg);
     }
 
     rc = zsock_send (state->frontend_rep, "p", ret);
@@ -160,6 +152,17 @@ prepare_rpc_rmq (sam_msg_t *msg)
 }
 
 
+static int
+prepare_rpc (sam_be_t be_type, sam_msg_t *msg)
+{
+    if (be_type == SAM_BE_RMQ) {
+        return prepare_rpc_rmq (msg);
+    }
+
+    assert (false);
+}
+
+
 //  --------------------------------------------------------------------------
 /// Make an rpc call to one or multiple backends.
 static int
@@ -175,28 +178,22 @@ make_rpc_call (
             state->frontend_rep, ret, "broker required");
     }
 
-    if (state->be_type == SAM_BE_RMQ) {
-        rc = prepare_rpc_rmq (msg);
-        if (rc) {
-            return send_error (
-                state->frontend_rep, ret, "malformed request");
-        }
-    }
-    else {
+    rc = prepare_rpc (state->be_type, msg);
+    if (rc) {
         return send_error (
-            state->frontend_rep, ret, "unknown backend type");
+            state->frontend_rep, ret, "malformed request");
     }
 
     sam_backend_t *backend = zlist_first (state->backends);
     while (backend != NULL) {
-        rc = zsock_send (backend->req, "sp", "rpc", msg);
+        rc = zsock_send (backend->rpc_req, "p", msg);
         if (rc) {
             sam_log_error ("send failed");
             return rc;
         }
 
         int status = -1;
-        rc = zsock_recv (backend->req, "i", &status);
+        rc = zsock_recv (backend->rpc_req, "i", &status);
         if (rc) {
             sam_log_error ("recv failed");
             return rc;
@@ -567,24 +564,24 @@ sam_init (sam_t *self, const char *conf UU)
 //  --------------------------------------------------------------------------
 /// Send the sam actor thread a message.
 sam_ret_t *
-sam_send_action (sam_t *self, sam_msg_t **msg)
+sam_send_action (sam_t *self, sam_msg_t *msg)
 {
     sam_ret_t *ret;
-    if (sam_msg_size (*msg) < 1) {
+    if (sam_msg_size (msg) < 1) {
         ret = malloc (sizeof (sam_ret_t));
         ret->rc = -1;
         ret->msg = "malformed request: action required";
     }
     else {
         sam_log_trace ("send on frontends req socket");
-        zsock_send (self->frontend_req, "p", *msg);
+        zsock_send (self->frontend_req, "p", msg);
 
         sam_log_trace ("recv on frontends req socket");
         zsock_recv (self->frontend_req, "p", &ret);
         sam_log_tracef ("frontends req socket read, code: %d", ret->rc);
     }
 
-    sam_msg_destroy (msg);
+    sam_msg_destroy (&msg);
     return ret;
 }
 
@@ -613,9 +610,8 @@ test_create_msg (uint arg_c, char **arg_v)
 static void
 test_assert_error (sam_t *sam, sam_msg_t *msg)
 {
-    sam_ret_t *ret = sam_send_action (sam, &msg);
+    sam_ret_t *ret = sam_send_action (sam, msg);
     assert (ret->rc == -1);
-    assert (!msg);
 
     sam_log_tracef ("got error: %s", ret->msg);
     free (ret);
@@ -647,9 +643,8 @@ sam_test ()
 
     size_t char_s = sizeof (char *);
     sam_msg_t *msg = test_create_msg (sizeof (pub_msg) / char_s, pub_msg);
-    sam_ret_t *ret = sam_send_action (sam, &msg);
+    sam_ret_t *ret = sam_send_action (sam, msg);
     assert (!ret->rc);
-    assert (!msg);
     free (ret);
 
     // rpc: exchange declare
@@ -662,9 +657,8 @@ sam_test ()
     };
 
     msg = test_create_msg (sizeof (exch_decl_msg) / char_s, exch_decl_msg);
-    ret = sam_send_action (sam, &msg);
+    ret = sam_send_action (sam, msg);
     assert (!ret->rc);
-    assert (!msg);
     free (ret);
 
 
@@ -677,9 +671,8 @@ sam_test ()
     };
 
     msg = test_create_msg (sizeof (exch_del_msg) / char_s, exch_del_msg);
-    ret = sam_send_action (sam, &msg);
+    ret = sam_send_action (sam, msg);
     assert (!ret->rc);
-    assert (!msg);
     free (ret);
 
 

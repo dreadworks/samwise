@@ -64,8 +64,7 @@ handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
 
     else {
         sam_msg_t *msg = sam_msg_new (&zmsg);
-        ret = sam_send_action (self->sam, &msg);
-        assert (!msg);
+        ret = sam_send_action (self->sam, msg);
     }
 
     if (!ret->rc) {
