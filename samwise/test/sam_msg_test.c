@@ -14,7 +14,8 @@
 
 //  --------------------------------------------------------------------------
 /// Create and destroy a message.
-START_TEST(test_msg_life_basic) {
+START_TEST(test_msg_life_basic)
+{
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
@@ -36,7 +37,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Test reference counting with _own ().
-START_TEST(test_msg_own) {
+START_TEST(test_msg_own)
+{
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
@@ -56,7 +58,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _pop () an integer.
-START_TEST(test_msg_pop_i) {
+START_TEST(test_msg_pop_i)
+{
     zmsg_t *zmsg = zmsg_new ();
     char *nbr = "1337";
     int rc = zmsg_pushstr (zmsg, nbr);
@@ -77,7 +80,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _pop () a char pointer.
-START_TEST(test_msg_pop_s) {
+START_TEST(test_msg_pop_s)
+{
     zmsg_t *zmsg = zmsg_new ();
     char *str = "hi!";
     int rc = zmsg_pushstr (zmsg, str);
@@ -98,7 +102,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _pop () a zframe pointer.
-START_TEST(test_msg_pop_f) {
+START_TEST(test_msg_pop_f)
+{
     zmsg_t *zmsg = zmsg_new ();
     char payload = 'a';
     zframe_t *frame = zframe_new (&payload, sizeof (payload));
@@ -120,7 +125,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _pop () a void pointer.
-START_TEST(test_msg_pop_p) {
+START_TEST(test_msg_pop_p)
+{
     zmsg_t *zmsg = zmsg_new ();
     void *ptr = (void *) 0xfabfab;
     int rc = zmsg_pushmem (zmsg, &ptr, sizeof (ptr));
@@ -141,7 +147,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _pop () multiple different values.
-START_TEST(test_msg_pop) {
+START_TEST(test_msg_pop)
+{
     zmsg_t *zmsg = zmsg_new ();
 
     // data to be pop()'d
@@ -203,7 +210,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _pop () when there are not enough frames.
-START_TEST(test_msg_pop_insufficient_data) {
+START_TEST(test_msg_pop_insufficient_data)
+{
     zmsg_t *zmsg = zmsg_new ();
     int rc = zmsg_pushstr (zmsg, "one");
     ck_assert_int_eq (rc, 0);
@@ -221,7 +229,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// _pop () multiple times. Mainly used to test the garbage collection.
-START_TEST(test_msg_pop_successively) {
+START_TEST(test_msg_pop_successively)
+{
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "three");
     zmsg_pushstr (zmsg, "two");
@@ -250,7 +259,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Test _size ().
-START_TEST(test_msg_size) {
+START_TEST(test_msg_size)
+{
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
@@ -270,7 +280,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Test successive _size () calls in combination with _pop ().
-START_TEST(test_msg_size_successively) {
+START_TEST(test_msg_size_successively)
+{
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "something");
     zmsg_pushstr (zmsg, "something");
@@ -295,7 +306,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Test _free ().
-START_TEST(test_msg_free) {
+START_TEST(test_msg_free)
+{
     zmsg_t *zmsg = zmsg_new ();
     int rc = zmsg_pushstr (zmsg, "one");
     ck_assert_int_eq (rc, 0);
@@ -323,7 +335,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _contain () an integer.
-START_TEST(test_msg_contain_i) {
+START_TEST(test_msg_contain_i)
+{
     zmsg_t *zmsg = zmsg_new ();
     char *nbr = "1337";
     int rc = zmsg_pushstr (zmsg, nbr);
@@ -353,7 +366,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _contain () a char pointer.
-START_TEST(test_msg_contain_s) {
+START_TEST(test_msg_contain_s)
+{
     zmsg_t *zmsg = zmsg_new ();
     char *str = "hi!";
     int rc = zmsg_pushstr (zmsg, str);
@@ -382,7 +396,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _contain () a zframe pointer.
-START_TEST(test_msg_contain_f) {
+START_TEST(test_msg_contain_f)
+{
     zmsg_t *zmsg = zmsg_new ();
     char payload = 'a';
     zframe_t *frame = zframe_new (&payload, sizeof (payload));
@@ -412,7 +427,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _contain () a void pointer.
-START_TEST(test_msg_contain_p) {
+START_TEST(test_msg_contain_p)
+{
     zmsg_t *zmsg = zmsg_new ();
     void *ptr = (void *) 0xfabfab;
     int rc = zmsg_pushmem (zmsg, &ptr, sizeof (ptr));
@@ -441,7 +457,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _contain () a combination of data.
-START_TEST(test_msg_contain) {
+START_TEST(test_msg_contain)
+{
     zmsg_t *zmsg = zmsg_new ();
     char *str = "str 1", *nbr = "1";
 
@@ -499,7 +516,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to _contain () more data than present.
-START_TEST(test_msg_contain_insufficient_data) {
+START_TEST(test_msg_contain_insufficient_data)
+{
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
     int rc = sam_msg_contain (msg, "s");
@@ -512,7 +530,8 @@ END_TEST
 
 //  --------------------------------------------------------------------------
 /// Try to retrieve more data than _contained ().
-START_TEST(test_msg_contained_insufficient_data) {
+START_TEST(test_msg_contained_insufficient_data)
+{
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "hi!");
     sam_msg_t *msg = sam_msg_new (&zmsg);
