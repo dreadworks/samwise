@@ -85,11 +85,18 @@ handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
 //  --------------------------------------------------------------------------
 /// Creates a new samd instance and binds the public endpoints socket.
 samd_t *
-samd_new (const char *endpoint)
+samd_new (const char *cfg_file UU)
 {
     samd_t *self = malloc (sizeof (samd_t));
     assert (self);
 
+    sam_cfg_t *cfg = sam_cfg_new (cfg_file);
+    sam_cfg_destroy (&cfg); // TO BE REMOVED
+
+    sam_log_info ("created samd");
+    return self;
+
+/*
     self->sam = sam_new (SAM_BE_RMQ);
     assert (self->sam);
 
@@ -97,9 +104,7 @@ samd_new (const char *endpoint)
     assert (self->client_rep);
 
     sam_init (self->sam, NULL);
-
-    sam_log_info ("created samd");
-    return self;
+*/
 }
 
 
@@ -135,9 +140,18 @@ samd_start (samd_t *self)
 //  --------------------------------------------------------------------------
 /// Main entry point, initializes and starts samd.
 int
-main ()
+main (int argc, char **argv)
 {
-    samd_t *samd = samd_new (SAM_PUBLIC_ENDPOINT);
+    argc -= 1;
+    argv += 1;
+
+    if (!argc) {
+        printf ("samd - samwise messaging daemon\n");
+        printf ("usage: samd path/to/config.cfg\n\n");
+        return 2;
+    }
+
+    samd_t *samd = samd_new (*argv);
     samd_start (samd);
     samd_destroy (&samd);
     sam_log_info ("exiting");

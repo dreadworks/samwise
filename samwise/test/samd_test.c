@@ -23,10 +23,10 @@ zsock_t *req;
 static void
 test_actor (zsock_t *pipe, void *args UU)
 {
-    samd_t *samd = samd_new (SAM_PUBLIC_ENDPOINT);
-    zsock_signal (pipe, 0);
+    // samd_t *samd = samd_new (SAM_PUBLIC_ENDPOINT);
+    // zsock_signal (pipe, 0);
     // samd_start (samd);
-    samd_destroy (&samd);
+    // samd_destroy (&samd);
 }
 
 
@@ -35,8 +35,8 @@ test_actor (zsock_t *pipe, void *args UU)
 static void
 setup ()
 {
-    actor = zactor_new (test_actor, NULL);
-    req = zsock_new_req (SAM_PUBLIC_ENDPOINT);
+    // actor = zactor_new (test_actor, NULL);
+    // req = zsock_new_req (SAM_PUBLIC_ENDPOINT);
 }
 
 
@@ -120,11 +120,10 @@ samd_test ()
 
 */
     Suite *s = suite_create ("samd");
-
     TCase *tc = tcase_create("protocol");
-    tcase_add_unchecked_fixture (tc, setup, destroy);
 
 /*
+    tcase_add_unchecked_fixture (tc, setup, destroy);
     tcase_add_test (tc, test_samd_ping);
     tcase_add_test (tc, test_samd_proterr_version);
     tcase_add_test (tc, test_samd_proterr_malformed);
