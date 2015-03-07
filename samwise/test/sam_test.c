@@ -292,16 +292,16 @@ sam_test ()
     tcase_add_test (tc, test_sam_rmq_xdel);
 
     // wrong protocol
-    tcase_add_test( tc, test_sam_rmq_prot_error_empty);
-    tcase_add_test( tc, test_sam_rmq_prot_error_unknown);
-    tcase_add_test( tc, test_sam_rmq_prot_error_missing_type);
-    tcase_add_test( tc, test_sam_rmq_prot_error_missing_dcount);
-    tcase_add_test( tc, test_sam_rmq_prot_error_publish);
-    tcase_add_test( tc, test_sam_rmq_prot_error_xdecl1);
-    tcase_add_test( tc, test_sam_rmq_prot_error_xdecl2);
-    tcase_add_test( tc, test_sam_rmq_prot_error_xdecl3);
-    tcase_add_test( tc, test_sam_rmq_prot_error_xdel1);
-    tcase_add_test( tc, test_sam_rmq_prot_error_xdel2);
+    tcase_add_test(tc, test_sam_rmq_prot_error_empty);
+    tcase_add_test(tc, test_sam_rmq_prot_error_unknown);
+    tcase_add_test(tc, test_sam_rmq_prot_error_missing_type);
+    tcase_add_test(tc, test_sam_rmq_prot_error_missing_dcount);
+    tcase_add_test(tc, test_sam_rmq_prot_error_publish);
+    tcase_add_test(tc, test_sam_rmq_prot_error_xdecl1);
+    tcase_add_test(tc, test_sam_rmq_prot_error_xdecl2);
+    tcase_add_test(tc, test_sam_rmq_prot_error_xdecl3);
+    tcase_add_test(tc, test_sam_rmq_prot_error_xdel1);
+    tcase_add_test(tc, test_sam_rmq_prot_error_xdel2);
     suite_add_tcase (s, tc);
 
     return s;
