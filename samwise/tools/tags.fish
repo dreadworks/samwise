@@ -17,13 +17,16 @@ function __tags
   pushd ../
   set -l dir (pwd)"/.tags"
   popd
-  
+
   rm -rf TAGS
 
   if [ ! -d "$dir" ]
     mkdir "$dir"
   end
 
+  #
+  #  get sources from github
+  #
   for dep in \
     "zeromq/libzmq"           \
     "zeromq/czmq v3.0.0"      \
@@ -48,6 +51,24 @@ function __tags
     echo
   end
 
+  #
+  #  get other sources
+  #
+  set -l name check-0.9.14
+  set -l url http://downloads.sourceforge.net/project/check/check/0.9.14
+
+  if [ ! -d "$dir/$name" ]
+    pushd "$dir"
+    wget $url/$name.tar.gz
+    tar xzf $name.tar.gz
+    rm $name.tar.gz
+    popd
+  end
+
+
+  #
+  #  create tags file
+  #
   __tags_find "$dir"
   __tags_find .
 
