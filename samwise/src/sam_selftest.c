@@ -33,10 +33,10 @@ test_fn_t suites [] = {
     sam_gen_test,
     sam_msg_test,
     sam_be_rmq_test,
-    sam_test
+    sam_test,
+    samd_test
 };
 
-/*     return samd_test; */
 
 //  --------------------------------------------------------------------------
 /// Print all necessary information for user invoking this

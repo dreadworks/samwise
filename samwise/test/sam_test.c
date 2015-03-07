@@ -67,8 +67,7 @@ static void
 test_assert_error (sam_t *sam, sam_msg_t *msg)
 {
     sam_ret_t *ret = sam_send_action (sam, msg);
-    assert (ret->rc == -1);
-
+    ck_assert_int_eq (ret->rc, -1);
     sam_log_tracef ("got error: %s", ret->msg);
     free (ret);
 }
