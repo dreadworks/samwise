@@ -151,7 +151,7 @@ sam_be_rmq_stop (
 
 //  --------------------------------------------------------------------------
 /// @brief Self test this class
-void
+void *
 sam_be_rmq_test ();
 
 

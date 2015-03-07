@@ -139,7 +139,7 @@ sam_send_action (
 
 //  --------------------------------------------------------------------------
 /// @brief Self test this class.
-void
+void *
 sam_test ();
 
 

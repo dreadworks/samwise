@@ -31,7 +31,7 @@ sam_gen_handle_pipe (
 
 //  --------------------------------------------------------------------------
 /// @brief Self test this file
-void
+void *
 sam_gen_test ();
 
 

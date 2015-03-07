@@ -104,7 +104,7 @@ sam_msg_contained (sam_msg_t *self, const char *pic, ...);
 
 //  --------------------------------------------------------------------------
 /// @ Self test this class
-void
+void *
 sam_msg_test ();
 
 

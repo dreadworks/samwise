@@ -53,7 +53,7 @@ samd_start (samd_t *self);
 
 //  --------------------------------------------------------------------------
 /// @brief Self test the daemon
-void
+void *
 samd_test ();
 
 

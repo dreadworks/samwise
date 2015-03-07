@@ -22,6 +22,11 @@
 #define __SAM_PRELUDE_H__
 
 
+#ifdef __SAM_TEST
+#include <check.h>
+#endif
+
+
 // external dependencies
 #include <amqp.h>
 #include <amqp_tcp_socket.h>
