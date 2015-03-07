@@ -55,11 +55,12 @@ samd_LDFLAGS = -static
 #
 #  selftest
 #
-sam_selftest_SOURCES = \
-	src/samd.c           \
-	test/sam_log_test.c  \
-	test/sam_gen_test.c  \
-	test/sam_msg_test.c  \
+sam_selftest_SOURCES =   \
+	src/samd.c             \
+	test/sam_log_test.c    \
+	test/sam_gen_test.c    \
+	test/sam_msg_test.c    \
+	test/sam_be_rmq_test.c \
 	src/sam_selftest.c
 
 sam_selftest_LDADD = src/libsam.la
