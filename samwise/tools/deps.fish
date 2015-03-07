@@ -1,64 +1,78 @@
+#
+#  install all required dependencies to ../usr
+#
 
+
+#
+#  generic download and autotools build
+#
+function __deps_build_generic \
+  -a dir name archive url
+
+  echo "building $name"
+  mkdir .tmp
+  pushd .tmp
+
+  wget $url
+  and tar xzf $archive
+  and pushd $name
+  and ./configure "--prefix=$dir"
+  and make
+  and make install
+  and popd
+  or begin
+    if [ (basename (pwd)) = "$name" ]
+      popd
+    end
+
+    popd
+    echo "installing $name failed"
+    return -1
+  end
+
+  popd
+  rm -rf .tmp
+  echo
+
+end
+
+
+#
+#  install zeromq
+#  http://zeromq.org
+#
 function __deps_libzmq \
   -a dir
 
-  echo "building libzmq"
-  mkdir .tmp
-  pushd .tmp
+  __deps_build_generic \
+    $dir \
+    zeromq-4.0.5 \
+    zeromq-4.0.5.tar.gz \
+    http://download.zeromq.org/zeromq-4.0.5.tar.gz
 
-  wget http://download.zeromq.org/zeromq-4.0.5.tar.gz
-  and tar xzf zeromq-4.0.5.tar.gz
-  and pushd zeromq-4.0.5
-  and ./configure "--prefix=$dir"
-  and make
-  and make install
-  and popd
-  or begin
-    if [ (basename (pwd)) = "zeromq-4.0.5" ]
-      popd
-    end
-
-    popd
-    echo "installing libzmq failed"
-    return -1
-  end
-
-  popd
-  rm -rf .tmp
-  echo
 end
 
 
+#
+#  install czmq
+#  http://czmq.zeromq.org
+#
 function __deps_libczmq \
   -a dir
 
-  echo "building czmq"
-  mkdir .tmp
-  pushd .tmp
+  __deps_build_generic \
+    $dir \
+    czmq-3.0.0 \
+    czmq-3.0.0-rc1.tar.gz \
+    http://download.zeromq.org/czmq-3.0.0-rc1.tar.gz
 
-  wget http://download.zeromq.org/czmq-3.0.0-rc1.tar.gz
-  and tar xzf czmq-3.0.0-rc1.tar.gz
-  and pushd czmq-3.0.0
-  and ./configure "--prefix=$dir"
-  and make
-  and make install
-  and popd
-  or begin
-    if [ (basename (pwd)) = "czmq-3.0.0" ]
-      popd
-    end
-
-    popd
-    echo "installing czmq failed"
-    return -1
-  end
-
-  popd
-  rm -rf .tmp
-  echo
 end
 
 
+#
+#  install the rabbitmq c library
+#  https://github.com/alanxz/rabbitmq-c
+#
 function __deps_librabbitmq \
   -a dir
 
@@ -84,6 +98,23 @@ function __deps_librabbitmq \
   rm -rf .tmp
   echo
 end
+
+
+#
+#  install check, a unit testing framework
+#  http://check.sourceforge.net
+#
+function __deps_check \
+  -a dir
+
+  __deps_build_generic \
+    $dir \
+    check-0.9.14 \
+    check-0.9.14.tar.gz \
+    http://downloads.sourceforge.net/project/check/check/0.9.14/check-0.9.14.tar.gz
+
+end
+
 
 
 function __deps \
@@ -116,6 +147,7 @@ function __deps \
   __deps_libzmq "$dir"
   and __deps_libczmq "$dir"
   and __deps_librabbitmq "$dir"
+  and __deps_check "$dir"
   or echo "something went wrong, exiting."
 
 end
