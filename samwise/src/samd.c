@@ -90,21 +90,33 @@ samd_new (const char *cfg_file UU)
     samd_t *self = malloc (sizeof (samd_t));
     assert (self);
 
-    sam_cfg_t *cfg = sam_cfg_new (cfg_file);
-    sam_cfg_destroy (&cfg); // TO BE REMOVED
+    self->cfg = sam_cfg_new (cfg_file);
+    if (!self->cfg) {
+        return NULL;
+    }
 
-    sam_log_info ("created samd");
-    return self;
-
-/*
-    self->sam = sam_new (SAM_BE_RMQ);
+    sam_be_t be_type;
+    int rc = sam_cfg_be_type (self->cfg, &be_type);
+    self->sam = sam_new (be_type);
     assert (self->sam);
+
+    char *endpoint;
+    rc = sam_cfg_endpoint (self->cfg, &endpoint);
+    if (rc) {
+        return NULL;
+    }
 
     self->client_rep = zsock_new_rep (endpoint);
     assert (self->client_rep);
+    sam_log_tracef ("bound public endpoint '%s'", endpoint);
 
-    sam_init (self->sam, NULL);
-*/
+    rc = sam_init (self->sam, self->cfg);
+    if (rc) {
+        return NULL;
+    }
+
+    sam_log_info ("created samd");
+    return self;
 }
 
 
@@ -152,6 +164,10 @@ main (int argc, char **argv)
     }
 
     samd_t *samd = samd_new (*argv);
+    if (!samd) {
+        return 2;
+    }
+
     samd_start (samd);
     samd_destroy (&samd);
     sam_log_info ("exiting");

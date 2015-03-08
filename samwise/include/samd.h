@@ -27,6 +27,7 @@
 typedef struct samd_t {
     sam_t *sam;            ///< encapsulates a sam thread
     zsock_t *client_rep;   ///< REPLY socket for client requests
+    sam_cfg_t *cfg;        ///< configuration
 } samd_t;
 
 
