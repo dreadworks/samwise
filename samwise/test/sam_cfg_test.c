@@ -67,21 +67,40 @@ END_TEST
 START_TEST(test_cfg_backends_rmq)
 {
     int backend_count;
+    char **names;
     sam_be_rmq_opts_t *opts;
     sam_be_t be_type;
 
     sam_cfg_be_type (cfg, &be_type);
-    int rc = sam_cfg_backends (cfg, be_type, &backend_count, (void **) &opts);
+    int rc = sam_cfg_backends (
+        cfg, be_type, &backend_count, &names, (void **) &opts);
 
     ck_assert_int_eq (rc, 0);
     ck_assert_int_eq (backend_count, 2);
 
+    // broker-1
+    ck_assert_str_eq (*names, "broker-1");
     ck_assert_str_eq (opts->host, "localhost");
     ck_assert_int_eq (opts->port, 5672);
     ck_assert_str_eq (opts->user, "guest");
     ck_assert_str_eq (opts->pass, "guest");
     ck_assert_int_eq (opts->heartbeat, 3);
 
+    names += 1;
+    opts += 1;
+
+    // broker-1
+    ck_assert_str_eq (*names, "broker-2");
+    ck_assert_str_eq (opts->host, "localhost");
+    ck_assert_int_eq (opts->port, 5673);
+    ck_assert_str_eq (opts->user, "guest");
+    ck_assert_str_eq (opts->pass, "guest");
+    ck_assert_int_eq (opts->heartbeat, 3);
+
+    names -= 1;
+    opts -= 1;
+
+    free (names);
     free (opts);
 }
 END_TEST

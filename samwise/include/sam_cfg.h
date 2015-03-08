@@ -69,6 +69,7 @@ sam_cfg_be_type (
 /// @param self A cfg instance
 /// @param be_type Decides the format to load
 /// @param be_c Number of backends loaded
+/// @param names Is going to point to a buffer containing all names
 /// @param opts Is going to point to a buffer containing all options
 /// @return 0 for success, -1 for errors
 int
@@ -76,6 +77,7 @@ sam_cfg_backends (
     sam_cfg_t *self,
     sam_be_t be_type,
     int *be_c,
+    char ***names,
     void **opts);
 
 

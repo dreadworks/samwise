@@ -192,10 +192,18 @@ static int
 read_backends_rmq (
     zconfig_t *cfg_ptr,
     int *be_c,
+    char ***names_ptr,
     void **opts_ptr)
 {
     size_t opt_s = sizeof (sam_be_rmq_opts_t);
+    size_t str_s = sizeof (char *);
+
     sam_be_rmq_opts_t *opts = malloc (opt_s);
+    assert (opts);
+
+    char **names = malloc (str_s);
+    assert (names);
+
     if (!opts) {
         assert (false);
     }
@@ -203,12 +211,19 @@ read_backends_rmq (
     *be_c = 0;
     while (cfg_ptr) {
         *be_c += 1;
-        long unsigned int byte_c = opt_s * *be_c;
 
-        opts = realloc (opts, byte_c);
+        // expand opts buffer
+        opts = realloc (opts, opt_s * *be_c);
         if (!opts) {
             assert (false);
         }
+
+        // expand names buffer
+        names = realloc (names, str_s * *be_c);
+        if (!names) {
+            assert (false);
+        }
+        names[*be_c - 1] = zconfig_name (cfg_ptr);
 
         sam_be_rmq_opts_t *be_opts = opts + (*be_c - 1);
         int rc = resolve (
@@ -227,6 +242,7 @@ read_backends_rmq (
         cfg_ptr = zconfig_next (cfg_ptr);
     }
 
+    *names_ptr = names;
     *opts_ptr = opts;
     return 0;
 }
@@ -240,6 +256,7 @@ sam_cfg_backends (
     sam_cfg_t *self,
     sam_be_t be_type,
     int *be_c,
+    char ***names,
     void **opts)
 {
     zconfig_t *cfg_ptr = zconfig_locate (self->zcfg, "/backends");
@@ -256,7 +273,7 @@ sam_cfg_backends (
 
     int rc = 0;
     if (be_type == SAM_BE_RMQ) {
-        rc = read_backends_rmq (cfg_ptr, be_c, opts);
+        rc = read_backends_rmq (cfg_ptr, be_c, names, opts);
     }
     else {
         sam_log_error ("unknown backend type");
