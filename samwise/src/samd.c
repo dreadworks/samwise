@@ -127,6 +127,7 @@ samd_destroy (samd_t **self)
 {
     sam_log_info ("destroying samd");
 
+    sam_cfg_destroy (&(*self)->cfg);
     zsock_destroy (&(*self)->client_rep);
     sam_destroy (&(*self)->sam);
 
