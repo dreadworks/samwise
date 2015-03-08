@@ -36,6 +36,57 @@ destroy ()
 }
 
 
+START_TEST(test_cfg_endpoint)
+{
+    char *endpoint;
+
+    int rc = sam_cfg_endpoint (cfg, &endpoint);
+    ck_assert_int_eq (rc, 0);
+
+    zsock_t *sock = zsock_new_rep (endpoint);
+    if (!sock) {
+        ck_abort_msg ("endpoint is not valid");
+    }
+    zsock_destroy (&sock);
+}
+END_TEST
+
+
+START_TEST(test_cfg_be_type)
+{
+    sam_be_t be_type;
+    int rc = sam_cfg_be_type (cfg, &be_type);
+
+    ck_assert_int_eq (rc, 0);
+    ck_assert (be_type == SAM_BE_RMQ);
+
+}
+END_TEST
+
+
+START_TEST(test_cfg_backends_rmq)
+{
+    int backend_count;
+    sam_be_rmq_opts_t *opts;
+    sam_be_t be_type;
+
+    sam_cfg_be_type (cfg, &be_type);
+    int rc = sam_cfg_backends (cfg, be_type, &backend_count, (void **) &opts);
+
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (backend_count, 2);
+
+    ck_assert_str_eq (opts->host, "localhost");
+    ck_assert_int_eq (opts->port, 5672);
+    ck_assert_str_eq (opts->user, "guest");
+    ck_assert_str_eq (opts->pass, "guest");
+    ck_assert_int_eq (opts->heartbeat, 3);
+
+    free (opts);
+}
+END_TEST
+
+
 //  --------------------------------------------------------------------------
 /// Self test this class.
 void *
@@ -45,7 +96,9 @@ sam_cfg_test ()
 
     TCase *tc = tcase_create("config");
     tcase_add_unchecked_fixture (tc, setup, destroy);
-    // tcase_add_test (tc, test_samd_proterr_malformed);
+    tcase_add_test (tc, test_cfg_endpoint);
+    tcase_add_test (tc, test_cfg_be_type);
+    tcase_add_test (tc, test_cfg_backends_rmq);
     suite_add_tcase (s, tc);
 
     return s;
