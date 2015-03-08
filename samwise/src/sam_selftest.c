@@ -32,9 +32,9 @@ test_fn_t suites [] = {
     sam_log_test,
     sam_gen_test,
     sam_msg_test,
+    sam_cfg_test,
     sam_be_rmq_test,
-    sam_test,
-    samd_test
+    sam_test
 };
 
 
@@ -45,14 +45,54 @@ static void
 rtfm (int rc)
 {
     printf ("sam selftest\n");
-    printf ("usage: sam_selftest [-h]\n");
+    printf ("usage: sam_selftest [-h] [--only SAM_MODULE]\n");
     printf ("options:\n");
     printf ("  -h: Print this message and exit\n");
+    printf ("  --only SAM_MODULE: run test only for SAM_MODULE\n");
+    printf ("    where SAM_MODULE is one of:\n");
+    printf ("    sam_gen, sam_log, sam_msg, sam_cfg, sam_be_rmq, sam\n");
     printf ("\n");
     printf ("You can selectively run tests by setting the CK_RUN_SUITE and\n");
-    printf ("CK_RUN_CASE environment variables.");
+    printf ("CK_RUN_CASE environment variables instead of providing --only");
     printf ("\n");
     exit (rc);
+}
+
+
+//  --------------------------------------------------------------------------
+/// Parses input parameters and sets environmental variables. Exits
+/// the program for invalid arguments.
+static char *
+parse_args (int arg_c, char **arg_v)
+{
+    arg_c -= 1;
+    arg_v += 1;
+
+    if (arg_c) {
+
+        // -h
+        if (!strcmp ("-h", arg_v[0])) {
+            rtfm (0);
+        }
+
+        // --only SAM_MODULE
+        if (arg_c < 2 || 3 < arg_c || strcmp ("--only", arg_v[0])) {
+            rtfm (2);
+        }
+
+        int buf_s = 64;
+
+        // must be heap memory because putenv won't copy
+        // any memory but instead point to the string
+        char *buf = malloc (buf_s);
+        snprintf (buf, buf_s, "CK_RUN_SUITE=%s", arg_v[1]);
+
+        int rc = putenv (buf);
+        assert (!rc);
+        return buf;
+    }
+
+    return NULL;
 }
 
 
@@ -60,6 +100,8 @@ rtfm (int rc)
 /// Run tests.
 int main (int arg_c, char **arg_v)
 {
+    char *env = parse_args (arg_c, arg_v);
+
     int suite_c = 0;
     int suites_size = sizeof (suites) / sizeof (test_fn_t);
 
@@ -77,6 +119,10 @@ int main (int arg_c, char **arg_v)
 
     int failed = srunner_ntests_failed (sr);
     srunner_free (sr);
+
+    if (env != NULL) {
+        free (env);
+    }
 
     return (failed) ? 2 : 0;
 }

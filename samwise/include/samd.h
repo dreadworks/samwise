@@ -27,15 +27,16 @@
 typedef struct samd_t {
     sam_t *sam;            ///< encapsulates a sam thread
     zsock_t *client_rep;   ///< REPLY socket for client requests
+    sam_cfg_t *cfg;        ///< configuration
 } samd_t;
 
 
 //  --------------------------------------------------------------------------
 /// @brief Create a new samd daemon instance
-/// @param endpoint Endpoint name for client requests (TCP/IPC)
+/// @param cfg Path to the config file
 /// @return A new samd instance
 samd_t *
-samd_new (const char *endpoint);
+samd_new (const char *cfg);
 
 
 //  --------------------------------------------------------------------------

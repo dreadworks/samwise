@@ -49,9 +49,10 @@
 // #define LOG_THRESHOLD_ERROR   // disable logging
 
 
-// TODO implement shared config (#32)
-#define SAM_LOG_ENDPOINT "inproc://log"
-#define SAM_PUBLIC_ENDPOINT "ipc://../sam_ipc"
+/// backend types
+typedef enum {
+    SAM_BE_RMQ     ///< RabbitMQ message backend
+} sam_be_t;
 
 
 /// return type for "start" functions
@@ -68,10 +69,11 @@ typedef struct sam_backend_t {
 } sam_backend_t;
 
 
+#include "sam_log.h"
 #include "sam_gen.h"
 #include "sam_msg.h"
-#include "sam_log.h"
 #include "sam_be_rmq.h"
+#include "sam_cfg.h"
 #include "sam.h"
 
 #include "playground.h"  // to be removed (#40)

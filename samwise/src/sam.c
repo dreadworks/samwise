@@ -516,45 +516,49 @@ sam_be_remove (
 
 
 //  --------------------------------------------------------------------------
-/// Read from a configuration file (TODO #32). Currently just
-/// statically creates a sam_msg instance with one rabbitmq broker
-/// connection.
+/// Initialize backends based on a samwise configuration file.
 int
-sam_init (sam_t *self, const char *conf UU)
+sam_init (sam_t *self, sam_cfg_t *cfg)
 {
-    // TODO create shared config (#32)
-    sam_be_rmq_opts_t rmq_opts = {
-        .host = "localhost",
-        .port = 5672,
-        .user = "guest",
-        .pass = "guest",
-        .heartbeat = 3
-    };
+    int count;
+    char **names, **names_ptr;
+    void *opts, *opts_ptr;
 
-    const char *be_name = "be1";
-    sam_backend_t *be = sam_be_create (self, be_name, &rmq_opts);
-    zsock_send (self->ctl_req, "sp", "be.add", be);
+    int rc = sam_cfg_backends (
+        cfg, self->be_type, &count, &names, &opts);
 
-    int rc = -1;
-    zsock_recv (self->ctl_req, "i", &rc);
-    if (rc) {
-        sam_log_error ("could not create backend");
+    names_ptr = names;
+    opts_ptr = opts;
+
+    if (rc || !count) {
         return -1;
     }
 
-    // second backend
-    sam_log_trace ("adding a second backend");
-    be_name = "be2";
-    rmq_opts.port = 5673;
-    be = sam_be_create (self, be_name, &rmq_opts);
-    zsock_send (self->ctl_req, "sp", "be.add", be);
+    sam_log_infof ("initializing %d backends", count);
 
-    rc = -1;
-    zsock_recv (self->ctl_req, "i", &rc);
-    if (rc) {
-        sam_log_error ("could not create backend");
-        return -1;
+    while (count) {
+        const char *name = *names_ptr;
+        sam_backend_t *be = sam_be_create (self, name, opts_ptr);
+        zsock_send (self->ctl_req, "sp", "be.add", be);
+
+        rc = -1;
+        zsock_recv (self->ctl_req, "i", &rc);
+        if (rc) {
+            sam_log_errorf (
+                "could not create backend %s", name);
+        }
+
+        // advance pointers, maybe there is a more elegant way
+        names_ptr += 1;
+        if (self->be_type == SAM_BE_RMQ) {
+            opts_ptr = (sam_be_rmq_opts_t *) opts_ptr + 1;
+        }
+
+        count -= 1;
     }
+
+    free (names);
+    free (opts);
 
     sam_log_info ("(re)loaded configuration");
     return 0;

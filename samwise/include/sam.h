@@ -41,12 +41,6 @@ typedef enum {
 } sam_res_t;
 
 
-/// backend types
-typedef enum {
-    SAM_BE_RMQ     ///< RabbitMQ message backend
-} sam_be_t;
-
-
 /// return type for client responses
 typedef struct sam_ret_t {
     int rc;    ///< return code
@@ -123,7 +117,7 @@ sam_be_remove (
 int
 sam_init (
     sam_t *self,
-    const char *conf);
+    sam_cfg_t *cfg);
 
 
 //  --------------------------------------------------------------------------
