@@ -42,6 +42,31 @@ sam_cfg_destroy (
     sam_cfg_t **self);
 
 
+
+//
+//  BUFFER CONFIGURATION
+//
+
+//  --------------------------------------------------------------------------
+/// @brief Load the buffers file location
+int
+sam_cfg_buf_file (
+    sam_cfg_t *self,
+    char **fname);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Returns the buffer size in bytes
+int
+sam_cfg_buf_size (
+    sam_cfg_t *self,
+    int *size);
+
+
+//
+//  BACKEND CONFIGURATION
+//
+
 //  --------------------------------------------------------------------------
 /// @brief Load the public endpoint
 /// @param self A cfg instance
@@ -73,7 +98,7 @@ sam_cfg_be_type (
 /// @param opts Is going to point to a buffer containing all options
 /// @return 0 for success, -1 for errors
 int
-sam_cfg_backends (
+sam_cfg_be_backends (
     sam_cfg_t *self,
     sam_be_t be_type,
     int *be_c,

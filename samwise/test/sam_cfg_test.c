@@ -16,6 +16,8 @@
 sam_cfg_t *cfg;
 
 
+//  --------------------------------------------------------------------------
+/// Load the configuration file into memory.
 static void
 setup ()
 {
@@ -26,6 +28,8 @@ setup ()
 }
 
 
+//  --------------------------------------------------------------------------
+/// Destroy the cfg instance.
 static void
 destroy ()
 {
@@ -36,6 +40,32 @@ destroy ()
 }
 
 
+//  --------------------------------------------------------------------------
+/// Test cfg_buf_file ().
+START_TEST(test_cfg_buf_file)
+{
+    char *fname;
+    int rc = sam_cfg_buf_file (cfg, &fname);
+    ck_assert_int_eq (rc, 0);
+    ck_assert_str_eq (fname, "./buf");
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Test cfg_buf_size ().
+START_TEST(test_cfg_buf_size)
+{
+    int size;
+    int rc = sam_cfg_buf_size (cfg, &size);
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (size, 1048576);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Test cfg_endpoint ().
 START_TEST(test_cfg_endpoint)
 {
     char *endpoint;
@@ -52,6 +82,8 @@ START_TEST(test_cfg_endpoint)
 END_TEST
 
 
+//  --------------------------------------------------------------------------
+/// Test cfg_be_type ().
 START_TEST(test_cfg_be_type)
 {
     sam_be_t be_type;
@@ -64,7 +96,9 @@ START_TEST(test_cfg_be_type)
 END_TEST
 
 
-START_TEST(test_cfg_backends_rmq)
+//  --------------------------------------------------------------------------
+/// Test cfg_be_backends ().
+START_TEST(test_cfg_be_backends_rmq)
 {
     int backend_count;
     char **names;
@@ -72,7 +106,7 @@ START_TEST(test_cfg_backends_rmq)
     sam_be_t be_type;
 
     sam_cfg_be_type (cfg, &be_type);
-    int rc = sam_cfg_backends (
+    int rc = sam_cfg_be_backends (
         cfg, be_type, &backend_count, &names, (void **) &opts);
 
     ck_assert_int_eq (rc, 0);
@@ -113,11 +147,17 @@ sam_cfg_test ()
 {
     Suite *s = suite_create ("sam_cfg");
 
-    TCase *tc = tcase_create("config");
+    TCase *tc = tcase_create("buffer");
+    tcase_add_unchecked_fixture (tc, setup, destroy);
+    tcase_add_test (tc, test_cfg_buf_file);
+    tcase_add_test (tc, test_cfg_buf_size);
+    suite_add_tcase (s, tc);
+
+    tc = tcase_create("backends");
     tcase_add_unchecked_fixture (tc, setup, destroy);
     tcase_add_test (tc, test_cfg_endpoint);
     tcase_add_test (tc, test_cfg_be_type);
-    tcase_add_test (tc, test_cfg_backends_rmq);
+    tcase_add_test (tc, test_cfg_be_backends_rmq);
     suite_add_tcase (s, tc);
 
     return s;

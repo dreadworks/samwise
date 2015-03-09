@@ -139,6 +139,65 @@ sam_cfg_destroy (sam_cfg_t **self)
 
 
 //  --------------------------------------------------------------------------
+/// Retrieve the file name of the buffer.
+int
+sam_cfg_buf_file (sam_cfg_t *self, char **fname)
+{
+    *fname = zconfig_resolve (self->zcfg, "buffer/file", NULL);
+    return (fname == NULL)? -1: 0;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Retrieve the maximum size of the buffer.
+int
+sam_cfg_buf_size (sam_cfg_t *self, int *size)
+{
+    char *size_str = zconfig_resolve (self->zcfg, "buffer/size", NULL);
+    if (size_str == NULL) {
+        sam_log_error ("could not load buffer size");
+        return -1;
+    }
+
+    char *str_ptr = size_str;
+    while ('0' <= *str_ptr && *str_ptr <= '9') {
+        str_ptr += 1;
+    }
+
+    char prefix = *str_ptr;
+    *str_ptr = '\0';
+    *size = atoi (size_str);
+
+    int power = -1;
+    if (prefix == 'B' || prefix == '\0') {
+        power = 0;
+    }
+    else if (prefix == 'K') {
+        power = 1;
+    }
+    else if (prefix == 'M') {
+        power = 2;
+    }
+    else if (prefix == 'G') {
+        power = 3;
+    }
+
+    if (power == -1) {
+        sam_log_errorf (
+            "buffer size malformed, unknown prefix '%c'", prefix);
+    }
+
+    while (power) {
+        *size *= 1024;
+        power -= 1;
+    }
+
+    return 0;
+}
+
+
+
+//  --------------------------------------------------------------------------
 /// Retrieve the public endpoint string. Used to bind a socket clients
 /// can connect to.
 int
@@ -163,7 +222,7 @@ sam_cfg_endpoint (sam_cfg_t *self, char **endpoint)
 int
 sam_cfg_be_type (sam_cfg_t *self, sam_be_t *be_type)
 {
-    char *val = zconfig_resolve (self->zcfg, "/backend", NULL);
+    char *val = zconfig_resolve (self->zcfg, "backend/type", NULL);
 
     if (val == NULL) {
         sam_log_error ("could not load backend type");
@@ -252,14 +311,14 @@ read_backends_rmq (
 /// Creates a buffer containing an array of backend specific
 /// configuration options.
 int
-sam_cfg_backends (
+sam_cfg_be_backends (
     sam_cfg_t *self,
     sam_be_t be_type,
     int *be_c,
     char ***names,
     void **opts)
 {
-    zconfig_t *cfg_ptr = zconfig_locate (self->zcfg, "/backends");
+    zconfig_t *cfg_ptr = zconfig_locate (self->zcfg, "backend/backends");
     if (cfg_ptr == NULL) {
         sam_log_error ("could not locate backends");
         return -1;
