@@ -187,13 +187,13 @@ START_TEST(test_msg_pop)
 
     // create message
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    ck_assert_int_eq (sam_msg_size (msg), 4);
+    ck_assert_int_eq (sam_msg_frames (msg), 4);
     rc = sam_msg_pop (msg, "pfsi", &pic_ptr, &pic_frame, &pic_str, &pic_nbr);
 
 
     // test data
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (sam_msg_size (msg), 0);
+    ck_assert_int_eq (sam_msg_frames (msg), 0);
     ck_assert (zframe_eq (char_frame, pic_frame));
     ck_assert_int_eq (pic_nbr, atoi (nbr));
     ck_assert_str_eq (pic_str, str);
@@ -264,7 +264,7 @@ START_TEST(test_msg_size)
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
-    ck_assert_int_eq (sam_msg_size (msg), 0);
+    ck_assert_int_eq (sam_msg_frames (msg), 0);
     sam_msg_destroy (&msg);
 
     zmsg = zmsg_new ();
@@ -272,7 +272,7 @@ START_TEST(test_msg_size)
     zmsg_addmem (zmsg, NULL, 0);
     msg = sam_msg_new (&zmsg);
 
-    ck_assert_int_eq (sam_msg_size (msg), 2);
+    ck_assert_int_eq (sam_msg_frames (msg), 2);
     sam_msg_destroy (&msg);
 }
 END_TEST
@@ -287,17 +287,17 @@ START_TEST(test_msg_size_successively)
     zmsg_pushstr (zmsg, "something");
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    ck_assert_int_eq (sam_msg_size (msg), 2);
+    ck_assert_int_eq (sam_msg_frames (msg), 2);
 
     char *buf;
     int rc = sam_msg_pop (msg, "s", &buf);
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (sam_msg_size (msg), 1);
+    ck_assert_int_eq (sam_msg_frames (msg), 1);
     sam_msg_free (msg);
 
     rc = sam_msg_pop (msg, "s", &buf);
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (sam_msg_size (msg), 0);
+    ck_assert_int_eq (sam_msg_frames (msg), 0);
 
     sam_msg_destroy (&msg);
 }
@@ -346,7 +346,7 @@ START_TEST(test_msg_contain_i)
 
     rc = sam_msg_contain (msg, "i");
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (sam_msg_size (msg), 0);
+    ck_assert_int_eq (sam_msg_frames (msg), 0);
 
     int ref;
     rc = sam_msg_contained (msg, "i", &ref);
@@ -482,10 +482,10 @@ START_TEST(test_msg_contain)
 
     // create sam_msg
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    ck_assert_int_eq (sam_msg_size (msg), 4);
+    ck_assert_int_eq (sam_msg_frames (msg), 4);
 
     sam_msg_contain (msg, "sifp");
-    ck_assert_int_eq (sam_msg_size (msg), 0);
+    ck_assert_int_eq (sam_msg_frames (msg), 0);
 
 
     // test idempotent _contained ()

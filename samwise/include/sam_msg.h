@@ -65,7 +65,7 @@ sam_msg_own (
 /// @brief Destroy a sam_msg, free's all recently allocated memory
 /// @param self A sam_msg instance
 int
-sam_msg_size (
+sam_msg_frames (
     sam_msg_t *self);
 
 

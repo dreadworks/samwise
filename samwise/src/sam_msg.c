@@ -144,9 +144,9 @@ sam_msg_own (sam_msg_t *self)
 }
 
 //  --------------------------------------------------------------------------
-/// Returns the number of remaining frames.
+/// Returns the number of remaining readable frames.
 int
-sam_msg_size (sam_msg_t *self)
+sam_msg_frames (sam_msg_t *self)
 {
     assert (self);
     return zmsg_size (self->zmsg);
@@ -328,7 +328,7 @@ sam_msg_contain (sam_msg_t *self, const char *pic)
 
 
 //  --------------------------------------------------------------------------
-/// Return contained data. This is going to be thread safe in the future.
+/// Return contained data. Thread safe function.
 int
 sam_msg_contained (sam_msg_t *self, const char *pic, ...)
 {
