@@ -524,7 +524,7 @@ sam_init (sam_t *self, sam_cfg_t *cfg)
     char **names, **names_ptr;
     void *opts, *opts_ptr;
 
-    int rc = sam_cfg_backends (
+    int rc = sam_cfg_be_backends (
         cfg, self->be_type, &count, &names, &opts);
 
     names_ptr = names;
