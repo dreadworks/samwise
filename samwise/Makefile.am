@@ -25,6 +25,9 @@ src_libsam_la_SOURCES =					\
 	include/sam_cfg.h							\
 	src/sam_cfg.c									\
 \
+	include/sam_buf.h							\
+	src/sam_buf.c									\
+\
 	include/sam_be_rmq.h	      	\
 	src/sam_be_rmq.c	      			\
 \
@@ -35,7 +38,11 @@ src_libsam_la_SOURCES =					\
 	src/playground_publish_loop.c	\
 	src/sam.c
 
-src_libsam_la_LDFLAGS = -lzmq -lczmq -lrabbitmq
+src_libsam_la_LDFLAGS = \
+	-lzmq                 \
+	-lczmq                \
+	-ldb                  \
+	-lrabbitmq
 
 
 #
@@ -64,6 +71,7 @@ sam_selftest_SOURCES =   \
 	test/sam_gen_test.c    \
 	test/sam_msg_test.c    \
 	test/sam_cfg_test.c    \
+	test/sam_buf_test.c    \
 	test/sam_be_rmq_test.c \
 	test/sam_test.c        \
 	src/sam_selftest.c

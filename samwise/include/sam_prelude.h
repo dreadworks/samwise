@@ -22,12 +22,16 @@
 #define __SAM_PRELUDE_H__
 
 
+// system dependencies
+#include <sys/mman.h>
+
+
+// external dependencies
 #ifdef __SAM_TEST
 #include <check.h>
 #endif
 
-
-// external dependencies
+#include <db.h>
 #include <amqp.h>
 #include <amqp_tcp_socket.h>
 
@@ -74,6 +78,7 @@ typedef struct sam_backend_t {
 #include "sam_msg.h"
 #include "sam_be_rmq.h"
 #include "sam_cfg.h"
+#include "sam_buf.h"
 #include "sam.h"
 
 #include "playground.h"  // to be removed (#40)
