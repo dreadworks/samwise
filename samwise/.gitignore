@@ -25,3 +25,8 @@ samd
 
 src/.dirstamp
 src/.libs/
+sam_selftest
+compile
+m4/
+md
+doc/
