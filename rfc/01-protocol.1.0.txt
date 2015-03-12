@@ -6,11 +6,11 @@ name: 01-protocol_v1.0
 ABSTRACT
 
   The samwise protocol describes how clients can communicate with
-  running samwise daemons (samd) over TCP/IPC or directly over Unix
-  Domain Sockets when using libsam. Every samd instance offers an
-  endpoint to pass either publishing requests or rpc calls to. The
-  libsam offers a function to accept messages. These are then
-  distributed to all or some connected brokers.
+  running samwise daemons (samd) over TCP/IPC or directly when using
+  libsam. Every samd instance offers an endpoint to pass either
+  publishing requests or rpc calls to. The libsam offers a function to
+  accept messages. These are then distributed to all or some connected
+  brokers.
 
   Since it is not important if samd or libsam get the data (since samd
   passes the message on to libsam), in the scope of this document
