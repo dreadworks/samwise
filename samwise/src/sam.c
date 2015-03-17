@@ -34,21 +34,15 @@ send_error (zsock_t *sock, sam_ret_t *ret, char *msg)
 }
 
 
-//  --------------------------------------------------------------------------
-/// Prepare a rabbitmq publishing request.
-static int
-prepare_publish_rmq (sam_msg_t *msg)
-{
-    int rc = sam_msg_contain (msg, "ssf");
-    return rc;
-}
-
-
 static int
 prepare_publish (sam_be_t be_type, sam_msg_t *msg)
 {
     if (be_type == SAM_BE_RMQ) {
-        return prepare_publish_rmq (msg);
+        return sam_msg_expect (
+            msg, 3,
+            SAM_MSG_NONZERO,    // exchange
+            SAM_MSG_ZERO,       // routing key
+            SAM_MSG_NONZERO);   // payload
     }
 
     assert (false);
@@ -125,29 +119,32 @@ publish_to_backends (
 static int
 prepare_rpc_rmq (sam_msg_t *msg)
 {
-    int rc = sam_msg_contain (msg, "s");
-    if (rc) {
-        return rc;
-    }
-
     char *type;
-    rc = sam_msg_contained (msg, "s", &type);
+    int rc = sam_msg_get (msg, "s", &type);
     if (rc == -1) {
         return rc;
     }
 
     if (!strcmp (type, "exchange.declare")) {
-        rc = sam_msg_contain (msg, "ss");
+        rc = sam_msg_expect (
+            msg, 3,
+            SAM_MSG_NONZERO,   // type
+            SAM_MSG_NONZERO,   // exchange name
+            SAM_MSG_NONZERO);  // exchange type
     }
 
     else if (!strcmp (type, "exchange.delete")) {
-        rc = sam_msg_contain (msg, "s");
+        rc = sam_msg_expect (
+            msg, 2,
+            SAM_MSG_NONZERO,   // type
+            SAM_MSG_NONZERO);  // exchange name
     }
 
     else {
-        return -1;
+        rc = -1;
     }
 
+    free (type);
     return rc;
 }
 
@@ -520,6 +517,9 @@ sam_be_remove (
 int
 sam_init (sam_t *self, sam_cfg_t *cfg)
 {
+    assert (self);
+    assert (cfg);
+
     int count;
     char **names, **names_ptr;
     void *opts, *opts_ptr;
@@ -553,6 +553,9 @@ sam_init (sam_t *self, sam_cfg_t *cfg)
         if (self->be_type == SAM_BE_RMQ) {
             opts_ptr = (sam_be_rmq_opts_t *) opts_ptr + 1;
         }
+        else {
+            assert (false);
+        }
 
         count -= 1;
     }
@@ -571,7 +574,7 @@ sam_ret_t *
 sam_send_action (sam_t *self, sam_msg_t *msg)
 {
     sam_ret_t *ret;
-    if (sam_msg_size (msg) < 1) {
+    if (sam_msg_expect (msg, 1, SAM_MSG_NONZERO)) {
         ret = malloc (sizeof (sam_ret_t));
         ret->rc = -1;
         ret->msg = "malformed request: action required";

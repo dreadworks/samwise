@@ -118,14 +118,14 @@ handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
     sam_msg_t *msg;
 
     int rc = zsock_recv (pll, "p", &msg);
-    if (!rc) {
+    if (rc) {
         sam_log_error ("receive failed");
     }
 
     char *exchange, *routing_key;
     zframe_t *payload;
 
-    rc = sam_msg_contained (
+    rc = sam_msg_get (
         msg, "ssf", &exchange, &routing_key, &payload);
     assert (!rc);
 
@@ -137,6 +137,10 @@ handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
         zframe_size (payload));
 
     sam_msg_destroy (&msg);
+    free (exchange);
+    free (routing_key);
+    zframe_destroy (&payload);
+
     return 0;
 }
 
@@ -163,27 +167,33 @@ handle_rpc_req (zloop_t *loop UU, zsock_t *rep, void *args)
         return -1;
     }
 
-    rc = sam_msg_contained (msg, "s", &action);
+    rc = sam_msg_get (msg, "s", &action);
     assert (!rc);
 
     if (!strcmp (action, "exchange.declare")) {
         char *exchange, *type;
-        rc = sam_msg_contained (msg, "sss", &action, &exchange, &type);
+        free (action);
+        rc = sam_msg_get (msg, "sss", &action, &exchange, &type);
         assert (!rc);
         rc = sam_be_rmq_exchange_declare (self, exchange, type);
+        free (exchange);
+        free (type);
     }
 
     else if (!strcmp (action, "exchange.delete")) {
         char *exchange;
-        rc = sam_msg_contained (msg, "ss", &action, &exchange);
+        free (action);
+        rc = sam_msg_get (msg, "ss", &action, &exchange);
         assert (!rc);
         rc = sam_be_rmq_exchange_delete (self, exchange);
+        free (exchange);
     }
 
     else {
         assert (false);
     }
 
+    free (action);
     rc = zsock_send (rep, "i", rc);
     return rc;
 }

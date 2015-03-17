@@ -47,7 +47,7 @@ START_TEST(test_cfg_buf_file)
     char *fname;
     int rc = sam_cfg_buf_file (cfg, &fname);
     ck_assert_int_eq (rc, 0);
-    ck_assert_str_eq (fname, "./buf");
+    ck_assert_str_eq (fname, "./base.db");
 }
 END_TEST
 

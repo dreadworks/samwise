@@ -13,6 +13,7 @@
 
 
 sam_t *sam;
+sam_cfg_t *cfg;
 size_t char_s = sizeof (char *);
 
 
@@ -26,7 +27,9 @@ setup_rmq ()
         ck_abort_msg ("could not create sam instance");
     }
 
-    sam_init (sam, NULL);
+    cfg = sam_cfg_new ("cfg/base.cfg");
+    int rc = sam_init (sam, cfg);
+    ck_assert_int_eq (rc, 0);
 }
 
 
@@ -39,6 +42,8 @@ destroy ()
     if (sam) {
         ck_abort_msg ("sam instance still reachable");
     }
+
+    sam_cfg_destroy (&cfg);
 }
 
 

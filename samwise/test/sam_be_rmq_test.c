@@ -173,7 +173,6 @@ START_TEST(test_be_rmq_async_xdecl)
     zmsg_pushstr (zmsg, "exchange.declare");
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    sam_msg_contain (msg, "sss");
     int rc = zsock_send (backend->rpc_req, "p", msg);
     ck_assert_int_eq (rc, 0);
 
@@ -196,7 +195,6 @@ START_TEST(test_be_rmq_async_xdel)
     zmsg_pushstr (zmsg, "exchange.delete");
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    sam_msg_contain (msg, "ss");
     int rc = zsock_send (backend->rpc_req, "p", msg);
     ck_assert_int_eq (rc, 0);
 
@@ -223,7 +221,6 @@ START_TEST(test_be_rmq_async_publish)
     zmsg_pushstr (zmsg, "amq.direct"); // 1. exchange
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    sam_msg_contain (msg, "ssf");
     int rc = zsock_send (backend->publish_psh, "p", msg);
     ck_assert_int_eq (rc, 0);
 

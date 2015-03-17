@@ -21,6 +21,17 @@
 #include "../include/sam_prelude.h"
 
 
+static void
+db_error_handler (
+    const DB_ENV *db_env UU,
+    const char *err_prefix UU,
+    const char *msg)
+{
+    sam_log_errorf ("db error: %s", msg);
+}
+
+
+
 //  --------------------------------------------------------------------------
 /// Create a sam buf instance.
 sam_buf_t *
@@ -54,6 +65,7 @@ sam_buf_new (const char *fname)
         return NULL;
     }
 
+    self->dbp->set_errcall (self->dbp, db_error_handler);
     return self;
 }
 
