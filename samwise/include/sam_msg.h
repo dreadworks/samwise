@@ -21,14 +21,21 @@
 #define __SAM_MSG_H__
 
 
+// rules for expect ()'s variadic arguments
+typedef enum {
+    SAM_MSG_ZERO,     ///< frame must exist, but can be of zero length
+    SAM_MSG_NONZERO   ///< frame must exist and contain data
+} sam_msg_rule_t;
+
+
+
 /// a zmsg wrapper
 typedef struct sam_msg_t {
     int owner_refs;                ///< reference counting by _own ()
     pthread_mutex_t owner_lock;    ///< used in _own ()
     pthread_mutex_t contain_lock;  ///< used in _contained ()
 
-    zmsg_t *zmsg;                  ///< the wrapped message
-    zlist_t *container;            ///< reference list for contained () calls
+    zlist_t *frames;               ///< payload of the message
 
     struct refs {
         zlist_t *s;                ///< for allocated strings
@@ -62,10 +69,10 @@ sam_msg_own (
 
 
 //  --------------------------------------------------------------------------
-/// @brief Destroy a sam_msg, free's all recently allocated memory
+/// @brief Return the count of saved frames
 /// @param self A sam_msg instance
 int
-sam_msg_frames (
+sam_msg_size (
     sam_msg_t *self);
 
 
@@ -73,7 +80,8 @@ sam_msg_frames (
 /// @brief Free's all memory allocated by the last pop() calls
 /// @param self A sam_msg instance
 void
-sam_msg_free (sam_msg_t *self);
+sam_msg_free (
+    sam_msg_t *self);
 
 
 //  --------------------------------------------------------------------------
@@ -83,27 +91,72 @@ sam_msg_free (sam_msg_t *self);
 /// @param ... Empty pointers for the popped values
 /// @return 0 if okay, -1 for errors
 int
-sam_msg_pop (sam_msg_t *self, const char *pic, ...);
+sam_msg_pop (
+    sam_msg_t *self,
+    const char *pic,
+    ...);
 
 
 //  --------------------------------------------------------------------------
-/// @brief Contain some data internally
+/// @brief Retrieve a copy of the currently contained items
 /// @param self A sam_msg instance
-/// @param pic Describes the frame contents
-/// @return 0 if okay, -1 for errors
+/// @param pic Describes the type of the frames content
+/// @param ... Pointers to be set
+/// @returns 0 if okay, -1 for errors
 int
-sam_msg_contain (sam_msg_t *self, const char *pic);
+sam_msg_get (
+    sam_msg_t *self,
+    const char *pic,
+    ...);
 
 
 //  --------------------------------------------------------------------------
-/// @brief Retrieve a shallow copy of the currently contained items
+/// @brief Check if at least <size> frames are available
+/// @param self A sem_msg instance
+/// @param size At least <size> frames must be available
+/// @param ... sam_msg_rule_t's constraints
+/// @return 0 in case of succes, -1 for errors
+int
+sam_msg_expect (
+    sam_msg_t *self,
+    int size,
+    ...);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Return the size of the buffer needed to store the encoded message
 /// @param self A sam_msg instance
-int
-sam_msg_contained (sam_msg_t *self, const char *pic, ...);
+/// @return Required buffer size
+size_t
+sam_msg_encoded_size (
+    sam_msg_t *self);
 
 
 //  --------------------------------------------------------------------------
-/// @ Self test this class
+/// @brief Encode all non-popped frames into an opaque buffer
+/// @param self A sam_msg instance
+/// @param buf Is goint to point to the malloc'd buffer
+/// @return 0 for success, -1 otherwise
+void
+sam_msg_encode (
+    sam_msg_t *self,
+    byte **buf);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Decode a buffer to a sam_msg
+/// @param buf The buffer containing a encoded sam_msg
+/// @param size Size of the buffer
+/// @return Freshly decoded sam_msg instance
+sam_msg_t *
+sam_msg_decode (
+    byte *buf,
+    size_t size);
+
+
+
+//  --------------------------------------------------------------------------
+/// @brief Self test this class
 void *
 sam_msg_test ();
 

@@ -18,8 +18,67 @@
 
 */
 
-
 #include "../include/sam_prelude.h"
+
+
+static void *
+resolve (zframe_t *frame, char type, va_list arg_p)
+{
+    // frames
+    if (type == 'f') {
+        zframe_t **va_p = va_arg (arg_p, zframe_t **);
+        if (!va_p) {
+            return NULL;
+        }
+
+        *va_p = zframe_dup (frame);
+        return va_p;
+    }
+
+
+    // pointer
+    else if (type == 'p') {
+        void **va_p = va_arg (arg_p, void **);
+        if (!va_p || zframe_size (frame) != sizeof (void *)) {
+            return NULL;
+        }
+
+        *va_p = *((void **) zframe_data (frame));
+        return va_p;
+    }
+
+
+    // string
+    else if (type == 's') {
+        char *str = zframe_strdup (frame);
+        char **va_p = va_arg (arg_p, char **);
+        if (!va_p) {
+            return NULL;
+        }
+
+        *va_p = str;
+        return va_p;
+    }
+
+
+    // integer
+    else if (type == 'i') {
+        char *str = zframe_strdup (frame);
+        int nbr = atoi (str);
+        int *va_p = va_arg (arg_p, int *);
+        if (!va_p) {
+            return NULL;
+        }
+
+        *va_p = nbr;
+        free (str);
+        return va_p;
+    }
+
+    // unknown type
+    return NULL;
+}
+
 
 
 //  --------------------------------------------------------------------------
@@ -44,20 +103,15 @@ refs_f_destructor (void **item)
 }
 
 
-//  --------------------------------------------------------------------------
-/// Create a new sam_msg instance. Wraps a zmsg instance for
-/// convenience.
-sam_msg_t *
-sam_msg_new (zmsg_t **zmsg)
+static sam_msg_t *
+new ()
 {
-    assert (zmsg);
-
     sam_msg_t *self = malloc (sizeof (sam_msg_t));
     assert (self);
 
-    // change ownership
-    self->zmsg = *zmsg;
-    *zmsg = NULL;
+    // store for frames
+    self->frames = zlist_new ();
+    zlist_set_destructor (self->frames, refs_f_destructor);
 
     // store for popped values
     self->refs.s = zlist_new ();
@@ -65,9 +119,6 @@ sam_msg_new (zmsg_t **zmsg)
 
     zlist_set_destructor (self->refs.s, refs_s_destructor);
     zlist_set_destructor (self->refs.f, refs_f_destructor);
-
-    // store for contained values
-    self->container = zlist_new ();
 
     // mutexes
     int rc = pthread_mutex_init (&self->owner_lock, NULL);
@@ -78,6 +129,26 @@ sam_msg_new (zmsg_t **zmsg)
 
     // reference counting
     self->owner_refs = 1;
+
+    return self;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Create a new sam_msg instance.
+sam_msg_t *
+sam_msg_new (zmsg_t **zmsg)
+{
+    assert (zmsg);
+    sam_msg_t *self = new (true);
+
+    // optimally, this could just access zmsg->frames...
+    zframe_t *frame = zmsg_pop (*zmsg);
+    while (frame) {
+        zlist_append(self->frames, frame);
+        frame = zmsg_pop (*zmsg);
+    }
+    zmsg_destroy (zmsg);
 
     return self;
 }
@@ -95,17 +166,18 @@ sam_msg_destroy (sam_msg_t **self)
     // _destroys, @see sam_msg_own
     pthread_mutex_lock (&(*self)->owner_lock);
     (*self)->owner_refs -= 1;
+    int refs = (*self)->owner_refs;
     pthread_mutex_unlock (&(*self)->owner_lock);
 
-    if ((*self)->owner_refs) {
+    if (refs) {
         return;
     }
 
-    zmsg_destroy (&(*self)->zmsg);
+
+    zlist_destroy (&(*self)->frames);
 
     zlist_destroy (&(*self)->refs.s);
     zlist_destroy (&(*self)->refs.f);
-    zlist_destroy (&(*self)->container);
 
     pthread_mutex_destroy (&(*self)->owner_lock);
     pthread_mutex_destroy (&(*self)->contain_lock);
@@ -133,8 +205,8 @@ sam_msg_destroy (sam_msg_t **self)
 /// t2: destroy msg
 ///
 /// The behaviour here is obviously undefined. This function can be
-/// used in safe way by own the messages as many times it gets
-/// destroyed independently before handing it to other threads.
+/// used in safe way by owning the messages as many times it gets
+/// destroyed independently, before handing it to other threads.
 void
 sam_msg_own (sam_msg_t *self)
 {
@@ -143,20 +215,19 @@ sam_msg_own (sam_msg_t *self)
     pthread_mutex_unlock (&self->owner_lock);
 }
 
-//  --------------------------------------------------------------------------
-/// Returns the number of remaining readable frames.
-int
-sam_msg_frames (sam_msg_t *self)
-{
-    assert (self);
-    return zmsg_size (self->zmsg);
-}
 
+//  --------------------------------------------------------------------------
+/// Return the amount of frames left.
+int
+sam_msg_size (sam_msg_t *self)
+{
+    return zlist_size (self->frames);
+}
 
 
 //  --------------------------------------------------------------------------
 /// Free's all recently allocated memory. Everytime the pop ()
-/// function is called with one or more 's' in the picture, the
+/// function is called with one or more 's' or 'f' in the picture, the
 /// sam_msg instance keeps track of these allocations. This function
 /// free's all recently allocated memory.
 void
@@ -165,7 +236,6 @@ sam_msg_free (sam_msg_t *self)
     assert (self);
     zlist_purge (self->refs.s);
     zlist_purge (self->refs.f);
-    zlist_purge (self->container);
 }
 
 
@@ -190,214 +260,212 @@ sam_msg_pop (sam_msg_t *self, const char *pic, ...)
     assert (self);
     assert (pic);
 
-    int rc = 0;
     va_list arg_p;
     va_start (arg_p, pic);
 
     while (*pic) {
 
-        // frame
+        zframe_t *frame = zlist_pop (self->frames);
+        if (frame == NULL) {
+            return -1;
+        }
+
+        void *ptr = resolve (frame, *pic, arg_p);
+        zframe_destroy (&frame);
+
+        if (ptr == NULL) {
+            return -1;
+        }
+
         if (*pic == 'f') {
-            zframe_t *frame = zmsg_pop (self->zmsg);
-            if (!frame) {
-                rc = -1;
-                break;
-            }
-
-            zframe_t **va_p = va_arg (arg_p, zframe_t **);
-            if (va_p) {
-                *va_p = frame;
-                zlist_append (self->refs.f, *va_p);
-                pic += 1;
-                continue;
-            }
-            else {
-                rc = -1;
-                zframe_destroy (&frame);
-                break;
-            }
+            zlist_append (self->refs.f, *(zframe_t **) ptr);
         }
-
-        // pointer
-        if (*pic == 'p') {
-            zframe_t *frame = zmsg_pop (self->zmsg);
-            if (!frame) {
-                rc = -1;
-                break;
-            }
-
-            void **va_p = va_arg (arg_p, void **);
-            if (va_p) {
-                if (zframe_size (frame) == sizeof (void *)) {
-                    *va_p = *((void **) zframe_data (frame));
-                    pic += 1;
-                    zframe_destroy (&frame);
-                    continue;
-                }
-                else {
-                    rc = -1;
-                }
-            }
-            zframe_destroy (&frame);
-
-            if (rc == -1) {
-                break;
-            }
-        }
-
-        char *str = zmsg_popstr (self->zmsg);
-        if (!str) {
-            rc = -1;
-            break;
-        }
-
-        // char *
-        if (*pic == 's') {
-            char **va_p = va_arg (arg_p, char **);
-            if (va_p) {
-                *va_p = str;
-                zlist_append (self->refs.s, *va_p);
-            }
-            else {
-                rc = -1;
-            }
-        }
-
-        // integer
-        else if (*pic == 'i') {
-            int nbr = atoi (str);
-            int *va_p = va_arg (arg_p, int *);
-            if (va_p) {
-                *va_p = nbr;
-                free (str);
-            }
-            else {
-                rc = -1;
-            }
-        }
-
-        if (rc == -1) {
-            free (str);
-            break;
+        else if (*pic == 's') {
+            zlist_append (self->refs.s, *(char **) ptr);
         }
 
         pic += 1;
+        zframe_destroy (&frame);
     }
 
     va_end (arg_p);
-    return rc;
+    return 0;
 }
 
 
 //  --------------------------------------------------------------------------
-/// Contain a number of frames internally. This is used for fast
-/// access to frames in a thread safe way.
+/// Get data from the message without removing it.
 int
-sam_msg_contain (sam_msg_t *self, const char *pic)
+sam_msg_get (sam_msg_t *self, const char *pic, ...)
 {
     assert (self);
     assert (pic);
 
-    int rc = 0;
-    while (*pic) {
-        void *item;
+    // copy list for thread safety
+    pthread_mutex_lock (&self->contain_lock);
+    zlist_t *frames = zlist_dup (self->frames);
+    pthread_mutex_unlock (&self->contain_lock);
+    zlist_set_destructor (frames, NULL);
 
-        // save 'i' as 's', convert with atoi in _contained ()
-        // lets zeromq handle all heap allocations
-        if (*pic == 'i' || *pic == 's') {
-            rc = sam_msg_pop (self, "s", &item);
-        }
-        else if (*pic == 'f' || *pic == 'p') {
-            char buf [2] = { *pic, '\0' };
-            rc = sam_msg_pop (self, buf, &item);
-        }
-        else {
-            rc = -1;
-        }
+    va_list arg_p;
+    va_start (arg_p, pic);
 
-        if (rc) {
-            return rc;
+    zframe_t *frame = zlist_first (frames);
+    while (*pic && frame != NULL) {
+        void *ptr = resolve (frame, *pic, arg_p);
+        if (ptr == NULL) {
+            return -1;
         }
 
-        zlist_append (self->container, item);
+        frame = zlist_next (frames);
         pic += 1;
+    }
+
+    // clean up
+    zlist_destroy (&frames);
+    va_end (arg_p);
+
+    // insufficient frames
+    if (*pic) {
+        return -1;
     }
 
     return 0;
 }
 
 
-//  --------------------------------------------------------------------------
-/// Return contained data. Thread safe function.
 int
-sam_msg_contained (sam_msg_t *self, const char *pic, ...)
+sam_msg_expect (sam_msg_t *self, int size, ...)
 {
-    pthread_mutex_lock (&self->contain_lock);
-    zlist_t *container = zlist_dup (self->container);
-    pthread_mutex_unlock (&self->contain_lock);
+    if (sam_msg_size (self) < size) {
+        return -1;
+    }
 
-    int rc = 0;
     va_list arg_p;
-    va_start (arg_p, pic);
+    va_start (arg_p, size);
 
-    while (*pic) {
-        void *item = zlist_pop (container);
-        if (!item) {
-            sam_log_trace ("no item left");
-            rc = -1;
+    zframe_t *frame = zlist_first (self->frames);
+    while (size > 0 && frame != NULL) {
+        sam_msg_rule_t rule = va_arg (arg_p, sam_msg_rule_t);
+        if (rule == SAM_MSG_NONZERO && zframe_size (frame) == 0) {
+            return -1;
+        }
+
+        frame = zlist_next (self->frames);
+        size -= 1;
+    }
+
+    va_end (arg_p);
+    return 0;
+}
+
+
+
+size_t
+sam_msg_encoded_size (sam_msg_t *self)
+{
+    assert (self);
+
+    size_t buf_size = 0;
+    zframe_t *frame = zlist_first (self->frames);
+
+    while (frame != NULL) {
+        size_t frame_size = zframe_size (frame);
+
+        if (frame_size < 0xFF) {
+            buf_size += frame_size + 1;
         }
         else {
-            if (*pic == 'i') {
-                int *va_p = va_arg (arg_p, int *);
-                if (va_p) {
-                    *va_p = atoi ((char *) item);
-                }
-                else {
-                    rc = -1;
-                }
-            }
-            else if (*pic == 's') {
-                char **va_p = va_arg (arg_p, char **);
-                if (va_p) {
-                    *va_p = (char *) item;
-                }
-                else {
-                    rc = -1;
-                }
-            }
-            else if (*pic == 'f') {
-                zframe_t **va_p = va_arg (arg_p, zframe_t **);
-                if (va_p) {
-                    *va_p = (zframe_t *) item;
-                }
-                else {
-                    rc = -1;
-                }
-            }
-            else if (*pic == 'p') {
-                void **va_p = va_arg (arg_p, void **);
-                if (va_p) {
-                    *va_p = (void *) item;
-                }
-                else {
-                    rc = -1;
-                }
-            }
-            else {
-                rc = -1;
-            }
+            buf_size += frame_size + 1 + 4;
         }
 
-        if (rc) {
-            sam_log_trace (
-                "not enough variadic arguments provided or unknown pic");
-            zlist_destroy (&container);
-            return rc;
+        frame = zlist_next (self->frames);
+    }
+
+    return buf_size;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Encode a sam_msg object into an opaque buffer.
+void
+sam_msg_encode (sam_msg_t *self, byte **buf)
+{
+    assert (self);
+    assert (*buf);
+
+    // taken from zmsg_encode
+    byte *dest = *buf;
+    zframe_t *frame = zlist_first (self->frames);
+
+    while (frame) {
+        size_t frame_size = zframe_size (frame);
+        if (frame_size < 0xFF) {
+            *dest++ = (byte) frame_size;
+            memcpy (dest, zframe_data (frame), frame_size);
+            dest += frame_size;
+        }
+        else {
+            *dest++ = 0xFF;
+            *dest++ = (frame_size >> 24) & 255;
+            *dest++ = (frame_size >> 16) & 255;
+            *dest++ = (frame_size >>  8) & 255;
+            *dest++ = frame_size        & 255;
+            memcpy (dest, zframe_data (frame), frame_size);
+            dest += frame_size;
+        }
+        frame = zlist_next (self->frames);
+    }
+}
+
+
+//  --------------------------------------------------------------------------
+/// Decode a sam_msg object from a buffer.
+sam_msg_t *
+sam_msg_decode (byte *buf, size_t size)
+{
+    // taken from zmsg_decode
+    sam_msg_t *self = new (false);
+    if (!self) {
+        return NULL;
+    }
+
+    byte *source = buf;
+    byte *limit = buf + size;
+
+    while (source < limit) {
+        size_t frame_size = *source++;
+        if (frame_size == 0xFF) {
+            if (source > limit - 4) {
+                sam_msg_destroy (&self);
+                break;
+            }
+
+            frame_size = (source [0] << 24)
+                         + (source [1] << 16)
+                         + (source [2] << 8)
+                         +  source [3];
+            source += 4;
         }
 
-        pic += 1;
-    }   // end while
+        if (source > limit - frame_size) {
+            sam_msg_destroy (&self);
+            break;
+        }
 
-    zlist_destroy (&container);
-    return rc;
+        zframe_t *frame = zframe_new (source, frame_size);
+        if (frame) {
+            if (zlist_append (self->frames, frame)) {
+                sam_msg_destroy (&self);
+                break;
+            }
+            source += frame_size;
+        }
+        else {
+            sam_msg_destroy (&self);
+            break;
+        }
+    }
+
+    return self;
 }

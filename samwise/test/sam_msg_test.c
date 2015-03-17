@@ -66,12 +66,14 @@ START_TEST(test_msg_pop_i)
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
 
     int ref;
     rc = sam_msg_pop (msg, "i", &ref);
 
     ck_assert_int_eq (rc, 0);
     ck_assert_int_eq (ref, atoi (nbr));
+    ck_assert_int_eq (sam_msg_size (msg), 0);
 
     sam_msg_destroy (&msg);
 }
@@ -88,12 +90,14 @@ START_TEST(test_msg_pop_s)
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
 
     char *ref;
     rc = sam_msg_pop (msg, "s", &ref);
 
     ck_assert_int_eq (rc, 0);
     ck_assert_str_eq (ref, str);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
 
     sam_msg_destroy (&msg);
 }
@@ -106,18 +110,26 @@ START_TEST(test_msg_pop_f)
 {
     zmsg_t *zmsg = zmsg_new ();
     char payload = 'a';
-    zframe_t *frame = zframe_new (&payload, sizeof (payload));
+
+    zframe_t
+        *frame = zframe_new (&payload, sizeof (payload)),
+        *ref = zframe_dup (frame);
+
+
     int rc = zmsg_push (zmsg, frame);
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
 
-    zframe_t *ref;
-    rc = sam_msg_pop (msg, "f", &ref);
+    zframe_t *popped;
+    rc = sam_msg_pop (msg, "f", &popped);
 
     ck_assert_int_eq (rc, 0);
-    ck_assert (zframe_eq (ref, frame));
+    ck_assert (zframe_eq (ref, popped));
+    ck_assert_int_eq (sam_msg_size (msg), 0);
 
+    zframe_destroy (&ref);
     sam_msg_destroy (&msg);
 }
 END_TEST
@@ -133,12 +145,14 @@ START_TEST(test_msg_pop_p)
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
 
     void *ref;
     rc = sam_msg_pop (msg, "p", &ref);
 
     ck_assert_int_eq (rc, 0);
     ck_assert (ref == ptr);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
 
     sam_msg_destroy (&msg);
 }
@@ -187,19 +201,18 @@ START_TEST(test_msg_pop)
 
     // create message
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    ck_assert_int_eq (sam_msg_frames (msg), 4);
+    ck_assert_int_eq (sam_msg_size (msg), 4);
     rc = sam_msg_pop (msg, "pfsi", &pic_ptr, &pic_frame, &pic_str, &pic_nbr);
 
 
     // test data
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (sam_msg_frames (msg), 0);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+
     ck_assert (zframe_eq (char_frame, pic_frame));
     ck_assert_int_eq (pic_nbr, atoi (nbr));
     ck_assert_str_eq (pic_str, str);
-    // ck_assert_ptr_eq (pic_ptr, ptr);
-    ck_assert (pic_ptr == ptr);
-
+    ck_assert_ptr_eq (pic_ptr, ptr);
 
     // clean up
     zframe_destroy (&char_frame);
@@ -247,10 +260,12 @@ START_TEST(test_msg_pop_successively)
 
     int rc = sam_msg_pop (msg, "fs", &zero, &one);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
 
     char *two, *three;
     rc = sam_msg_pop (msg, "ss", &two, &three);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
 
     sam_msg_destroy (&msg);
 }
@@ -264,7 +279,7 @@ START_TEST(test_msg_size)
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
-    ck_assert_int_eq (sam_msg_frames (msg), 0);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
     sam_msg_destroy (&msg);
 
     zmsg = zmsg_new ();
@@ -272,7 +287,7 @@ START_TEST(test_msg_size)
     zmsg_addmem (zmsg, NULL, 0);
     msg = sam_msg_new (&zmsg);
 
-    ck_assert_int_eq (sam_msg_frames (msg), 2);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
     sam_msg_destroy (&msg);
 }
 END_TEST
@@ -287,17 +302,17 @@ START_TEST(test_msg_size_successively)
     zmsg_pushstr (zmsg, "something");
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    ck_assert_int_eq (sam_msg_frames (msg), 2);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
 
     char *buf;
     int rc = sam_msg_pop (msg, "s", &buf);
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (sam_msg_frames (msg), 1);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     sam_msg_free (msg);
 
     rc = sam_msg_pop (msg, "s", &buf);
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (sam_msg_frames (msg), 0);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
 
     sam_msg_destroy (&msg);
 }
@@ -316,16 +331,19 @@ START_TEST(test_msg_free)
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
 
     char *pic_str;
     rc = sam_msg_pop (msg, "s", &pic_str);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert_str_eq (pic_str, "two");
 
     sam_msg_free (msg);
 
     rc = sam_msg_pop (msg, "s", &pic_str);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
     ck_assert_str_eq (pic_str, "one");
 
     sam_msg_destroy (&msg);
@@ -334,8 +352,8 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Try to _contain () an integer.
-START_TEST(test_msg_contain_i)
+/// Try to _get () an integer.
+START_TEST(test_msg_get_i)
 {
     zmsg_t *zmsg = zmsg_new ();
     char *nbr = "1337";
@@ -343,20 +361,19 @@ START_TEST(test_msg_contain_i)
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-
-    rc = sam_msg_contain (msg, "i");
-    ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (sam_msg_frames (msg), 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
 
     int ref;
-    rc = sam_msg_contained (msg, "i", &ref);
+    rc = sam_msg_get (msg, "i", &ref);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert_int_eq (ref, atoi (nbr));
 
-    // check idempotency of _contained ()
+    // check idempotency of _get ()
     ref = -1;
-    rc = sam_msg_contained (msg, "i", &ref);
+    rc = sam_msg_get (msg, "i", &ref);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert_int_eq (ref, atoi (nbr));
 
     sam_msg_destroy (&msg);
@@ -365,8 +382,8 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Try to _contain () a char pointer.
-START_TEST(test_msg_contain_s)
+/// Try to _get () a char pointer.
+START_TEST(test_msg_get_s)
 {
     zmsg_t *zmsg = zmsg_new ();
     char *str = "hi!";
@@ -374,20 +391,22 @@ START_TEST(test_msg_contain_s)
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-
-    rc = sam_msg_contain (msg, "s");
-    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
 
     char *ref;
-    rc = sam_msg_contained (msg, "s", &ref);
+    rc = sam_msg_get (msg, "s", &ref);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert_str_eq (ref, str);
+    free (ref);
 
-    // check idempotency of _contained ()
+    // check idempotency of _get ()
     ref = NULL;
-    rc = sam_msg_contained (msg, "s", &ref);
+    rc = sam_msg_get (msg, "s", &ref);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert_str_eq (ref, str);
+    free (ref);
 
     sam_msg_destroy (&msg);
 }
@@ -395,8 +414,8 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Try to _contain () a zframe pointer.
-START_TEST(test_msg_contain_f)
+/// Try to _get () a zframe pointer.
+START_TEST(test_msg_get_f)
 {
     zmsg_t *zmsg = zmsg_new ();
     char payload = 'a';
@@ -405,20 +424,21 @@ START_TEST(test_msg_contain_f)
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-
-    rc = sam_msg_contain (msg, "f");
-    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
 
     zframe_t *ref;
-    rc = sam_msg_contained (msg, "f", &ref);
+    rc = sam_msg_get (msg, "f", &ref);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert (zframe_eq (ref, frame));
+    zframe_destroy (&ref);
 
-    // check idempotency of _contained ()
-    ref = NULL;
-    rc = sam_msg_contained (msg, "f", &ref);
+    // check idempotency of _get ()
+    rc = sam_msg_get (msg, "f", &ref);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert (zframe_eq (ref, frame));
+    zframe_destroy (&ref);
 
     sam_msg_destroy (&msg);
 }
@@ -426,8 +446,8 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Try to _contain () a void pointer.
-START_TEST(test_msg_contain_p)
+/// Try to _get () a void pointer.
+START_TEST(test_msg_get_p)
 {
     zmsg_t *zmsg = zmsg_new ();
     void *ptr = (void *) 0xfabfab;
@@ -435,19 +455,19 @@ START_TEST(test_msg_contain_p)
     ck_assert_int_eq (rc, 0);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-
-    rc = sam_msg_contain (msg, "p");
-    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
 
     void *ref;
-    rc = sam_msg_contained (msg, "p", &ref);
+    rc = sam_msg_get (msg, "p", &ref);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert (ref == ptr);
 
-    // check idempotency of _contained ()
+    // check idempotency of _get ()
     ref = NULL;
-    rc = sam_msg_contained (msg, "p", &ref);
+    rc = sam_msg_get (msg, "p", &ref);
     ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
     ck_assert (ref == ptr);
 
     sam_msg_destroy (&msg);
@@ -456,8 +476,8 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Try to _contain () a combination of data.
-START_TEST(test_msg_contain)
+/// Try to _get () a combination of data.
+START_TEST(test_msg_get)
 {
     zmsg_t *zmsg = zmsg_new ();
     char *str = "str 1", *nbr = "1";
@@ -482,13 +502,10 @@ START_TEST(test_msg_contain)
 
     // create sam_msg
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    ck_assert_int_eq (sam_msg_frames (msg), 4);
-
-    sam_msg_contain (msg, "sifp");
-    ck_assert_int_eq (sam_msg_frames (msg), 0);
+    ck_assert_int_eq (sam_msg_size (msg), 4);
 
 
-    // test idempotent _contained ()
+    // test idempotent _get ()
     int round_c;
     for (round_c = 0; round_c < 2; round_c++) {
 
@@ -497,14 +514,18 @@ START_TEST(test_msg_contain)
         zframe_t *pic_frame = NULL;
         void *pic_ptr = NULL;
 
-        int rc = sam_msg_contained (
+        int rc = sam_msg_get (
             msg, "sifp", &pic_str, &pic_nbr, &pic_frame, &pic_ptr);
         ck_assert_int_eq (rc, 0);
+        ck_assert_int_eq (sam_msg_size (msg), 4);
 
         ck_assert_str_eq (pic_str, str);
         ck_assert_int_eq (pic_nbr, atoi (nbr));
         ck_assert (zframe_eq (pic_frame, frame));
         ck_assert (pic_ptr == ptr);
+
+        free (pic_str);
+        zframe_destroy (&pic_frame);
     }
 
     zframe_destroy (&frame);
@@ -515,12 +536,12 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Try to _contain () more data than present.
-START_TEST(test_msg_contain_insufficient_data)
+/// Try to _get () more data than present.
+START_TEST(test_msg_get_insufficient_data)
 {
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    int rc = sam_msg_contain (msg, "s");
+    int rc = sam_msg_get (msg, "s");
 
     ck_assert_int_eq (rc, -1);
     sam_msg_destroy (&msg);
@@ -529,24 +550,178 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Try to retrieve more data than _contained ().
-START_TEST(test_msg_contained_insufficient_data)
+/// Test encoding and decoding.
+START_TEST(test_msg_code)
 {
     zmsg_t *zmsg = zmsg_new ();
-    zmsg_pushstr (zmsg, "hi!");
+    zmsg_pushstr (zmsg, "two");
+    zmsg_pushstr (zmsg, "one");
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
-    int rc = sam_msg_contain (msg, "s");
-    ck_assert_int_eq (rc, 0);
+    // one byte per frame for frame sizes < 255 and 2 * 4 bytes
+    size_t size = sam_msg_encoded_size (msg);
+    ck_assert_int_eq (size, 8);
+
+    // encode message to the buffer
+    byte *buf = malloc (size);
+    assert (buf);
+    sam_msg_encode (msg, &buf);
+    sam_msg_destroy (&msg);
+
+    msg = sam_msg_decode (buf, size);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
+    free (buf);
 
     char *one, *two;
-    rc = sam_msg_contained (msg, "ss", &one, &two);
+    int rc = sam_msg_pop (msg, "ss", &one, &two);
+    ck_assert_str_eq (one, "one");
+    ck_assert_str_eq (two, "two");
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Test encoding and decoding when part of the data is already pop'd.
+START_TEST(test_msg_code_pop)
+{
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "two");
+    zmsg_pushstr (zmsg, "one");
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
+
+    char *one;
+    int rc = sam_msg_pop (msg, "s", &one);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    size_t size = sam_msg_encoded_size (msg);
+    byte *buf = malloc (size);
+    assert (buf);
+
+    sam_msg_encode (msg, &buf);
+    sam_msg_destroy (&msg);
+    ck_assert_int_eq (size, 4);
+
+    msg = sam_msg_decode (buf, size);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+    free (buf);
+
+    char *two;
+    rc = sam_msg_pop (msg, "s", &two);
+    ck_assert_str_eq (two, "two");
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Expect at least one non-zero frame.
+START_TEST(test_msg_expect_nonzero)
+{
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "one");
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    int rc = sam_msg_expect (msg, 1, SAM_MSG_NONZERO);
+    ck_assert_int_eq (rc, 0);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Expect failure for empty messages.
+START_TEST(test_msg_expect_nonzero_noframe)
+{
+    zmsg_t *zmsg = zmsg_new ();
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+    int rc = sam_msg_expect (msg, 1, SAM_MSG_NONZERO);
     ck_assert_int_eq (rc, -1);
 
     sam_msg_destroy (&msg);
 }
 END_TEST
 
+
+//  --------------------------------------------------------------------------
+/// Expect failure for empty frames.
+START_TEST(test_msg_expect_nonzero_empty)
+{
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "");
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+    int rc = sam_msg_expect (msg, 1, SAM_MSG_NONZERO);
+    ck_assert_int_eq (rc, -1);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Expect at least one frame that may contain zero data.
+START_TEST(test_msg_expect_zero)
+{
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "");
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    int rc = sam_msg_expect (msg, 1, SAM_MSG_ZERO);
+    ck_assert_int_eq (rc, 0);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Expect failure for empty messages.
+START_TEST(test_msg_expect_zero_noframe)
+{
+    zmsg_t *zmsg = zmsg_new ();
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+
+    int rc = sam_msg_expect (msg, 1, SAM_MSG_ZERO);
+    ck_assert_int_eq (rc, -1);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Test a combination of expectations.
+START_TEST(test_msg_expect)
+{
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "nonzero");
+    zmsg_pushstr (zmsg, "");
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
+
+    int rc = sam_msg_expect (msg, 2, SAM_MSG_ZERO, SAM_MSG_NONZERO);
+    ck_assert_int_eq (rc, 0);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
 
 
 //  --------------------------------------------------------------------------
@@ -580,14 +755,27 @@ sam_msg_test ()
     tcase_add_test (tc, test_msg_free);
     suite_add_tcase (s, tc);
 
-    tc = tcase_create ("contain ()");
-    tcase_add_test (tc, test_msg_contain_i);
-    tcase_add_test (tc, test_msg_contain_s);
-    tcase_add_test (tc, test_msg_contain_f);
-    tcase_add_test (tc, test_msg_contain_p);
-    tcase_add_test (tc, test_msg_contain);
-    tcase_add_test (tc, test_msg_contain_insufficient_data);
-    tcase_add_test (tc, test_msg_contained_insufficient_data);
+    tc = tcase_create ("get ()");
+    tcase_add_test (tc, test_msg_get_i);
+    tcase_add_test (tc, test_msg_get_s);
+    tcase_add_test (tc, test_msg_get_f);
+    tcase_add_test (tc, test_msg_get_p);
+    tcase_add_test (tc, test_msg_get);
+    tcase_add_test (tc, test_msg_get_insufficient_data);
+    suite_add_tcase (s, tc);
+
+    tc = tcase_create ("encode () and decode ()");
+    tcase_add_test (tc, test_msg_code);
+    // tcase_add_test (tc, test_msg_code_pop);
+    suite_add_tcase (s, tc);
+
+    tc = tcase_create ("expect ()");
+    tcase_add_test (tc, test_msg_expect_zero_noframe);
+    tcase_add_test (tc, test_msg_expect_zero);
+    tcase_add_test (tc, test_msg_expect_nonzero_empty);
+    tcase_add_test (tc, test_msg_expect_nonzero_noframe);
+    tcase_add_test (tc, test_msg_expect);
+    tcase_add_test (tc, test_msg_expect_nonzero);
     suite_add_tcase (s, tc);
 
     return s;
