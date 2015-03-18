@@ -476,6 +476,52 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
+/// Try to skip a value in _get () with '?'.
+START_TEST(test_msg_get_skipped)
+{
+    zmsg_t *zmsg = zmsg_new ();
+    int rc = zmsg_pushstr (zmsg, "foo");
+    ck_assert_int_eq (rc, 0);
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    void *ref;
+    rc = sam_msg_get (msg, "?");
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    // check idempotency of _get ()
+    ref = NULL;
+    rc = sam_msg_get (msg, "?");
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Assert that '?' only skips if there is a value
+START_TEST(test_msg_get_skipped_nonempty)
+{
+    zmsg_t *zmsg = zmsg_new ();
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+
+    void *ref;
+    int rc = sam_msg_get (msg, "?");
+    ck_assert_int_eq (rc, -1);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
 /// Try to _get () a combination of data.
 START_TEST(test_msg_get)
 {
@@ -492,6 +538,7 @@ START_TEST(test_msg_get)
     // compose zmsg
     zmsg_addstr (zmsg, str);
     zmsg_addstr (zmsg, nbr);
+    zmsg_addstr (zmsg, "skipped");
 
     zframe_t *frame_dup = zframe_dup (frame);
     zmsg_append (zmsg, &frame_dup);
@@ -502,7 +549,7 @@ START_TEST(test_msg_get)
 
     // create sam_msg
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    ck_assert_int_eq (sam_msg_size (msg), 4);
+    ck_assert_int_eq (sam_msg_size (msg), 5);
 
 
     // test idempotent _get ()
@@ -515,9 +562,9 @@ START_TEST(test_msg_get)
         void *pic_ptr = NULL;
 
         int rc = sam_msg_get (
-            msg, "sifp", &pic_str, &pic_nbr, &pic_frame, &pic_ptr);
+            msg, "si?fp", &pic_str, &pic_nbr, &pic_frame, &pic_ptr);
         ck_assert_int_eq (rc, 0);
-        ck_assert_int_eq (sam_msg_size (msg), 4);
+        ck_assert_int_eq (sam_msg_size (msg), 5);
 
         ck_assert_str_eq (pic_str, str);
         ck_assert_int_eq (pic_nbr, atoi (nbr));
@@ -760,6 +807,8 @@ sam_msg_test ()
     tcase_add_test (tc, test_msg_get_s);
     tcase_add_test (tc, test_msg_get_f);
     tcase_add_test (tc, test_msg_get_p);
+    tcase_add_test (tc, test_msg_get_skipped);
+    tcase_add_test (tc, test_msg_get_skipped_nonempty);
     tcase_add_test (tc, test_msg_get);
     tcase_add_test (tc, test_msg_get_insufficient_data);
     suite_add_tcase (s, tc);

@@ -26,252 +26,106 @@
 typedef struct sam_state_t {
     sam_be_t be_type;        ///< backend type, used to parse the protocol
     zsock_t *ctl_rep;        ///< reply socket for control commands
-    zsock_t *frontend_rep;   ///< reply socket for the internal actor
+    zsock_t *frontend_rpc;   ///< reply socket for rpc requests
+    zsock_t *frontend_pub;   ///< pull socket for publishing requests
+    zlist_t *backends;       ///< maintains backend handles
+
+    // TO BE REMOVED - belongs to sam_buf in the future
     zsock_t *backend_pull;   ///< back channel for backend acknowledgments
-    zlist_t *backends;       ///< maintains request sockets
 } sam_state_t;
 
 
 
 //  --------------------------------------------------------------------------
-/// Send a reference of a proper sam_ret_t via INPROC.
-static int
-send_error (zsock_t *sock, sam_ret_t *ret, char *msg)
+/// Convenience function to create a new return object.
+static sam_ret_t *
+new_ret ()
 {
-    ret->rc = -1;
-    ret->msg = msg;
-    sam_log_trace ("send frontend rep socket (error)");
-    zsock_send (sock, "p", ret);
-    return 0;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Checks if the message contains a valid publishing request
-static int
-prepare_publish (sam_be_t be_type, sam_msg_t *msg)
-{
-    if (be_type == SAM_BE_RMQ) {
-        return sam_msg_expect (
-            msg, 3,
-            SAM_MSG_NONZERO,    // exchange
-            SAM_MSG_ZERO,       // routing key
-            SAM_MSG_NONZERO);   // payload
-    }
-
-    assert (false);
+    sam_ret_t *ret = malloc (sizeof (sam_ret_t));
+    assert (ret);
+    ret->rc = 0;
+    return ret;
 }
 
 
 //  --------------------------------------------------------------------------
 /// Publish a message to the backends.
 static int
-publish_to_backends (
-    sam_state_t *state,
-    sam_msg_t *msg,
-    sam_ret_t *ret)
+handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
 {
+    sam_state_t *state = args;
+    sam_msg_t *msg;
+    zsock_recv (pll, "p", &msg);
+
     char *distribution;
     int rc = sam_msg_pop (msg, "s", &distribution);
-    if (rc == -1) {
-        return send_error (
-            state->frontend_rep, ret,
-            "malformed request: distribution required");
-    }
+    assert (!rc);
 
     int n = 1;
     if (!strcmp (distribution, "redundant")) {
         rc = sam_msg_pop (msg, "i", &n);
-        if (rc == -1) {
-            return send_error (
-                state->frontend_rep, ret,
-                "malformed request: distribution count required");
-        }
+        assert (!rc);
     }
 
     sam_log_tracef ("publish %s(%d)", distribution, n);
-
-    if (n <= 0 ||
-        (strcmp (distribution, "redundant") &&
-         strcmp (distribution, "round robin"))) {
-        return send_error (
-            state->frontend_rep, ret,
-            "unknown distribution method");
-    }
-
-    // check if the message is correctly formatted
-    // and contain necessary data
-    rc = prepare_publish (state->be_type, msg);
-    if (rc) {
-        return send_error (state->frontend_rep, ret, "malformed request");
-    }
-
     sam_backend_t *backend = zlist_next (state->backends);
-    if (backend == NULL) {
-        backend = zlist_first (state->backends);
+    while (0 < n) {
+        if (backend == NULL) {
+            backend = zlist_first (state->backends);
+        }
+
+        if (backend != NULL) {
+            sam_log_tracef ("send publishing request to '%s'", backend->name);
+            sam_msg_own (msg); // the backend is trying to destroy it
+            zsock_send (backend->publish_psh, "p", msg);
+        }
+
+        n -= 1;
     }
 
-    if (backend != NULL) {
-        sam_log_tracef ("send publishing request to '%s'", backend->name);
-        sam_msg_own (msg); // the backend is trying to destroy it
-        zsock_send (backend->publish_psh, "p", msg);
-    }
-
-    rc = zsock_send (state->frontend_rep, "p", ret);
-    if (rc) {
-        sam_log_error ("send failed");
-        return rc;
-    }
-
+    sam_msg_destroy (&msg);
     return rc;
 }
 
 
 //  --------------------------------------------------------------------------
-/// Checks if the protocol for the incoming message is obeyed.
+/// Callback for events on the internally used req/rep connection for
+/// rpc requests. This function accepts messages crafted as defined by
+/// the protocol to delegate them (based on the distribution method)
+/// to various message backends.
 static int
-prepare_rpc_rmq (sam_msg_t *msg)
+handle_frontend_rpc (zloop_t *loop UU, zsock_t *rep, void *args)
 {
-    char *type;
-    int rc = sam_msg_get (msg, "s", &type);
-    if (rc == -1) {
-        return rc;
-    }
+    sam_state_t *state = args;
+    sam_msg_t *msg;
+    zsock_recv (rep, "p", &msg);
 
-    if (!strcmp (type, "exchange.declare")) {
-        rc = sam_msg_expect (
-            msg, 3,
-            SAM_MSG_NONZERO,   // type
-            SAM_MSG_NONZERO,   // exchange name
-            SAM_MSG_NONZERO);  // exchange type
-    }
+    sam_ret_t *ret = new_ret ();
 
-    else if (!strcmp (type, "exchange.delete")) {
-        rc = sam_msg_expect (
-            msg, 2,
-            SAM_MSG_NONZERO,   // type
-            SAM_MSG_NONZERO);  // exchange name
-    }
-
-    else {
-        rc = -1;
-    }
-
-    free (type);
-    return rc;
-}
-
-
-static int
-prepare_rpc (sam_be_t be_type, sam_msg_t *msg)
-{
-    if (be_type == SAM_BE_RMQ) {
-        return prepare_rpc_rmq (msg);
-    }
-
-    assert (false);
-}
-
-
-//  --------------------------------------------------------------------------
-/// Make an rpc call to one or multiple backends.
-static int
-make_rpc_call (
-    sam_state_t *state,
-    sam_msg_t *msg,
-    sam_ret_t *ret)
-{
     char *broker;
     int rc = sam_msg_pop (msg, "s", &broker);
-    if (rc) {
-        return send_error (
-            state->frontend_rep, ret, "broker required");
-    }
-
-    rc = prepare_rpc (state->be_type, msg);
-    if (rc) {
-        return send_error (
-            state->frontend_rep, ret, "malformed request");
-    }
+    // TODO: consider "broker"
 
     sam_backend_t *backend = zlist_first (state->backends);
     while (backend != NULL) {
         rc = zsock_send (backend->rpc_req, "p", msg);
-        if (rc) {
-            sam_log_error ("send failed");
-            return rc;
-        }
 
         int status = -1;
         rc = zsock_recv (backend->rpc_req, "i", &status);
-        if (rc) {
-            sam_log_error ("recv failed");
-            return rc;
-        }
-
         backend = zlist_next (state->backends);
     }
 
-    rc = zsock_send (state->frontend_rep, "p", ret);
+    rc = zsock_send (rep, "p", ret);
+    sam_msg_destroy (&msg);
     return rc;
-}
-
-
-
-//  --------------------------------------------------------------------------
-/// Callback for events on the internally used req/rep
-/// connection. This function accepts messages crafted as defined by
-/// the protocol to delegate them (based on the distribution method)
-/// to various message backends.
-static int
-handle_frontend_req (zloop_t *loop UU, zsock_t *rep, void *args)
-{
-    sam_ret_t *ret = malloc (sizeof (sam_ret_t));
-    assert (ret);
-    ret->rc = 0;
-
-    sam_state_t *state = args;
-
-    sam_msg_t *msg;
-    sam_log_trace ("recv on the frontends rep socket");
-    int rc = zsock_recv (rep, "p", &msg);
-    if (rc == -1) { // interrupted
-        return -1;
-    }
-
-    assert (msg);
-    char *action;
-    rc = sam_msg_pop (msg, "s", &action);
-    if (rc == -1) {
-        return send_error(
-            rep, ret,
-            "malformed request: action required");
-    }
-
-    // publish
-    sam_log_tracef ("frontends rep socket read, request %s", action);
-    if (!strcmp (action, "publish")) {
-        return publish_to_backends (state, msg, ret);
-    }
-
-    // rpc
-    else if (!strcmp (action, "rpc")) {
-        return make_rpc_call (state, msg, ret);
-    }
-
-    // ping
-    else if (!strcmp (action, "ping")) {
-        rc = zsock_send (rep, "p", ret);
-        return rc;
-    }
-
-    return send_error (rep, ret, "unknown method");
 }
 
 
 //  --------------------------------------------------------------------------
 /// Demultiplexes acknowledgements arriving on the push/pull
 /// connection wiring the backends to sam.
+///
+/// TO BE REMOVED - belongs to sam_buf in the future
 static int
 handle_backend_req (zloop_t *loop UU, zsock_t *pull, void *args UU)
 {
@@ -355,10 +209,16 @@ actor (zsock_t *pipe, void *args)
     sam_state_t *state = args;
     zloop_t *loop = zloop_new ();
 
-    zloop_reader (loop, state->frontend_rep, handle_frontend_req, state);
-    zloop_reader (loop, state->backend_pull, handle_backend_req, state);
+    // publishing and rpc calls to backends
+    zloop_reader (loop, state->frontend_pub, handle_frontend_pub, state);
+    zloop_reader (loop, state->frontend_rpc, handle_frontend_rpc, state);
+
+    // internal channel for control commands
     zloop_reader (loop, state->ctl_rep, handle_ctl_req, state);
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
+
+    // TO BE REMOVED - belongs to sam_buf in the future
+    zloop_reader (loop, state->backend_pull, handle_backend_req, state);
 
     sam_log_info ("starting poll loop");
     zsock_signal (pipe, 0);
@@ -367,7 +227,9 @@ actor (zsock_t *pipe, void *args)
     sam_log_trace ("destroying loop");
     zloop_destroy (&loop);
 
-    zsock_destroy (&state->frontend_rep);
+    zsock_destroy (&state->frontend_pub);
+    zsock_destroy (&state->frontend_rpc);
+
     zsock_destroy (&state->backend_pull);
     zsock_destroy (&state->ctl_rep);
 
@@ -404,21 +266,38 @@ sam_new (sam_be_t be_type)
     sam_state_t *state = malloc (sizeof (sam_state_t));
     assert (self);
 
+
+    // publishing requests
+    char *endpoint = "inproc://sam-pub";
+
+    self->frontend_pub = zsock_new_push (endpoint);
+    state->frontend_pub = zsock_new_pull (endpoint);
+
+    assert (self->frontend_pub);
+    assert (state->frontend_pub);
+    sam_log_tracef ("created push/pull pair at '%s'", endpoint);
+
+
+    // rpc requests
+    endpoint = "inproc://sam-rpc";
+
+    self->frontend_rpc = zsock_new_req (endpoint);
+    state->frontend_rpc = zsock_new_rep (endpoint);
+
+    assert (self->frontend_rpc);
+    assert (state->frontend_rpc);
+    sam_log_tracef ("created req/rep pair at '%s'", endpoint);
+
+
     // actor control commands
-    char *endpoint = "inproc://sam-ctl";
+    endpoint = "inproc://sam-ctl";
     self->ctl_req = zsock_new_req (endpoint);
-    assert (self->ctl_req);
     state->ctl_rep = zsock_new_rep (endpoint);
+
+    assert (self->ctl_req);
     assert (state->ctl_rep);
     sam_log_tracef ("created req/rep pair at '%s'", endpoint);
 
-    // actor frontend/backend
-    endpoint = "inproc://sam-frontend";
-    self->frontend_req = zsock_new_req (endpoint);
-    assert (self->frontend_req);
-    state->frontend_rep = zsock_new_rep (endpoint);
-    assert (state->frontend_rep);
-    sam_log_tracef ("created req/rep pair at '%s'", endpoint);
 
     // backend pull
     endpoint = "inproc://sam-backend";
@@ -430,6 +309,7 @@ sam_new (sam_be_t be_type)
     self->backend_pull_endpoint = malloc (str_len + 1);
     memcpy (self->backend_pull_endpoint, endpoint, str_len + 1);
     self->backend_pull_endpoint[str_len] = '\0';
+
 
     // actor
     self->actor = zactor_new (actor, state);
@@ -454,7 +334,8 @@ sam_destroy (sam_t **self)
 
     // destroy sockets
     free ((*self)->backend_pull_endpoint);
-    zsock_destroy (&(*self)->frontend_req);
+    zsock_destroy (&(*self)->frontend_pub);
+    zsock_destroy (&(*self)->frontend_rpc);
     zsock_destroy (&(*self)->ctl_req);
     zactor_destroy (&(*self)->actor);
 
@@ -579,25 +460,170 @@ sam_init (sam_t *self, sam_cfg_t *cfg)
 
 
 //  --------------------------------------------------------------------------
+/// Destroy the message and create a return object with an error message.
+static sam_ret_t *
+error (sam_msg_t *msg, char *error_msg)
+{
+    sam_msg_destroy (&msg);
+
+    sam_ret_t *ret = new_ret ();
+    ret->rc = -1;
+    ret->msg = error_msg;
+
+    return ret;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Checks if the protocol for the incoming RabbitMQ RPC message is obeyed.
+static int
+check_rpc_rmq (sam_msg_t *msg)
+{
+    char *type;
+    int rc = sam_msg_get (msg, "?s", &type);
+    if (rc == -1) {
+        return rc;
+    }
+
+    if (!strcmp (type, "exchange.declare")) {
+        rc = sam_msg_expect (
+            msg, 4,
+            SAM_MSG_ZERO,      // target broker
+            SAM_MSG_NONZERO,   // type
+            SAM_MSG_NONZERO,   // exchange name
+            SAM_MSG_NONZERO);  // exchange type
+    }
+
+    else if (!strcmp (type, "exchange.delete")) {
+        rc = sam_msg_expect (
+            msg, 3,
+            SAM_MSG_ZERO,      // target broker
+            SAM_MSG_NONZERO,   // type
+            SAM_MSG_NONZERO);  // exchange name
+    }
+
+    else {
+        rc = -1;
+    }
+
+    free (type);
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Checks if the rpc request conforms to the protocol.
+static int
+check_rpc (sam_be_t be_type, sam_msg_t *msg)
+{
+    int rc = 0;
+
+    if (be_type == SAM_BE_RMQ) {
+        rc = check_rpc_rmq (msg);
+    }
+    else {
+        assert (false);
+    }
+
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Checks if the protocol for the RabbitMQ publishing message is obeyed.
+static int
+check_pub_rmq (sam_msg_t *msg)
+{
+    char *distribution;
+    int rc = sam_msg_get (msg, "s", &distribution);
+    if (rc) {
+        return rc;
+    }
+
+    if (!strcmp (distribution, "redundant")) {
+        rc = sam_msg_expect (
+            msg, 5,
+            SAM_MSG_NONZERO,    // distribution
+            SAM_MSG_NONZERO,    // min. acknowledged
+            SAM_MSG_NONZERO,    // exchange
+            SAM_MSG_ZERO,       // routing key
+            SAM_MSG_NONZERO);   // payload
+    }
+    else if (!strcmp (distribution, "round robin")) {
+        rc = sam_msg_expect (
+            msg, 4,
+            SAM_MSG_NONZERO,    // distribution
+            SAM_MSG_NONZERO,    // exchange
+            SAM_MSG_ZERO,       // routing key
+            SAM_MSG_NONZERO);   // payload
+    }
+    else {
+        rc = -1;
+    }
+
+
+    free (distribution);
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Checks if the message contains a valid publishing request.
+static int
+check_pub (sam_be_t be_type, sam_msg_t *msg)
+{
+    if (be_type == SAM_BE_RMQ) {
+        return check_pub_rmq (msg);
+    }
+
+    assert (false);
+}
+
+
+//  --------------------------------------------------------------------------
 /// Send the sam actor thread a message.
 sam_ret_t *
 sam_eval (sam_t *self, sam_msg_t *msg)
 {
-    sam_ret_t *ret;
-    if (sam_msg_expect (msg, 1, SAM_MSG_NONZERO)) {
-        ret = malloc (sizeof (sam_ret_t));
-        ret->rc = -1;
-        ret->msg = "malformed request: action required";
-    }
-    else {
-        sam_log_trace ("send on frontends req socket");
-        zsock_send (self->frontend_req, "p", msg);
+    assert (self);
+    assert (msg);
 
-        sam_log_trace ("recv on frontends req socket");
-        zsock_recv (self->frontend_req, "p", &ret);
-        sam_log_tracef ("frontends req socket read, code: %d", ret->rc);
+    char *action;
+    int rc = sam_msg_pop (msg, "s", &action);
+    if (rc) {
+        return error (msg, "action required");
     }
 
-    sam_msg_destroy (&msg);
-    return ret;
+    // publish, synchronous store, asynchronous distribution
+    sam_log_tracef ("checking '%s' request", action);
+    if (!strcmp (action, "publish")) {
+        rc = check_pub (self->be_type, msg);
+        if (rc) {
+            return error (msg, "malformed publishing request");
+        }
+
+        // TODO: store message in sam_buf
+        zsock_send (self->frontend_pub, "p", msg);
+        return new_ret ();
+    }
+
+    // rpc, synchronous
+    else if (!strcmp (action, "rpc")) {
+        rc = check_rpc (self->be_type, msg);
+        if (rc) {
+            return error (msg, "malformed rpc request");
+        }
+
+        sam_ret_t *ret;
+        zsock_send (self->frontend_rpc, "p", msg);
+        zsock_recv (self->frontend_rpc, "p", &ret);
+        return ret;
+    }
+
+    // ping
+    else if (!strcmp (action, "ping")) {
+        return new_ret ();
+    }
+
+    return error (msg, "unknown action");
 }

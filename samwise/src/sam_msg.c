@@ -312,9 +312,11 @@ sam_msg_get (sam_msg_t *self, const char *pic, ...)
 
     zframe_t *frame = zlist_first (frames);
     while (*pic && frame != NULL) {
-        void *ptr = resolve (frame, *pic, arg_p);
-        if (ptr == NULL) {
-            return -1;
+        if (*pic != '?') {
+            void *ptr = resolve (frame, *pic, arg_p);
+            if (ptr == NULL) {
+                return -1;
+            }
         }
 
         frame = zlist_next (frames);
