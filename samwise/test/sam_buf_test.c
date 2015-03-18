@@ -13,24 +13,54 @@
 #include "../include/sam_prelude.h"
 
 
-START_TEST(test_buf_lifecyle)
+zsock_t
+    *backend_push,  // messages arriving from backends
+    *frontend_pull; // messages distributed by libsam
+
+sam_buf_t *buf;
+
+
+static void
+setup ()
 {
-    char *fname;
+    char *endpoint = "inproc://test-buf_be";
+    zsock_t *backend_pull = zsock_new_pull (endpoint);
+    backend_push = zsock_new_push (endpoint);
 
-    sam_cfg_t *cfg = sam_cfg_new ("cfg/base.cfg");
-    sam_cfg_buf_file (cfg, &fname);
+    endpoint = "inproc://test-buf_fe";
+    zsock_t *frontend_push = zsock_new_push (endpoint);
+    frontend_pull = zsock_new_pull (endpoint);
 
-    sam_buf_t *buf = sam_buf_new (fname);
+    buf = sam_buf_new ("test.db", &backend_pull, &frontend_push);
+
     if (!buf) {
-        ck_abort_msg ("buf was not created");
+        ck_abort_msg ("buf instance was not created");
     }
 
+    if (backend_pull) {
+        ck_abort_msg ("backend pull socket still reachable");
+    }
+
+    if (frontend_push) {
+        ck_abort_msg ("frontend push still reachable");
+    }
+
+}
+
+
+static void
+destroy ()
+{
     sam_buf_destroy (&buf);
-    if (buf) {
-        ck_abort_msg ("buf is still reachable");
-    }
+    zsock_destroy (&backend_push);
+    zsock_destroy (&frontend_pull);
+}
 
-    sam_cfg_destroy (&cfg);
+
+
+START_TEST(test_buf_save)
+{
+    // int key = sam_buf_save ();
 }
 END_TEST
 
@@ -41,7 +71,8 @@ sam_buf_test ()
     Suite *s = suite_create ("sam_buf");
 
     TCase *tc = tcase_create("config");
-    tcase_add_test (tc, test_buf_lifecyle);
+    tcase_add_unchecked_fixture (tc, setup, destroy);
+    // tcase_add_test (tc, test_buf_save);
     suite_add_tcase (s, tc);
 
     return s;

@@ -26,13 +26,14 @@
 /// the be_rmq state
 typedef struct sam_be_rmq_t {
     char *name;
+    zlist_t *store;    ///< maps message keys to sequence numbers
 
     struct {                                ///< amqp connection
         amqp_connection_state_t connection; ///< internal connection state
         amqp_socket_t *socket;              ///< tcp socket holding the conn
         int message_channel;                ///< channel for messages
         int method_channel;                 ///< channel for rpc calls
-        int seq;                            ///< incremented number for acks
+        unsigned int seq;                   ///< incremented number for acks
     } amqp;
 
     zsock_t *publish_pll;          ///< accepting publishing requests

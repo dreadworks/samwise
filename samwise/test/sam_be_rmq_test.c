@@ -220,19 +220,22 @@ START_TEST(test_be_rmq_async_publish)
     zmsg_pushstr (zmsg, "");           // 2. routing key
     zmsg_pushstr (zmsg, "amq.direct"); // 1. exchange
 
+    int msg_id = 17;
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    int rc = zsock_send (backend->publish_psh, "p", msg);
+    int rc = zsock_send (backend->publish_psh, "ip", msg_id, msg);
     ck_assert_int_eq (rc, 0);
 
     // wait for ack
     sam_res_t res_t;
     char *returned_name;
+    int returned_msg_id;
 
-    rc = zsock_recv (pll, "si", &returned_name, &res_t);
+    rc = zsock_recv (pll, "sii", &returned_name, &res_t, &returned_msg_id);
     ck_assert_int_eq (rc, 0);
 
     ck_assert_str_eq (returned_name, be_name);
     ck_assert (res_t == SAM_RES_ACK);
+    ck_assert_int_eq (returned_msg_id, msg_id);
 
     free (returned_name);
 }

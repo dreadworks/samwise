@@ -29,9 +29,6 @@ typedef struct sam_state_t {
     zsock_t *frontend_rpc;   ///< reply socket for rpc requests
     zsock_t *frontend_pub;   ///< pull socket for publishing requests
     zlist_t *backends;       ///< maintains backend handles
-
-    // TO BE REMOVED - belongs to sam_buf in the future
-    zsock_t *backend_pull;   ///< back channel for backend acknowledgments
 } sam_state_t;
 
 
@@ -54,8 +51,12 @@ static int
 handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
 {
     sam_state_t *state = args;
+
+    int key;
     sam_msg_t *msg;
-    zsock_recv (pll, "p", &msg);
+
+    sam_log_trace ("recv () frontend pub");
+    zsock_recv (pll, "ip", &key, &msg);
 
     char *distribution;
     int rc = sam_msg_pop (msg, "s", &distribution);
@@ -75,9 +76,9 @@ handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
         }
 
         if (backend != NULL) {
-            sam_log_tracef ("send publishing request to '%s'", backend->name);
             sam_msg_own (msg); // the backend is trying to destroy it
-            zsock_send (backend->publish_psh, "p", msg);
+            sam_log_tracef ("send () message %d to '%s'", key, backend->name);
+            zsock_send (backend->publish_psh, "ip", key, msg);
         }
 
         n -= 1;
@@ -98,6 +99,8 @@ handle_frontend_rpc (zloop_t *loop UU, zsock_t *rep, void *args)
 {
     sam_state_t *state = args;
     sam_msg_t *msg;
+
+    sam_log_trace ("recv () frontend rpc");
     zsock_recv (rep, "p", &msg);
 
     sam_ret_t *ret = new_ret ();
@@ -108,33 +111,19 @@ handle_frontend_rpc (zloop_t *loop UU, zsock_t *rep, void *args)
 
     sam_backend_t *backend = zlist_first (state->backends);
     while (backend != NULL) {
+        sam_log_tracef ("send () rpc req to '%s'", backend->name);
         rc = zsock_send (backend->rpc_req, "p", msg);
 
         int status = -1;
+        sam_log_tracef ("recv () reply from backend '%s'", backend->name);
         rc = zsock_recv (backend->rpc_req, "i", &status);
         backend = zlist_next (state->backends);
     }
 
+    sam_log_tracef ("send () ret (%d) for rpc internally", ret->rc);
     rc = zsock_send (rep, "p", ret);
     sam_msg_destroy (&msg);
     return rc;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Demultiplexes acknowledgements arriving on the push/pull
-/// connection wiring the backends to sam.
-///
-/// TO BE REMOVED - belongs to sam_buf in the future
-static int
-handle_backend_req (zloop_t *loop UU, zsock_t *pull, void *args UU)
-{
-    sam_log_trace ("recv on the backend pull socket");
-    zmsg_t *msg = zmsg_recv (pull);
-    zmsg_destroy (&msg);
-
-    sam_log_trace ("backend pull socket read");
-    return 0;
 }
 
 
@@ -149,6 +138,7 @@ handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
     char *cmd;
     zmsg_t *zmsg = zmsg_new ();
 
+    sam_log_trace ("recv () ctl request");
     zsock_recv (rep, "sm", &cmd, &zmsg);
     assert (cmd);
 
@@ -193,6 +183,7 @@ handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
     free (cmd);
     sam_msg_destroy (&msg);
 
+    sam_log_tracef ("send () '%d' for ctl internally", rc);
     zsock_send (rep, "i", rc);
     return 0;
 }
@@ -217,9 +208,6 @@ actor (zsock_t *pipe, void *args)
     zloop_reader (loop, state->ctl_rep, handle_ctl_req, state);
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
 
-    // TO BE REMOVED - belongs to sam_buf in the future
-    zloop_reader (loop, state->backend_pull, handle_backend_req, state);
-
     sam_log_info ("starting poll loop");
     zsock_signal (pipe, 0);
     zloop_start (loop);
@@ -230,13 +218,10 @@ actor (zsock_t *pipe, void *args)
     zsock_destroy (&state->frontend_pub);
     zsock_destroy (&state->frontend_rpc);
 
-    zsock_destroy (&state->backend_pull);
-    zsock_destroy (&state->ctl_rep);
-
     // destroy backends
     sam_backend_t *backend = zlist_first (state->backends);
     while (backend != NULL) {
-        sam_log_tracef ("trying to delete backend %s", backend->name);
+        sam_log_tracef ("trying to delete backend '%s'", backend->name);
 
         // rabbitmq backends
         if (state->be_type == SAM_BE_RMQ) {
@@ -252,6 +237,8 @@ actor (zsock_t *pipe, void *args)
     }
 
     zlist_destroy (&state->backends);
+    zsock_destroy (&state->ctl_rep);
+
     free (state);
 }
 
@@ -267,19 +254,22 @@ sam_new (sam_be_t be_type)
     assert (self);
 
 
-    // publishing requests
-    char *endpoint = "inproc://sam-pub";
+    self->buf = NULL;
 
-    self->frontend_pub = zsock_new_push (endpoint);
-    state->frontend_pub = zsock_new_pull (endpoint);
+
+    // publishing requests
+    self->frontend_pub_endpoint = "inproc://sam-pub";
+    self->frontend_pub = zsock_new_push (self->frontend_pub_endpoint);
+    state->frontend_pub = zsock_new_pull (self->frontend_pub_endpoint);
 
     assert (self->frontend_pub);
     assert (state->frontend_pub);
-    sam_log_tracef ("created push/pull pair at '%s'", endpoint);
+    sam_log_tracef (
+        "created push/pull pair at '%s'", self->frontend_pub_endpoint);
 
 
     // rpc requests
-    endpoint = "inproc://sam-rpc";
+    char *endpoint = "inproc://sam-rpc";
 
     self->frontend_rpc = zsock_new_req (endpoint);
     state->frontend_rpc = zsock_new_rep (endpoint);
@@ -299,16 +289,9 @@ sam_new (sam_be_t be_type)
     sam_log_tracef ("created req/rep pair at '%s'", endpoint);
 
 
-    // backend pull
-    endpoint = "inproc://sam-backend";
-    state->backend_pull = zsock_new_pull (endpoint);
-    assert (state->backend_pull);
-    sam_log_tracef ("created pull socket at '%s'", endpoint);
-
-    int str_len = strlen (endpoint);
-    self->backend_pull_endpoint = malloc (str_len + 1);
-    memcpy (self->backend_pull_endpoint, endpoint, str_len + 1);
-    self->backend_pull_endpoint[str_len] = '\0';
+    // backend pull, used by init_buf and when
+    // creating new messaging backends
+    self->backend_pull_endpoint = "inproc://sam-backend";
 
 
     // actor
@@ -329,14 +312,17 @@ sam_new (sam_be_t be_type)
 void
 sam_destroy (sam_t **self)
 {
-    assert (self);
+    assert (*self);
     sam_log_info ("destroying sam instance");
 
-    // destroy sockets
-    free ((*self)->backend_pull_endpoint);
+    if ((*self)->buf) {
+        sam_buf_destroy (&(*self)->buf);
+    }
+
     zsock_destroy (&(*self)->frontend_pub);
     zsock_destroy (&(*self)->frontend_rpc);
     zsock_destroy (&(*self)->ctl_req);
+
     zactor_destroy (&(*self)->actor);
 
     free (*self);
@@ -394,23 +380,45 @@ sam_be_remove (
     sam_t *self,
     const char *name)
 {
-    sam_log_infof ("removing backend '%s'", name);
+    sam_log_infof ("send () 'be.rm' for '%s' internally", name);
     zsock_send (self->ctl_req, "ss", "be.rm", name);
 
     int rc = -1;
+    sam_log_tracef ("recv () return code for be.rm for '%s'", name);
     zsock_recv (self->ctl_req, "i", &rc);
     return rc;
 }
 
 
-//  --------------------------------------------------------------------------
-/// Initialize backends based on a samwise configuration file.
-int
-sam_init (sam_t *self, sam_cfg_t *cfg)
+static int
+init_buf (sam_t *self, sam_cfg_t *cfg)
 {
-    assert (self);
-    assert (cfg);
+    if (self->buf) {
+        sam_buf_destroy (&self->buf);
+    }
 
+    char *fname;
+    int rc = sam_cfg_buf_file (cfg, &fname);
+    if (rc) {
+        return rc;
+    }
+
+    zsock_t *backend_pull = zsock_new_pull (
+        self->backend_pull_endpoint);
+
+    zsock_t *frontend_push = zsock_new_push (
+        self->frontend_pub_endpoint);
+
+    self->buf = sam_buf_new (
+        fname, &backend_pull, &frontend_push);
+
+    return rc;
+}
+
+
+static int
+init_backends (sam_t *self, sam_cfg_t *cfg)
+{
     int count;
     char **names, **names_ptr;
     void *opts, *opts_ptr;
@@ -425,14 +433,14 @@ sam_init (sam_t *self, sam_cfg_t *cfg)
         return -1;
     }
 
-    sam_log_infof ("initializing %d backends", count);
-
     while (count) {
         const char *name = *names_ptr;
         sam_backend_t *be = sam_be_create (self, name, opts_ptr);
+        sam_log_tracef ("send () 'be.add' to '%s'", name);
         zsock_send (self->ctl_req, "sp", "be.add", be);
 
         rc = -1;
+        sam_log_tracef ("recv () for return code of 'be.add' for '%s'", name);
         zsock_recv (self->ctl_req, "i", &rc);
         if (rc) {
             sam_log_errorf (
@@ -453,6 +461,28 @@ sam_init (sam_t *self, sam_cfg_t *cfg)
 
     free (names);
     free (opts);
+
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Initialize backends and the store based on a samwise configuration file.
+int
+sam_init (sam_t *self, sam_cfg_t *cfg)
+{
+    assert (self);
+    assert (cfg);
+
+    int rc = init_buf (self, cfg);
+    if (rc) {
+        return rc;
+    }
+
+    rc = init_backends (self, cfg);
+    if (rc) {
+        return rc;
+    }
 
     sam_log_info ("(re)loaded configuration");
     return 0;
@@ -602,8 +632,10 @@ sam_eval (sam_t *self, sam_msg_t *msg)
             return error (msg, "malformed publishing request");
         }
 
-        // TODO: store message in sam_buf
-        zsock_send (self->frontend_pub, "p", msg);
+        int key = sam_buf_save (self->buf, msg);
+
+        sam_log_tracef ("send () message '%d' internally", key);
+        zsock_send (self->frontend_pub, "ip", key, msg);
         return new_ret ();
     }
 
@@ -615,7 +647,9 @@ sam_eval (sam_t *self, sam_msg_t *msg)
         }
 
         sam_ret_t *ret;
+        sam_log_trace ("send () rpc internally");
         zsock_send (self->frontend_rpc, "p", msg);
+        sam_log_trace ("recv () rpc internally");
         zsock_recv (self->frontend_rpc, "p", &ret);
         return ret;
     }

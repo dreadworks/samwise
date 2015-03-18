@@ -41,6 +41,38 @@
 #include "../include/sam_prelude.h"
 
 
+/// store item to be able to map the message key -> sequence number
+typedef struct store_item {
+    unsigned int seq;     ///< amqp sequence number for publisher confirms
+    int key;              ///< message key assigned outside of this module
+} store_item;
+
+
+//  --------------------------------------------------------------------------
+/// Destructor function for the store.
+static void
+free_store_item (void **store_item)
+{
+    free (*store_item);
+    *store_item = NULL;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Create a new store item.
+static store_item *
+new_store_item (int key, int seq)
+{
+    store_item *item = malloc (sizeof (store_item));
+    assert (item);
+
+    item->key = key;
+    item->seq = seq;
+
+    return item;
+}
+
+
 //  --------------------------------------------------------------------------
 /// Checks if the frame returned by the broker is an acknowledgement.
 static void
@@ -85,16 +117,31 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
         self->amqp.connection, &frame, &timeout);
 
     while (rc != AMQP_STATUS_TIMEOUT) {
+
+        // retrieve frame contents
         check_amqp_ack_frame (frame);
         amqp_basic_ack_t *props = frame.payload.method.decoded;
         assert (props);
-
         sam_log_tracef (
             "'%s' received ack no %d", self->name, props->delivery_tag);
 
-        zsock_send (
-            self->psh, "si", self->name, SAM_RES_ACK);
 
+        // look the msg key up and update the store
+        store_item *item = zlist_first (self->store);
+        while (item && item->seq != props->delivery_tag) {
+            item = zlist_next (self->store);
+        }
+
+        assert (item);
+        zsock_send (
+            self->psh, "sii", self->name, SAM_RES_ACK, item->key);
+
+        sam_log_tracef (
+            "removing %d -> %d from the store", item->key, item->seq);
+        zlist_remove (self->store, item);
+
+
+        // rabbitmq-c acts edge triggered
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.connection, &frame, &timeout);
     }
@@ -115,9 +162,11 @@ static int
 handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
 {
     sam_be_rmq_t *self = args;
-    sam_msg_t *msg;
 
-    int rc = zsock_recv (pll, "p", &msg);
+    sam_msg_t *msg;
+    int key;
+
+    int rc = zsock_recv (pll, "ip", &key, &msg);
     if (rc) {
         sam_log_error ("receive failed");
     }
@@ -129,12 +178,20 @@ handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
         msg, "ssf", &exchange, &routing_key, &payload);
     assert (!rc);
 
+    unsigned int seq = self->amqp.seq;
     rc = sam_be_rmq_publish (
         self,
         exchange,
         routing_key,
         zframe_data (payload),
         zframe_size (payload));
+
+    if (rc) {
+        return -1;
+    }
+
+    sam_log_tracef ("saving message %d -> %d to the store", key, seq);
+    zlist_append (self->store, new_store_item (key, seq));
 
     sam_msg_destroy (&msg);
     free (exchange);
@@ -340,6 +397,10 @@ sam_be_rmq_new (const char *name)
     self->amqp.connection = amqp_new_connection ();
     self->amqp.socket = amqp_tcp_socket_new (self->amqp.connection);
 
+    // init store
+    self->store = zlist_new ();
+    zlist_set_destructor (self->store, free_store_item);
+
     return self;
 }
 
@@ -352,6 +413,8 @@ void
 sam_be_rmq_destroy (sam_be_rmq_t **self)
 {
     sam_log_trace ("destroying rabbitmq message backend instance");
+    zlist_destroy (&(*self)->store);
+
 
     try ("closing message channel", amqp_channel_close (
              (*self)->amqp.connection,
