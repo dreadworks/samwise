@@ -48,16 +48,6 @@ typedef struct sam_ret_t {
 } sam_ret_t;
 
 
-/// state used by the sam actor
-typedef struct sam_state_t {
-    sam_be_t be_type;        ///< backend type, used to parse the protocol
-    zsock_t *ctl_rep;        ///< reply socket for control commands
-    zsock_t *frontend_rep;   ///< reply socket for the internal actor
-    zsock_t *backend_pull;   ///< back channel for backend acknowledgments
-    zlist_t *backends;       ///< maintains request sockets
-} sam_state_t;
-
-
 /// a sam instance
 typedef struct sam_t {
     sam_be_t be_type;             ///< backend type, used to init backends
@@ -65,10 +55,6 @@ typedef struct sam_t {
     zsock_t *frontend_req;        ///< request socket for the internal actor
     char *backend_pull_endpoint;  ///< pull endpoint name for backends to bind
     zactor_t *actor;              ///< thread maintaining broker connections
-
-    // this reference must be handled with care
-    // because it is shared between threads.
-    sam_state_t *state;           ///< ref to the state object for destroy ()
 } sam_t;
 
 
@@ -126,7 +112,7 @@ sam_init (
 /// @param msg Message containing some <action>
 /// @return Some sam_ret_t
 sam_ret_t *
-sam_send_action (
+sam_eval (
     sam_t *self,
     sam_msg_t *msg);
 

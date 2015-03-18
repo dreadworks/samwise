@@ -21,6 +21,18 @@
 #include "../include/sam_prelude.h"
 
 
+
+/// state used by the sam actor
+typedef struct sam_state_t {
+    sam_be_t be_type;        ///< backend type, used to parse the protocol
+    zsock_t *ctl_rep;        ///< reply socket for control commands
+    zsock_t *frontend_rep;   ///< reply socket for the internal actor
+    zsock_t *backend_pull;   ///< back channel for backend acknowledgments
+    zlist_t *backends;       ///< maintains request sockets
+} sam_state_t;
+
+
+
 //  --------------------------------------------------------------------------
 /// Send a reference of a proper sam_ret_t via INPROC.
 static int
@@ -34,6 +46,8 @@ send_error (zsock_t *sock, sam_ret_t *ret, char *msg)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Checks if the message contains a valid publishing request
 static int
 prepare_publish (sam_be_t be_type, sam_msg_t *msg)
 {
@@ -98,7 +112,6 @@ publish_to_backends (
     }
 
     if (backend != NULL) {
-        // all necessary information is now "contained"
         sam_log_tracef ("send publishing request to '%s'", backend->name);
         sam_msg_own (msg); // the backend is trying to destroy it
         zsock_send (backend->publish_psh, "p", msg);
@@ -353,6 +366,31 @@ actor (zsock_t *pipe, void *args)
 
     sam_log_trace ("destroying loop");
     zloop_destroy (&loop);
+
+    zsock_destroy (&state->frontend_rep);
+    zsock_destroy (&state->backend_pull);
+    zsock_destroy (&state->ctl_rep);
+
+    // destroy backends
+    sam_backend_t *backend = zlist_first (state->backends);
+    while (backend != NULL) {
+        sam_log_tracef ("trying to delete backend %s", backend->name);
+
+        // rabbitmq backends
+        if (state->be_type == SAM_BE_RMQ) {
+            sam_be_rmq_t *rabbit = sam_be_rmq_stop (&backend);
+            sam_be_rmq_destroy (&rabbit);
+        }
+
+        else {
+            assert (false);
+        }
+
+        backend = zlist_next (state->backends);
+    }
+
+    zlist_destroy (&state->backends);
+    free (state);
 }
 
 
@@ -401,7 +439,6 @@ sam_new (sam_be_t be_type)
     self->be_type = be_type;
 
     state->backends = zlist_new ();
-    self->state = state;
     return self;
 }
 
@@ -414,40 +451,13 @@ sam_destroy (sam_t **self)
 {
     assert (self);
     sam_log_info ("destroying sam instance");
-    zactor_destroy (&(*self)->actor);
-
-    // destroy backends
-    sam_state_t *state = (*self)->state;
-    sam_backend_t *backend = zlist_first (state->backends);
-    while (backend != NULL) {
-        sam_log_tracef ("trying to delete backend %s", backend->name);
-
-        // rabbitmq backends
-        if (state->be_type == SAM_BE_RMQ) {
-            sam_be_rmq_t *rabbit = sam_be_rmq_stop (&backend);
-            sam_be_rmq_destroy (&rabbit);
-        }
-
-        else {
-            assert (false);
-        }
-
-        backend = zlist_next (state->backends);
-    }
-
-    zlist_destroy (&state->backends);
 
     // destroy sockets
-    zsock_destroy (&(*self)->state->backend_pull);
     free ((*self)->backend_pull_endpoint);
-
-    zsock_destroy (&(*self)->state->frontend_rep);
     zsock_destroy (&(*self)->frontend_req);
-
-    zsock_destroy (&(*self)->state->ctl_rep);
     zsock_destroy (&(*self)->ctl_req);
+    zactor_destroy (&(*self)->actor);
 
-    free ((*self)->state);
     free (*self);
     *self = NULL;
 }
@@ -571,7 +581,7 @@ sam_init (sam_t *self, sam_cfg_t *cfg)
 //  --------------------------------------------------------------------------
 /// Send the sam actor thread a message.
 sam_ret_t *
-sam_send_action (sam_t *self, sam_msg_t *msg)
+sam_eval (sam_t *self, sam_msg_t *msg)
 {
     sam_ret_t *ret;
     if (sam_msg_expect (msg, 1, SAM_MSG_NONZERO)) {

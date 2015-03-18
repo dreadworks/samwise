@@ -67,11 +67,11 @@ test_create_msg (uint arg_c, char **arg_v)
 
 
 //  --------------------------------------------------------------------------
-/// Asserts that sam_send_action will return with an error.
+/// Asserts that sam_eval will return with an error.
 static void
 test_assert_error (sam_t *sam, sam_msg_t *msg)
 {
-    sam_ret_t *ret = sam_send_action (sam, msg);
+    sam_ret_t *ret = sam_eval (sam, msg);
     ck_assert_int_eq (ret->rc, -1);
     sam_log_tracef ("got error: %s", ret->msg);
     free (ret);
@@ -91,7 +91,7 @@ START_TEST(test_sam_rmq_publish)
     };
 
     sam_msg_t *msg = test_create_msg (sizeof (pub_msg) / char_s, pub_msg);
-    sam_ret_t *ret = sam_send_action (sam, msg);
+    sam_ret_t *ret = sam_eval (sam, msg);
 
     ck_assert_int_eq (ret->rc, 0);
     free (ret);
@@ -114,7 +114,7 @@ START_TEST(test_sam_rmq_xdecl)
     sam_msg_t *msg = test_create_msg (
         sizeof (exch_decl_msg) / char_s, exch_decl_msg);
 
-    sam_ret_t *ret = sam_send_action (sam, msg);
+    sam_ret_t *ret = sam_eval (sam, msg);
 
     ck_assert_int_eq (ret->rc, 0);
     free (ret);
@@ -135,7 +135,7 @@ START_TEST(test_sam_rmq_xdel)
     sam_msg_t *msg = test_create_msg (
         sizeof (exch_del_msg) / char_s, exch_del_msg);
 
-    sam_ret_t *ret = sam_send_action (sam, msg);
+    sam_ret_t *ret = sam_eval (sam, msg);
 
     ck_assert_int_eq (ret->rc, 0);
     free (ret);
