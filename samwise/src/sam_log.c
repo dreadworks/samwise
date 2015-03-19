@@ -45,6 +45,7 @@ static void
 out (
     FILE *f,
     sam_log_lvl_t lvl,
+    const char *prefix,
     const char *msg,
     const char *filename,
     const int line)
@@ -57,7 +58,8 @@ out (
 
     // format output string
     fprintf (
-        f, "%s [%.*s:%d] (%s): %.*s\n",
+        f, "%s %s [%.*s:%d] (%s): %.*s\n",
+        prefix,
         date_buf,
         16, filename,
         line,
@@ -76,13 +78,18 @@ sam_log_ (
     const int line)
 {
 
-    if (lvl == SAM_LOG_LVL_TRACE || lvl == SAM_LOG_LVL_INFO) {
-        out (stdout, lvl, msg, filename, line);
+    if (lvl == SAM_LOG_LVL_TRACE) {
+        out (stdout, lvl, "\033[0m", msg, filename, line);
+        return;
+    }
+
+    if (lvl == SAM_LOG_LVL_INFO) {
+        out (stdout, lvl, "\x1B[33m", msg, filename, line);
         return;
     }
 
     if (lvl == SAM_LOG_LVL_ERROR) {
-        out (stderr, lvl, msg, filename, line);
+        out (stderr, lvl, "\x1B[31m", msg, filename, line);
         return;
     }
 
