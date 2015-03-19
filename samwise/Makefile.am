@@ -34,8 +34,6 @@ src_libsam_la_SOURCES =					\
 	include/sam.h									\
 	include/sam_prelude.h					\
 \
-	include/playground.h					\
-	src/playground_publish_loop.c	\
 	src/sam.c
 
 src_libsam_la_LDFLAGS = \
