@@ -137,7 +137,11 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
             self->psh, "sii", self->name, SAM_RES_ACK, item->key);
 
         sam_log_tracef (
-            "removing %d -> %d from the store", item->key, item->seq);
+            "'%s' removes %d (seq: %d) from the store",
+            self->name,
+            item->key,
+            item->seq);
+
         zlist_remove (self->store, item);
 
 
@@ -168,7 +172,7 @@ handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
 
     int rc = zsock_recv (pll, "ip", &key, &msg);
     if (rc) {
-        sam_log_error ("receive failed");
+        sam_log_errorf ("'%s' receive failed", self->name);
     }
 
     char *exchange, *routing_key;
@@ -190,7 +194,10 @@ handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
         return -1;
     }
 
-    sam_log_tracef ("saving message %d -> %d to the store", key, seq);
+    sam_log_tracef (
+        "'%s' saves message %d (seq: %d) to the store",
+        self->name, key, seq);
+
     zlist_append (self->store, new_store_item (key, seq));
 
     sam_msg_destroy (&msg);
@@ -220,7 +227,7 @@ handle_rpc_req (zloop_t *loop UU, zsock_t *rep, void *args)
 
     int rc = zsock_recv (rep, "p", &msg);
     if (rc) {
-        sam_log_error ("receive failed");
+        sam_log_errorf ("'%s' receive failed", self->name);
         return -1;
     }
 
@@ -263,7 +270,7 @@ static void
 actor (zsock_t *pipe, void *args)
 {
     sam_be_rmq_t *self = args;
-    sam_log_info ("started be_rmq actor");
+    sam_log_infof ("'%s' started be_rmq actor", self->name);
 
     zmq_pollitem_t amqp_pollitem = {
         .socket = NULL,
@@ -281,11 +288,10 @@ actor (zsock_t *pipe, void *args)
 
     zloop_poller (loop, &amqp_pollitem, handle_amqp, self);
 
-    sam_log_trace ("send ready signal");
     zsock_signal (pipe, 0);
     zloop_start (loop);
 
-    sam_log_info ("stopping be_rmq actor");
+    sam_log_infof ("'%s' stopping be_rmq actor", self->name);
     zloop_destroy (&loop);
 }
 
@@ -412,7 +418,10 @@ sam_be_rmq_new (const char *name)
 void
 sam_be_rmq_destroy (sam_be_rmq_t **self)
 {
-    sam_log_trace ("destroying rabbitmq message backend instance");
+    sam_log_tracef (
+        "destroying rabbitmq message backend instance '%s'",
+        (*self)->name);
+
     zlist_destroy (&(*self)->store);
 
 
@@ -449,7 +458,10 @@ sam_be_rmq_connect (
     sam_be_rmq_opts_t *opts)
 {
     sam_log_infof (
-        "connecting to %s:%d", opts->host, opts->port);
+        "'%s' connecting to %s:%d",
+        self->name,
+        opts->host,
+        opts->port);
 
     int rc = amqp_socket_open (
         self->amqp.socket,
@@ -459,7 +471,11 @@ sam_be_rmq_connect (
     assert (rc == 0);
 
     // login
-    sam_log_tracef ("logging in as user '%s'", opts->user);
+    sam_log_tracef (
+        "'%s' logging in as user '%s'",
+        self->name,
+        opts->user);
+
     try ("logging in", amqp_login(
             self->amqp.connection,   // state
             "/",                     // vhost
@@ -471,10 +487,6 @@ sam_be_rmq_connect (
             opts->pass));
 
     // message channel
-    sam_log_tracef (
-        "opening message channel (%d)",
-        self->amqp.message_channel);
-
     amqp_channel_open (
         self->amqp.connection,
         self->amqp.message_channel);
@@ -483,10 +495,6 @@ sam_be_rmq_connect (
          amqp_get_rpc_reply (self->amqp.connection));
 
     // method channel
-    sam_log_tracef (
-        "opening method channel (%d)",
-        self->amqp.method_channel);
-
     amqp_channel_open (
         self->amqp.connection,
         self->amqp.method_channel);
@@ -495,7 +503,6 @@ sam_be_rmq_connect (
          amqp_get_rpc_reply (self->amqp.connection));
 
     // enable publisher confirms
-    sam_log_trace ("set channel in confirm mode");
     amqp_confirm_select_t req;
     req.nowait = 0;
 
@@ -528,7 +535,8 @@ sam_be_rmq_publish (
     };
 
     sam_log_tracef (
-        "publishing message %d of size %d",
+        "'%s' publishing message %d of size %d",
+        self->name,
         self->amqp.seq,
         payload_len);
 
@@ -543,7 +551,10 @@ sam_be_rmq_publish (
         msg_bytes);                           // body
 
     if (rc == AMQP_STATUS_HEARTBEAT_TIMEOUT) {
-        sam_log_error ("connection lost while publishing!");
+        sam_log_errorf (
+            "'%s' connection lost while publishing!",
+            self->name);
+
         zsock_send (self->psh, "i", SAM_RES_CONNECTION_LOSS);
         return -1;
     }
@@ -591,7 +602,10 @@ sam_be_rmq_exchange_declare (
     const char *type)
 {
     sam_log_infof (
-        "declaring exchange '%s' (%s)", exchange, type);
+        "'%s' declaring exchange '%s' (%s)",
+        self->name,
+        exchange,
+        type);
 
     amqp_exchange_declare (
         self->amqp.connection,         // connection state
@@ -637,8 +651,9 @@ sam_be_rmq_start (
     char *pll_endpoint)
 {
     char buf [64];
-    sam_log_trace ("starting message backend actor");
-
+    sam_log_tracef (
+        "'%s' starting message backend actor",
+        (*self)->name);
 
     // create backend
     sam_backend_t *backend = malloc (sizeof (sam_backend_t));
@@ -655,7 +670,10 @@ sam_be_rmq_start (
     backend->publish_psh = zsock_new_push (buf);
     assert (backend->publish_psh);
 
-    sam_log_tracef ("generated rmq psh/pull publishing endpoint '%s'", buf);
+    sam_log_tracef (
+        "'%s' created psh/pull pair on '%s'",
+        (*self)->name,
+        buf);
 
 
     // rpc REQ/REP
@@ -667,13 +685,18 @@ sam_be_rmq_start (
     backend->rpc_req = zsock_new_req (buf);
     assert (backend->rpc_req);
 
-    sam_log_tracef ("generated rmq req/rep rpc endpoints '%s'", buf);
+    sam_log_tracef (
+        "'%s' created req/rep pair for rpc '%s'",
+        (*self)->name, buf);
 
 
     // feedback PUSH
     (*self)->psh = zsock_new_push (pll_endpoint);
     assert ((*self)->psh);
-    sam_log_tracef ("connected push socket to '%s'", pll_endpoint);
+    sam_log_tracef (
+        "'%s' connected push socket to '%s'",
+        (*self)->name,
+        pll_endpoint);
 
 
     // change ownership
