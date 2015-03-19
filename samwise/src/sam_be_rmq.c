@@ -133,8 +133,12 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
         }
 
         assert (item);
+        sam_log_tracef ("send () ack for '%d'", item->key);
+
+        zframe_t *id = zframe_new (&self->id, sizeof (self->id));
         zsock_send (
-            self->psh, "sii", self->name, SAM_RES_ACK, item->key);
+            self->psh, "fii", id, SAM_RES_ACK, item->key);
+        zframe_destroy (&id);
 
         sam_log_tracef (
             "'%s' removes %d (seq: %d) from the store",
@@ -384,10 +388,10 @@ sam_be_rmq_sockfd (sam_be_rmq_t *self)
 /// function creates an AMQP connection state and initializes a TCP
 /// socket for the broker connection.
 sam_be_rmq_t *
-sam_be_rmq_new (const char *name)
+sam_be_rmq_new (const char *name, uint64_t id)
 {
     sam_log_infof (
-        "creating rabbitmq message backend (%s)", name);
+        "creating rabbitmq message backend (%s:%d)", name, id);
 
     sam_be_rmq_t *self = malloc (sizeof (sam_be_rmq_t));
     assert (self);
@@ -395,6 +399,8 @@ sam_be_rmq_new (const char *name)
     self->name = malloc (strlen (name) * sizeof (char) + 1);
     assert (self->name);
     strcpy (self->name, name);
+
+    self->id = id;
 
     // init amqp
     self->amqp.seq = 1;
@@ -659,7 +665,7 @@ sam_be_rmq_start (
     sam_backend_t *backend = malloc (sizeof (sam_backend_t));
     assert (backend);
     backend->name = (*self)->name;
-
+    backend->id = (*self)->id;
 
     // publish PUSH/PULL
     snprintf (buf, 64, "inproc://be_rmq-%s-publish", (*self)->name);

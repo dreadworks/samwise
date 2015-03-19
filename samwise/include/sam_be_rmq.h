@@ -25,7 +25,9 @@
 
 /// the be_rmq state
 typedef struct sam_be_rmq_t {
-    char *name;
+    char *name;        ///< identifier assigned by the user
+    uint64_t id;       ///< identifier used by sam_buf
+
     zlist_t *store;    ///< maps message keys to sequence numbers
 
     struct {                                ///< amqp connection
@@ -66,7 +68,9 @@ sam_be_rmq_sockfd (
 /// @brief Create a new RabbitMQ connection
 /// @return New be_rmq instance
 sam_be_rmq_t *
-sam_be_rmq_new (const char *name);
+sam_be_rmq_new (
+    const char *name,
+    uint64_t id);
 
 
 //  --------------------------------------------------------------------------

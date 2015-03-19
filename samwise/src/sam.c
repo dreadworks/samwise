@@ -253,7 +253,7 @@ sam_new (sam_be_t be_type)
     sam_state_t *state = malloc (sizeof (sam_state_t));
     assert (self);
 
-
+    self->be_id_power = 0;
     self->buf = NULL;
 
 
@@ -340,7 +340,11 @@ create_be_rmq (
     sam_be_rmq_opts_t *opts)
 {
     sam_be_rmq_opts_t *rabbit_opts = opts;
-    sam_be_rmq_t *rabbit = sam_be_rmq_new (name);
+
+    sam_be_rmq_t *rabbit = sam_be_rmq_new (
+        name, 1 << self->be_id_power);
+
+    self->be_id_power += 1;
     assert (rabbit);
 
     sam_be_rmq_connect (rabbit, rabbit_opts); // TODO handle erors
@@ -430,6 +434,7 @@ init_backends (sam_t *self, sam_cfg_t *cfg)
     opts_ptr = opts;
 
     if (rc || !count) {
+        sam_log_error ("there are no backends to initialize");
         return -1;
     }
 
@@ -632,6 +637,7 @@ sam_eval (sam_t *self, sam_msg_t *msg)
             return error (msg, "malformed publishing request");
         }
 
+        sam_msg_own (msg);
         int key = sam_buf_save (self->buf, msg);
 
         sam_log_tracef ("send () message '%d' internally", key);

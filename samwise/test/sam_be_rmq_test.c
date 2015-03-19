@@ -14,6 +14,7 @@
 
 // rabbitmq instance
 char *be_name = "test";
+uint64_t be_id = 1;
 sam_be_rmq_t *rabbit;
 
 // feedback channel for async. communication
@@ -27,7 +28,7 @@ sam_backend_t *backend;
 static void
 setup_connection ()
 {
-    rabbit = sam_be_rmq_new (be_name);
+    rabbit = sam_be_rmq_new (be_name, be_id);
     if (!rabbit) {
         ck_abort_msg ("could not create be_rmq instance");
     }
@@ -152,6 +153,10 @@ START_TEST(test_be_rmq_async_beprops)
         ck_abort_msg ("backend name not available");
     }
 
+    if (!backend->id) {
+        ck_abort_msg ("backend id not available");
+    }
+
     if (!backend->publish_psh) {
         ck_abort_msg ("backend push socket not available");
     }
@@ -227,17 +232,24 @@ START_TEST(test_be_rmq_async_publish)
 
     // wait for ack
     sam_res_t res_t;
-    char *returned_name;
+    uint64_t returned_be_id;
+    zframe_t *id_frame;
     int returned_msg_id;
 
-    rc = zsock_recv (pll, "sii", &returned_name, &res_t, &returned_msg_id);
+    rc = zsock_recv (
+        pll, "fii",
+        &id_frame,
+        &res_t,
+        &returned_msg_id);
+
+    returned_be_id = *(uint64_t *) zframe_data (id_frame);
+    zframe_destroy (&id_frame);
+
     ck_assert_int_eq (rc, 0);
 
-    ck_assert_str_eq (returned_name, be_name);
+    ck_assert_int_eq (returned_be_id, be_id);
     ck_assert (res_t == SAM_RES_ACK);
     ck_assert_int_eq (returned_msg_id, msg_id);
-
-    free (returned_name);
 }
 END_TEST
 

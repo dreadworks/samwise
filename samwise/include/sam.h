@@ -50,6 +50,7 @@ typedef struct sam_ret_t {
 
 /// a sam instance
 typedef struct sam_t {
+    int be_id_power;              ///< used to assign backend ids
     sam_be_t be_type;             ///< backend type, used to init backends
 
     zsock_t *frontend_pub;        ///< request socket for rpc calls
