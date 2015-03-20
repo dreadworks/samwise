@@ -21,6 +21,7 @@ Samwise relies on some libraries:
 |----------------------------------------------------|---------|
 | [ZeroMQ](http://zeromq.org/)                       | 4.0.5   |
 | [CZMQ](http://czmq.zeromq.org/)                    | 3.0.0   |
+| Berkeley DB                                        | 5.1     |
 | [RabbitMQ-C](https://github.com/alanxz/rabbitmq-c) | 0.5.2   |
 
 
