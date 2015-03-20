@@ -20,13 +20,9 @@
 
 /// buf instance wrapping the buffer
 typedef struct sam_buf_t {
-    int seq;
-    DB *dbp;
-
-    zsock_t *in;
-    zsock_t *out;
-
-    zactor_t *actor;
+    int seq;               ///< used to assign unique message id's
+    zsock_t *store_sock;   ///< for (internal) storage requests
+    zactor_t *actor;       ///< maintaining the event loop
 } sam_buf_t;
 
 
@@ -54,6 +50,9 @@ sam_buf_destroy (
 
 //  --------------------------------------------------------------------------
 /// @brief Hand message over to store, get a key as the receipt
+/// @param self A buf instance
+/// @param msg A publishing request wrapped by sam_msg_t
+/// @return A unique id used to identify the message
 int
 sam_buf_save (
     sam_buf_t *self,
