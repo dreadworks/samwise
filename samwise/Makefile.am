@@ -72,6 +72,8 @@ sam_selftest_SOURCES =   \
 	test/sam_buf_test.c    \
 	test/sam_be_rmq_test.c \
 	test/sam_test.c        \
+\
+	include/sam_selftest.h \
 	src/sam_selftest.c
 
 sam_selftest_LDADD = src/libsam.la

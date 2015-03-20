@@ -25,6 +25,7 @@
 
 #include "../include/sam_prelude.h"
 #include "../include/samd.h"
+#include "../include/sam_selftest.h"
 
 
 typedef void *(*test_fn_t) ();
@@ -37,6 +38,20 @@ test_fn_t suites [] = {
     sam_be_rmq_test,
     sam_test
 };
+
+
+
+void
+sam_selftest_introduce (const char *name)
+{
+    char buf [] = "\n|---| ----------------------------------------------------------------------------------|\n";
+    char *tmpl = " %s |";
+
+    snprintf (buf + 6, 50, tmpl, name);
+    buf[strlen (buf)] = '-';
+
+    printf ("%s", buf);
+}
 
 
 //  --------------------------------------------------------------------------
