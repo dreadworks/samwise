@@ -82,6 +82,8 @@ test_assert_error (sam_t *sam, sam_msg_t *msg)
 /// Test publishing a message to a RabbitMQ broker.
 START_TEST(test_sam_rmq_publish)
 {
+    sam_selftest_introduce ("test_sam_rmq_publish");
+
     char *pub_msg [] = {
         "publish",        // action
         "round robin",    // distribution type
@@ -103,6 +105,8 @@ END_TEST
 /// Test declaring an exchange on a RabbitMQ broker.
 START_TEST(test_sam_rmq_xdecl)
 {
+    sam_selftest_introduce ("test_sam_rmq_xdecl");
+
     char *exch_decl_msg [] = {
         "rpc",
         "",                 // broker name
@@ -125,6 +129,8 @@ END_TEST
 /// Test deleting an exchange on a RabbitMQ broker
 START_TEST(test_sam_rmq_xdel)
 {
+    sam_selftest_introduce ("test_sam_rmq_xdel");
+
     char *exch_del_msg [] = {
         "rpc",
         "",                // broker name
@@ -147,6 +153,8 @@ END_TEST
 /// Send an empty message.
 START_TEST(test_sam_rmq_prot_error_empty)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_empty");
+
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
     test_assert_error (sam, msg);
@@ -157,6 +165,8 @@ END_TEST
 /// Send a request with an unknown method frame.
 START_TEST(test_sam_rmq_prot_error_unknown)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_unknown");
+
     char *a [] = {
         "consume", "amq.direct", ""
     };
@@ -171,6 +181,8 @@ END_TEST
 /// Send a request with a missing distribution type.
 START_TEST(test_sam_rmq_prot_error_missing_type)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_missing_type");
+
     char *a [] = {
         "publish", "amq.direct", "", "hi!"
     };
@@ -185,6 +197,8 @@ END_TEST
 /// Send a request with a missing distribution count for "redundant".
 START_TEST(test_sam_rmq_prot_error_missing_dcount)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_missing_dcount");
+
     char *a [] = {
         "publish", "redundant", "amq.direct", "", "hi!"
     };
@@ -199,6 +213,8 @@ END_TEST
 /// Send a wrongly formatted publishing request.
 START_TEST(test_sam_rmq_prot_error_publish)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_publish");
+
     char *a [] = {
         "publish", "round robin", "amq.direct"
     };
@@ -213,6 +229,8 @@ END_TEST
 /// Send a wrong exchange.declare with missing options.
 START_TEST(test_sam_rmq_prot_error_xdecl1)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_xdecl1");
+
     char *a [] = {
         "rpc", "exchange.declare"
     };
@@ -227,6 +245,8 @@ END_TEST
 /// Send a wrong exchange declare with empty options.
 START_TEST(test_sam_rmq_prot_error_xdecl2)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_xdecl2");
+
     char *a [] = {
         "rpc", "exchange.declare", "", ""
     };
@@ -241,6 +261,8 @@ END_TEST
 /// Send a wrong exchange declare with wrong argument count.
 START_TEST(test_sam_rmq_prot_error_xdecl3)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_xdecl3");
+
     char *a [] = {
         "rpc", "exchange.declare", "foo"
     };
@@ -255,6 +277,8 @@ END_TEST
 /// Send a wrong exchange delete with missing option frames.
 START_TEST(test_sam_rmq_prot_error_xdel1)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_xdel1");
+
     // wrong exchange.delete
     char *a [] = {
         "rpc", "exchange.delete"
@@ -270,6 +294,8 @@ END_TEST
 /// Send a wrong echange delete with empty option frames.
 START_TEST(test_sam_rmq_prot_error_xdel2)
 {
+    sam_selftest_introduce ("test_sam_rmq_prot_error_xdel2");
+
     char *a [] = {
         "rpc", "exchange.delete", ""
     };

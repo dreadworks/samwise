@@ -632,8 +632,13 @@ sam_be_rmq_exchange_declare (
 int
 sam_be_rmq_exchange_delete (
     sam_be_rmq_t *self,
-    const char *exchange UU)
+    const char *exchange)
 {
+    sam_log_infof (
+        "'%s' deleting exchange '%s'",
+        self->name,
+        exchange);
+
     amqp_exchange_delete (
         self->amqp.connection,
         self->amqp.method_channel,

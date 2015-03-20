@@ -15,6 +15,8 @@
 
 START_TEST(test_sam_log_trace)
 {
+    sam_selftest_introduce ("test_sam_log_trace");
+
     sam_log_trace ("trace");
     ck_assert (true);
 }
@@ -23,6 +25,8 @@ END_TEST
 
 START_TEST(test_sam_log_info)
 {
+    sam_selftest_introduce ("test_sam_log_info");
+
     sam_log_info ("info");
     ck_assert (true);
 }
@@ -31,6 +35,8 @@ END_TEST
 
 START_TEST(test_sam_log_error)
 {
+    sam_selftest_introduce ("test_sam_log_error");
+
     sam_log_error ("error");
     ck_assert (true);
 }
@@ -39,6 +45,8 @@ END_TEST
 
 START_TEST(test_sam_log_tracef)
 {
+    sam_selftest_introduce ("test_sam_log_tracef");
+
     sam_log_tracef ("%s formatted", "trace");
     ck_assert (true);
 }
@@ -47,6 +55,8 @@ END_TEST
 
 START_TEST(test_sam_log_infof)
 {
+    sam_selftest_introduce ("test_sam_log_infof");
+
     sam_log_infof ("%s formatted", "info");
     ck_assert (true);
 }
@@ -55,6 +65,8 @@ END_TEST
 
 START_TEST(test_sam_log_errorf)
 {
+    sam_selftest_introduce ("test_sam_log_errorf");
+
     sam_log_errorf ("%s formatted", "error");
     ck_assert (true);
 }

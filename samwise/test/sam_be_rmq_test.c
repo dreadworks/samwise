@@ -101,6 +101,8 @@ destroy_backend ()
 /// Test synchronous exchange declaration.
 START_TEST(test_be_rmq_sync_xdecl)
 {
+    sam_selftest_introduce("test_be_rmq_sync_xdecl");
+
     int rc = sam_be_rmq_exchange_declare (rabbit, "x-test", "direct");
     ck_assert_int_eq (rc, 0);
 }
@@ -111,6 +113,8 @@ END_TEST
 /// Test synchronous exchange deletion.
 START_TEST(test_be_rmq_sync_xdel)
 {
+    sam_selftest_introduce("test_be_rmq_sync_xdel");
+
     int rc = sam_be_rmq_exchange_delete (rabbit, "x-test");
     ck_assert_int_eq (rc, 0);
 
@@ -122,6 +126,8 @@ END_TEST
 /// Test synchronous publishing.
 START_TEST(test_be_rmq_sync_publish)
 {
+    sam_selftest_introduce("test_be_rmq_sync_publish");
+
     int rc = sam_be_rmq_publish (
         rabbit, "amq.direct", "", (byte *) "hi!", 3);
     ck_assert_int_eq (rc, 0);
@@ -149,6 +155,8 @@ END_TEST
 /// Test if all public properties of the rmq backend instance are initialized.
 START_TEST(test_be_rmq_async_beprops)
 {
+    sam_selftest_introduce("test_be_rmq_async_beprops");
+
     if (!backend->name) {
         ck_abort_msg ("backend name not available");
     }
@@ -172,6 +180,8 @@ END_TEST
 /// Test asynchronous exchange declaration.
 START_TEST(test_be_rmq_async_xdecl)
 {
+    sam_selftest_introduce("test_be_rmq_async_xdecl");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "direct");
     zmsg_pushstr (zmsg, "x-test-async");
@@ -195,6 +205,8 @@ END_TEST
 /// Test asynchronous exchange deletion.
 START_TEST(test_be_rmq_async_xdel)
 {
+    sam_selftest_introduce("test_be_rmq_async_xdel");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "x-test-async");
     zmsg_pushstr (zmsg, "exchange.delete");
@@ -217,6 +229,8 @@ END_TEST
 /// Test asynchronous publishing.
 START_TEST(test_be_rmq_async_publish)
 {
+    sam_selftest_introduce("test_be_rmq_async_publish");
+
     zmsg_t *zmsg = zmsg_new ();
     char *str_payload = "hi!";
     zframe_t *payload = zframe_new (str_payload, strlen (str_payload));

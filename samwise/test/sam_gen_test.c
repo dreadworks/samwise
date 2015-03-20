@@ -29,6 +29,8 @@ test_actor (zsock_t *pipe, void *args UU)
 /// Test if the actor exits cleanly by using the gen_pipe callback.
 START_TEST(test_sam_handle_pipe)
 {
+    sam_selftest_introduce ("test_sam_handle_pipe");
+
     zactor_t *actor = zactor_new (test_actor, NULL);
     if (!actor) {
         ck_abort_msg ("no actor created");

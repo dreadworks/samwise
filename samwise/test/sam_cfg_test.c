@@ -44,6 +44,8 @@ destroy ()
 /// Test cfg_buf_file ().
 START_TEST(test_cfg_buf_file)
 {
+    sam_selftest_introduce ("test_cfg_buf_file");
+
     char *fname;
     int rc = sam_cfg_buf_file (cfg, &fname);
     ck_assert_int_eq (rc, 0);
@@ -56,6 +58,8 @@ END_TEST
 /// Test cfg_buf_size ().
 START_TEST(test_cfg_buf_size)
 {
+    sam_selftest_introduce ("test_cfg_buf_size");
+
     int size;
     int rc = sam_cfg_buf_size (cfg, &size);
     ck_assert_int_eq (rc, 0);
@@ -68,6 +72,8 @@ END_TEST
 /// Test cfg_endpoint ().
 START_TEST(test_cfg_endpoint)
 {
+    sam_selftest_introduce ("test_cfg_endpoint");
+
     char *endpoint;
 
     int rc = sam_cfg_endpoint (cfg, &endpoint);
@@ -86,6 +92,8 @@ END_TEST
 /// Test cfg_be_type ().
 START_TEST(test_cfg_be_type)
 {
+    sam_selftest_introduce ("test_cfg_be_type");
+
     sam_be_t be_type;
     int rc = sam_cfg_be_type (cfg, &be_type);
 
@@ -100,6 +108,8 @@ END_TEST
 /// Test cfg_be_backends ().
 START_TEST(test_cfg_be_backends_rmq)
 {
+    sam_selftest_introduce ("test_cfg_be_backends_rmq");
+
     int backend_count;
     char **names;
     sam_be_rmq_opts_t *opts;

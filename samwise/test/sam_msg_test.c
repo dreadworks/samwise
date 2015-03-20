@@ -16,6 +16,8 @@
 /// Create and destroy a message.
 START_TEST(test_msg_life_basic)
 {
+    sam_selftest_introduce ("test_msg_life_basic");
+
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
@@ -39,6 +41,8 @@ END_TEST
 /// Test reference counting with _own ().
 START_TEST(test_msg_own)
 {
+    sam_selftest_introduce ("test_msg_own");
+
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
@@ -60,6 +64,8 @@ END_TEST
 /// Try to _pop () an integer.
 START_TEST(test_msg_pop_i)
 {
+    sam_selftest_introduce ("test_msg_pop_i");
+
     zmsg_t *zmsg = zmsg_new ();
     char *nbr = "1337";
     int rc = zmsg_pushstr (zmsg, nbr);
@@ -84,6 +90,8 @@ END_TEST
 /// Try to _pop () a char pointer.
 START_TEST(test_msg_pop_s)
 {
+    sam_selftest_introduce ("test_msg_pop_s");
+
     zmsg_t *zmsg = zmsg_new ();
     char *str = "hi!";
     int rc = zmsg_pushstr (zmsg, str);
@@ -108,6 +116,8 @@ END_TEST
 /// Try to _pop () a zframe pointer.
 START_TEST(test_msg_pop_f)
 {
+    sam_selftest_introduce ("test_msg_pop_f");
+
     zmsg_t *zmsg = zmsg_new ();
     char payload = 'a';
 
@@ -139,6 +149,8 @@ END_TEST
 /// Try to _pop () a void pointer.
 START_TEST(test_msg_pop_p)
 {
+    sam_selftest_introduce ("test_msg_pop_p");
+
     zmsg_t *zmsg = zmsg_new ();
     void *ptr = (void *) 0xfabfab;
     int rc = zmsg_pushmem (zmsg, &ptr, sizeof (ptr));
@@ -163,6 +175,8 @@ END_TEST
 /// Try to _pop () multiple different values.
 START_TEST(test_msg_pop)
 {
+    sam_selftest_introduce ("test_msg_pop");
+
     zmsg_t *zmsg = zmsg_new ();
 
     // data to be pop()'d
@@ -225,6 +239,8 @@ END_TEST
 /// Try to _pop () when there are not enough frames.
 START_TEST(test_msg_pop_insufficient_data)
 {
+    sam_selftest_introduce ("test_msg_pop_insufficient_data");
+
     zmsg_t *zmsg = zmsg_new ();
     int rc = zmsg_pushstr (zmsg, "one");
     ck_assert_int_eq (rc, 0);
@@ -244,6 +260,8 @@ END_TEST
 /// _pop () multiple times. Mainly used to test the garbage collection.
 START_TEST(test_msg_pop_successively)
 {
+    sam_selftest_introduce ("test_msg_pop_successively");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "three");
     zmsg_pushstr (zmsg, "two");
@@ -276,6 +294,8 @@ END_TEST
 /// Test _size ().
 START_TEST(test_msg_size)
 {
+    sam_selftest_introduce ("test_msg_size");
+
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
@@ -297,6 +317,8 @@ END_TEST
 /// Test successive _size () calls in combination with _pop ().
 START_TEST(test_msg_size_successively)
 {
+    sam_selftest_introduce ("test_msg_size_successively");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "something");
     zmsg_pushstr (zmsg, "something");
@@ -323,6 +345,8 @@ END_TEST
 /// Test _free ().
 START_TEST(test_msg_free)
 {
+    sam_selftest_introduce ("test_msg_free");
+
     zmsg_t *zmsg = zmsg_new ();
     int rc = zmsg_pushstr (zmsg, "one");
     ck_assert_int_eq (rc, 0);
@@ -355,6 +379,8 @@ END_TEST
 /// Try to _get () an integer.
 START_TEST(test_msg_get_i)
 {
+    sam_selftest_introduce ("test_msg_get_i");
+
     zmsg_t *zmsg = zmsg_new ();
     char *nbr = "1337";
     int rc = zmsg_pushstr (zmsg, nbr);
@@ -385,6 +411,8 @@ END_TEST
 /// Try to _get () a char pointer.
 START_TEST(test_msg_get_s)
 {
+    sam_selftest_introduce ("test_msg_get_s");
+
     zmsg_t *zmsg = zmsg_new ();
     char *str = "hi!";
     int rc = zmsg_pushstr (zmsg, str);
@@ -417,6 +445,8 @@ END_TEST
 /// Try to _get () a zframe pointer.
 START_TEST(test_msg_get_f)
 {
+    sam_selftest_introduce ("test_msg_get_f");
+
     zmsg_t *zmsg = zmsg_new ();
     char payload = 'a';
     zframe_t *frame = zframe_new (&payload, sizeof (payload));
@@ -449,6 +479,8 @@ END_TEST
 /// Try to _get () a void pointer.
 START_TEST(test_msg_get_p)
 {
+    sam_selftest_introduce ("test_msg_get_p");
+
     zmsg_t *zmsg = zmsg_new ();
     void *ptr = (void *) 0xfabfab;
     int rc = zmsg_pushmem (zmsg, &ptr, sizeof (ptr));
@@ -479,6 +511,8 @@ END_TEST
 /// Try to skip a value in _get () with '?'.
 START_TEST(test_msg_get_skipped)
 {
+    sam_selftest_introduce ("test_msg_get_skipped");
+
     zmsg_t *zmsg = zmsg_new ();
     int rc = zmsg_pushstr (zmsg, "foo");
     ck_assert_int_eq (rc, 0);
@@ -506,6 +540,8 @@ END_TEST
 /// Assert that '?' only skips if there is a value
 START_TEST(test_msg_get_skipped_nonempty)
 {
+    sam_selftest_introduce ("test_msg_get_skipped_nonempty");
+
     zmsg_t *zmsg = zmsg_new ();
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
@@ -525,6 +561,8 @@ END_TEST
 /// Try to _get () a combination of data.
 START_TEST(test_msg_get)
 {
+    sam_selftest_introduce ("test_msg_get");
+
     zmsg_t *zmsg = zmsg_new ();
     char *str = "str 1", *nbr = "1";
 
@@ -586,6 +624,8 @@ END_TEST
 /// Try to _get () more data than present.
 START_TEST(test_msg_get_insufficient_data)
 {
+    sam_selftest_introduce ("test_msg_get_insufficient_data");
+
     zmsg_t *zmsg = zmsg_new ();
     sam_msg_t *msg = sam_msg_new (&zmsg);
     int rc = sam_msg_get (msg, "s");
@@ -600,6 +640,8 @@ END_TEST
 /// Test encoding and decoding.
 START_TEST(test_msg_code)
 {
+    sam_selftest_introduce ("test_msg_code");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "two");
     zmsg_pushstr (zmsg, "one");
@@ -634,6 +676,8 @@ END_TEST
 /// Test encoding and decoding when part of the data is already pop'd.
 START_TEST(test_msg_code_pop)
 {
+    sam_selftest_introduce ("test_msg_code_pop");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "two");
     zmsg_pushstr (zmsg, "one");
@@ -670,6 +714,8 @@ END_TEST
 /// Expect at least one non-zero frame.
 START_TEST(test_msg_expect_nonzero)
 {
+    sam_selftest_introduce ("test_msg_expect_nonzero");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "one");
 
@@ -688,6 +734,8 @@ END_TEST
 /// Expect failure for empty messages.
 START_TEST(test_msg_expect_nonzero_noframe)
 {
+    sam_selftest_introduce ("test_msg_expect_nonzero_noframe");
+
     zmsg_t *zmsg = zmsg_new ();
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
@@ -704,6 +752,8 @@ END_TEST
 /// Expect failure for empty frames.
 START_TEST(test_msg_expect_nonzero_empty)
 {
+    sam_selftest_introduce ("test_msg_expect_nonzero_empty");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "");
 
@@ -721,6 +771,8 @@ END_TEST
 /// Expect at least one frame that may contain zero data.
 START_TEST(test_msg_expect_zero)
 {
+    sam_selftest_introduce ("test_msg_expect_zero");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "");
 
@@ -739,6 +791,8 @@ END_TEST
 /// Expect failure for empty messages.
 START_TEST(test_msg_expect_zero_noframe)
 {
+    sam_selftest_introduce ("test_msg_expect_zero_noframe");
+
     zmsg_t *zmsg = zmsg_new ();
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
@@ -756,6 +810,8 @@ END_TEST
 /// Test a combination of expectations.
 START_TEST(test_msg_expect)
 {
+    sam_selftest_introduce ("test_msg_expect");
+
     zmsg_t *zmsg = zmsg_new ();
     zmsg_pushstr (zmsg, "nonzero");
     zmsg_pushstr (zmsg, "");
