@@ -64,6 +64,7 @@ typedef enum {
 typedef struct sam_backend_t {
     // public interface
     char *name;            ///< name of the backend
+    uint64_t id;           ///< id (power of 2) > 0
     zsock_t *publish_psh;  ///< push messages to be published
     zsock_t *rpc_req;      ///< request an rpc call
 
@@ -80,8 +81,5 @@ typedef struct sam_backend_t {
 #include "sam_cfg.h"
 #include "sam_buf.h"
 #include "sam.h"
-
-#include "playground.h"  // to be removed (#40)
-
 
 #endif
