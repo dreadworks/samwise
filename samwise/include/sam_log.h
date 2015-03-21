@@ -99,7 +99,7 @@ sam_log_test ();
 
 
 // info logging
-#if defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_TRACE)
+#if defined(LOG_THRESHOLD_INFO) || defined(LOG_THRESHOLD_ERROR)
     #define sam_log_info(msg)
     #define sam_log_infof(msg, ...)
 
