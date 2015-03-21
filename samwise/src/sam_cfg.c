@@ -104,6 +104,108 @@ resolve (
 }
 
 
+
+static char
+get_prefix (char *size_str)
+{
+    char *str_ptr = size_str;
+    while (*str_ptr && '0' <= *str_ptr && *str_ptr <= '9') {
+        str_ptr += 1;
+    }
+
+    if (str_ptr == size_str) {
+        return 0;
+    }
+
+    char prefix = *str_ptr;
+    *str_ptr = '\0';
+
+    return prefix;
+}
+
+
+static uint64_t
+conv_time_prefix (char *time_str)
+{
+    char prefix = get_prefix (time_str);
+    uint64_t ms = atoi (time_str);
+
+    if (prefix == 'M' || prefix == '\0') {
+        // do nothing
+    }
+    else if (prefix == 's') {
+        ms *= 100;
+    }
+    else if (prefix == 'm') {
+        ms *= 100 * 60;
+    }
+    else if (prefix == 'h') {
+        ms *= 100 * 60 * 60;
+    }
+    else if (prefix == 'd') {
+        ms *= 100 * 60 * 60 * 24;
+    }
+    else {
+        sam_log_errorf ("unknown time prefix: '%c'", prefix);
+        return 0;
+    }
+
+    return ms;
+}
+
+
+
+static uint64_t
+conv_binary_prefix (char *size_str)
+{
+    char prefix = get_prefix (size_str);
+
+    int power;
+    if (prefix == 'B' || prefix == '\0') {
+        power = 0;
+    }
+    else if (prefix == 'K') {
+        power = 1;
+    }
+    else if (prefix == 'M') {
+        power = 2;
+    }
+    else if (prefix == 'G') {
+        power = 3;
+    }
+    else {
+        sam_log_errorf ("unknown binary prefix: '%c'", prefix);
+        return 0;
+    }
+
+    uint64_t size = atoi (size_str);
+    while (power) {
+        size *= 1024;
+        power -= 1;
+    }
+
+    return size;
+}
+
+
+static int
+retrieve_time_value (sam_cfg_t *self, const char *path, uint64_t *val)
+{
+    char *str = zconfig_resolve (self->zcfg, path, NULL);
+
+    if (str != NULL) {
+        uint64_t rc = conv_time_prefix (str);
+        if (rc != 0) {
+            *val = rc;
+            return 0;
+        }
+    }
+
+    sam_log_error ("could not load retry threshold");
+    return -1;
+}
+
+
 //  --------------------------------------------------------------------------
 /// Create a new cfg instance.
 sam_cfg_t *
@@ -144,56 +246,68 @@ sam_cfg_destroy (sam_cfg_t **self)
 int
 sam_cfg_buf_file (sam_cfg_t *self, char **fname)
 {
+    assert (self);
+
     *fname = zconfig_resolve (self->zcfg, "buffer/file", NULL);
-    return (fname == NULL)? -1: 0;
+    if (*fname == NULL) {
+        sam_log_error ("could not load buffer file name");
+        return -1;
+    }
+    return 0;
 }
 
 
 //  --------------------------------------------------------------------------
 /// Retrieve the maximum size of the buffer.
 int
-sam_cfg_buf_size (sam_cfg_t *self, int *size)
+sam_cfg_buf_size (sam_cfg_t *self, uint64_t *size)
 {
+    assert (self);
+    assert (size);
+
     char *size_str = zconfig_resolve (self->zcfg, "buffer/size", NULL);
-    if (size_str == NULL) {
-        sam_log_error ("could not load buffer size");
-        return -1;
+    if (size_str != NULL) {
+        uint64_t rc = conv_binary_prefix (size_str);
+        if (rc != 0) {
+            *size = rc;
+            return 0;
+        }
     }
 
-    char *str_ptr = size_str;
-    while ('0' <= *str_ptr && *str_ptr <= '9') {
-        str_ptr += 1;
-    }
+    sam_log_error ("could not load buffer size");
+    return -1;
 
-    char prefix = *str_ptr;
-    *str_ptr = '\0';
-    *size = atoi (size_str);
 
-    int power = -1;
-    if (prefix == 'B' || prefix == '\0') {
-        power = 0;
-    }
-    else if (prefix == 'K') {
-        power = 1;
-    }
-    else if (prefix == 'M') {
-        power = 2;
-    }
-    else if (prefix == 'G') {
-        power = 3;
-    }
+}
 
-    if (power == -1) {
-        sam_log_errorf (
-            "buffer size malformed, unknown prefix '%c'", prefix);
-    }
 
-    while (power) {
-        *size *= 1024;
-        power -= 1;
-    }
+//  --------------------------------------------------------------------------
+/// Retrieve the buffers retry interval.
+int
+sam_cfg_buf_retry_interval (
+    sam_cfg_t *self,
+    uint64_t *interval)
+{
+    assert (self);
+    assert (interval);
 
-    return 0;
+    return retrieve_time_value (
+        self, "buffer/retries/interval", interval);
+}
+
+
+//  --------------------------------------------------------------------------
+/// Retrieve the buffers retry threshold.
+int
+sam_cfg_buf_retry_threshold (
+    sam_cfg_t *self,
+    uint64_t *threshold)
+{
+    assert (self);
+    assert (threshold);
+
+    return retrieve_time_value (
+        self, "buffer/retries/threshold", threshold);
 }
 
 
@@ -204,6 +318,7 @@ sam_cfg_buf_size (sam_cfg_t *self, int *size)
 int
 sam_cfg_endpoint (sam_cfg_t *self, char **endpoint)
 {
+    assert (self);
     char *val = zconfig_resolve (self->zcfg, "/endpoint", NULL);
 
     if (val == NULL) {
@@ -211,7 +326,6 @@ sam_cfg_endpoint (sam_cfg_t *self, char **endpoint)
         return -1;
     }
 
-    sam_log_tracef ("read endpoint '%s'", val);
     *endpoint = val;
     return 0;
 }
@@ -223,6 +337,9 @@ sam_cfg_endpoint (sam_cfg_t *self, char **endpoint)
 int
 sam_cfg_be_type (sam_cfg_t *self, sam_be_t *be_type)
 {
+    assert (self);
+    assert (be_type);
+
     char *val = zconfig_resolve (self->zcfg, "backend/type", NULL);
 
     if (val == NULL) {
@@ -230,12 +347,9 @@ sam_cfg_be_type (sam_cfg_t *self, sam_be_t *be_type)
         return -1;
     }
 
-    sam_log_tracef ("read backend type: '%s'", val);
-    if (!strcmp (val, "rmq"))
-    {
+    if (!strcmp (val, "rmq")) {
         *be_type = SAM_BE_RMQ;
     }
-
     else {
         sam_log_errorf ("unknown backend type: '%s'", val);
         return -1;
@@ -319,9 +433,10 @@ sam_cfg_be_backends (
     char ***names,
     void **opts)
 {
+    assert (self);
+
     zconfig_t *cfg_ptr = zconfig_locate (self->zcfg, "backend/backends");
     if (cfg_ptr == NULL) {
-        sam_log_error ("could not locate backends");
         return -1;
     }
 

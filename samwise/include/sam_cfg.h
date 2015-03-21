@@ -57,10 +57,35 @@ sam_cfg_buf_file (
 
 //  --------------------------------------------------------------------------
 /// @brief Returns the buffer size in bytes
+/// @param self A cfg instance
+/// @param size Pointer to the value set
+/// @return -1 in case of error, 0 on success
 int
 sam_cfg_buf_size (
     sam_cfg_t *self,
-    int *size);
+    uint64_t *size);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Returns the retry interval in milliseconds.
+/// @param self A cfg instance
+/// @param interval Pointer to the value set
+/// @return -1 in case of error, 0 on success
+int
+sam_cfg_buf_retry_interval (
+    sam_cfg_t *self,
+    uint64_t *interval);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Returns the retry threshold in milliseconds.
+/// @param self A cfg instance
+/// @param threshold Pointer to the value set
+/// @return -1 in case of error, 0 on success
+int
+sam_cfg_buf_retry_threshold (
+    sam_cfg_t *self,
+    uint64_t *threshold);
 
 
 //
