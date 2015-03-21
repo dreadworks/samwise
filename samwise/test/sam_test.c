@@ -351,11 +351,13 @@ sam_test ()
     suite_add_tcase (s, tc);
 
     tc = tcase_create ("rmq_rpc");
+    tcase_add_unchecked_fixture (tc, setup_rmq, destroy);
     tcase_add_test (tc, test_sam_rmq_xdecl);
     tcase_add_test (tc, test_sam_rmq_xdel);
     suite_add_tcase (s, tc);
 
     tc = tcase_create("rmq_proterror");
+    tcase_add_unchecked_fixture (tc, setup_rmq, destroy);
     tcase_add_test(tc, test_sam_rmq_prot_error_empty);
     tcase_add_test(tc, test_sam_rmq_prot_error_unknown);
     tcase_add_test(tc, test_sam_rmq_prot_error_missing_type);
