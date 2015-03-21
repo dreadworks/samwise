@@ -69,8 +69,10 @@ handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
     }
 
     sam_log_tracef ("publish %s(%d)", distribution, n);
-    sam_backend_t *backend = zlist_next (state->backends);
     while (0 < n) {
+        n -= 1;
+        sam_backend_t *backend = zlist_next (state->backends);
+
         if (backend == NULL) {
             backend = zlist_first (state->backends);
         }
@@ -80,8 +82,6 @@ handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
             sam_log_tracef ("send () message %d to '%s'", key, backend->name);
             zsock_send (backend->publish_psh, "ip", key, msg);
         }
-
-        n -= 1;
     }
 
     sam_msg_destroy (&msg);
@@ -637,9 +637,15 @@ sam_eval (sam_t *self, sam_msg_t *msg)
             return error (msg, "malformed publishing request");
         }
 
-        sam_msg_own (msg);
-        int key = sam_buf_save (self->buf, msg);
+        // Create a copy of the message and pass that over to the
+        // store. Crafting a copy is necessary because the actor
+        // starts chewing up the message which is not thread safe. If
+        // the store is going to act completely synchronously, this
+        // operation may become obsolete...
+        sam_msg_t *dup = sam_msg_dup (msg);
+        int key = sam_buf_save (self->buf, dup);
 
+        // pass the message on for distribution
         sam_log_tracef ("send () message '%d' internally", key);
         zsock_send (self->frontend_pub, "ip", key, msg);
         return new_ret ();

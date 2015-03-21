@@ -80,9 +80,9 @@ test_assert_error (sam_t *sam, sam_msg_t *msg)
 
 //  --------------------------------------------------------------------------
 /// Test publishing a message to a RabbitMQ broker.
-START_TEST(test_sam_rmq_publish)
+START_TEST(test_sam_rmq_publish_roundrobin)
 {
-    sam_selftest_introduce ("test_sam_rmq_publish");
+    sam_selftest_introduce ("test_sam_rmq_publish_roundrobin");
 
     char *pub_msg [] = {
         "publish",        // action
@@ -95,10 +95,41 @@ START_TEST(test_sam_rmq_publish)
     sam_msg_t *msg = test_create_msg (sizeof (pub_msg) / char_s, pub_msg);
     sam_ret_t *ret = sam_eval (sam, msg);
 
+    // let the parts cope before tearing it down
+    zclock_sleep (50);
+
     ck_assert_int_eq (ret->rc, 0);
     free (ret);
 }
 END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Test publishing a message to two RabbitMQ brokers redundantly.
+START_TEST(test_sam_rmq_publish_redundant)
+{
+    sam_selftest_introduce ("test_sam_rmq_redundant");
+
+    char *pub_msg [] = {
+        "publish",        // action
+        "redundant",      // distribution type
+        "2",              // distribution count
+        "amq.direct",     // exchange
+        "",               // routing key
+        "hi!"             // payload
+    };
+
+    sam_msg_t *msg = test_create_msg (sizeof (pub_msg) / char_s, pub_msg);
+    sam_ret_t *ret = sam_eval (sam, msg);
+
+    // let the parts cope before tearing it down
+    zclock_sleep (50);
+
+    ck_assert_int_eq (ret->rc, 0);
+    free (ret);
+}
+END_TEST
+
 
 
 //  --------------------------------------------------------------------------
@@ -317,7 +348,8 @@ sam_test ()
     tcase_add_unchecked_fixture (tc, setup_rmq, destroy);
 
     // correct protocol
-    tcase_add_test (tc, test_sam_rmq_publish);
+    tcase_add_test (tc, test_sam_rmq_publish_roundrobin);
+    tcase_add_test (tc, test_sam_rmq_publish_redundant);
     tcase_add_test (tc, test_sam_rmq_xdecl);
     tcase_add_test (tc, test_sam_rmq_xdel);
 
