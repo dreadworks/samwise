@@ -61,12 +61,13 @@ static void
 rtfm (int rc)
 {
     printf ("sam selftest\n");
-    printf ("usage: sam_selftest [-h] [--only SAM_MODULE]\n");
+    printf ("usage: sam_selftest [-h] [--only SAM_MODULE [TESTCASE]]\n");
     printf ("options:\n");
     printf ("  -h: Print this message and exit\n");
     printf ("  --only SAM_MODULE: run test only for SAM_MODULE\n");
     printf ("    where SAM_MODULE is one of:\n");
     printf ("    sam_gen, sam_log, sam_msg, sam_cfg, sam_be_rmq, sam\n");
+    printf ("    and TESTCASE one of the test cases defined in SAM_MODULE");
     printf ("\n");
     printf ("You can selectively run tests by setting the CK_RUN_SUITE and\n");
     printf ("CK_RUN_CASE environment variables instead of providing --only");
@@ -92,19 +93,27 @@ parse_args (int arg_c, char **arg_v)
         }
 
         // --only SAM_MODULE
-        if (arg_c < 2 || 3 < arg_c || strcmp ("--only", arg_v[0])) {
+        if (arg_c < 2 || 4 < arg_c || strcmp ("--only", arg_v[0])) {
             rtfm (2);
         }
 
-        int buf_s = 64;
+        int buf_s = 128;
 
         // must be heap memory because putenv won't copy
         // any memory but instead point to the string
         char *buf = malloc (buf_s);
-        snprintf (buf, buf_s, "CK_RUN_SUITE=%s", arg_v[1]);
-
+        snprintf (buf, buf_s / 2, "CK_RUN_SUITE=%s", arg_v[1]);
         int rc = putenv (buf);
         assert (!rc);
+
+        // add optional TESTCASE if there's one provided
+        if (arg_c == 3) {
+            char *buf_ptr = buf + strlen (buf) + 1;
+            snprintf (buf_ptr, buf_s / 2, "CK_RUN_CASE=%s", arg_v[2]);
+            rc = putenv (buf_ptr);
+            assert (!rc);
+        }
+
         return buf;
     }
 
@@ -135,6 +144,8 @@ int main (int arg_c, char **arg_v)
 
     int failed = srunner_ntests_failed (sr);
     srunner_free (sr);
+
+    printf ("ran case: %s\n", getenv("CK_RUN_CASE"));
 
     if (env != NULL) {
         free (env);
