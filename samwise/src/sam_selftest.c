@@ -62,13 +62,13 @@ rtfm (int rc)
 {
     printf ("sam selftest\n");
     printf ("usage: sam_selftest [-h] [--only SAM_MODULE [TESTCASE]]\n");
-    printf ("options:\n");
-    printf ("  -h: Print this message and exit\n");
-    printf ("  --only SAM_MODULE: run test only for SAM_MODULE\n");
-    printf ("    where SAM_MODULE is one of:\n");
-    printf ("    sam_gen, sam_log, sam_msg, sam_cfg, sam_be_rmq, sam\n");
-    printf ("    and TESTCASE one of the test cases defined in SAM_MODULE");
-    printf ("\n");
+    printf ("options:\n\n");
+    printf ("  -h: Print this message and exit\n\n");
+    printf ("  --only SAM_MODULE [TESTCASE]:\n");
+    printf ("      selective running of tests, where SAM_MODULE is one of\n");
+    printf ("      { sam_gen, sam_log, sam_msg, sam_cfg, sam_be_rmq, sam }\n");
+    printf ("      and TESTCASE one of the test cases defined in SAM_MODULE");
+    printf ("\n\n");
     printf ("You can selectively run tests by setting the CK_RUN_SUITE and\n");
     printf ("CK_RUN_CASE environment variables instead of providing --only");
     printf ("\n");
@@ -144,8 +144,6 @@ int main (int arg_c, char **arg_v)
 
     int failed = srunner_ntests_failed (sr);
     srunner_free (sr);
-
-    printf ("ran case: %s\n", getenv("CK_RUN_CASE"));
 
     if (env != NULL) {
         free (env);
