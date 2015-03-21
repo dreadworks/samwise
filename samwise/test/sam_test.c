@@ -27,7 +27,7 @@ setup_rmq ()
         ck_abort_msg ("could not create sam instance");
     }
 
-    cfg = sam_cfg_new ("cfg/base.cfg");
+    cfg = sam_cfg_new ("cfg/test/sam_three_brokers.cfg");
     int rc = sam_init (sam, cfg);
     ck_assert_int_eq (rc, 0);
 }
@@ -344,16 +344,18 @@ sam_test ()
 {
     Suite *s = suite_create ("sam");
 
-    TCase *tc = tcase_create("rmq");
+    TCase *tc = tcase_create ("rmq_publish");
     tcase_add_unchecked_fixture (tc, setup_rmq, destroy);
-
-    // correct protocol
     tcase_add_test (tc, test_sam_rmq_publish_roundrobin);
     tcase_add_test (tc, test_sam_rmq_publish_redundant);
+    suite_add_tcase (s, tc);
+
+    tc = tcase_create ("rmq_rpc");
     tcase_add_test (tc, test_sam_rmq_xdecl);
     tcase_add_test (tc, test_sam_rmq_xdel);
+    suite_add_tcase (s, tc);
 
-    // wrong protocol
+    tc = tcase_create("rmq_proterror");
     tcase_add_test(tc, test_sam_rmq_prot_error_empty);
     tcase_add_test(tc, test_sam_rmq_prot_error_unknown);
     tcase_add_test(tc, test_sam_rmq_prot_error_missing_type);
