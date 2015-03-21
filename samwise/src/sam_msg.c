@@ -21,6 +21,9 @@
 #include "../include/sam_prelude.h"
 
 
+//  --------------------------------------------------------------------------
+/// Converter function that accepts a type character and a variadic
+/// argument to be set.
 static void *
 resolve (zframe_t *frame, char type, va_list arg_p)
 {
@@ -103,6 +106,8 @@ refs_f_destructor (void **item)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Constructor function used by both _new () and _decode ().
 static sam_msg_t *
 new ()
 {
@@ -184,6 +189,23 @@ sam_msg_destroy (sam_msg_t **self)
 
     free (*self);
     *self = NULL;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Duplicate a message.
+sam_msg_t *
+sam_msg_dup (sam_msg_t *self)
+{
+    sam_msg_t *dup = new ();
+
+    zframe_t *frame = zlist_first (self->frames);
+    while (frame) {
+        zlist_append (dup->frames, zframe_dup (frame));
+        frame = zlist_next (self->frames);
+    }
+
+    return dup;
 }
 
 

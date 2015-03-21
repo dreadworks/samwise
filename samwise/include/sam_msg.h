@@ -61,6 +61,15 @@ sam_msg_destroy (
 
 
 //  --------------------------------------------------------------------------
+/// @brief Create a deep copy of the message object
+/// @self A sam_msg instance
+/// @return A copy of the sam_msg instance
+sam_msg_t *
+sam_msg_dup (
+    sam_msg_t *self);
+
+
+//  --------------------------------------------------------------------------
 /// @brief Become one owner of the msg instance, used for reference counting
 /// @param self A sam_msg_instance
 void

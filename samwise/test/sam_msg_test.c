@@ -828,6 +828,68 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
+/// Test duplicating a sam_msg instance.
+START_TEST(test_msg_dup)
+{
+    sam_selftest_introduce ("test_msg_dup");
+
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "payload");
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    sam_msg_t *dup = sam_msg_dup (msg);
+
+    sam_msg_destroy (&msg);
+
+    char *payload;
+    sam_msg_pop (dup, "s", &payload);
+    ck_assert_str_eq (payload, "payload");
+
+    sam_msg_destroy (&dup);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Test if reference counting is handled independently.
+START_TEST(test_msg_dup_refc)
+{
+    sam_selftest_introduce ("test_msg_dup_refc");
+
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "two");
+    zmsg_pushstr (zmsg, "one");
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
+
+    sam_msg_t *dup = sam_msg_dup (msg);
+    sam_msg_own (dup);
+
+    char *buf;
+    sam_msg_pop (dup, "s", &buf);
+    ck_assert_str_eq (buf, "one");
+
+    sam_msg_pop (msg, "s", &buf);
+    ck_assert_str_eq (buf, "one");
+
+    sam_msg_destroy (&dup);
+
+    sam_msg_pop (dup, "s", &buf);
+    ck_assert_str_eq (buf, "two");
+
+    sam_msg_pop (msg, "s", &buf);
+    ck_assert_str_eq (buf, "two");
+
+    sam_msg_destroy (&msg);
+    sam_msg_destroy (&dup);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
 /// Self test this class.
 void *
 sam_msg_test ()
@@ -871,7 +933,7 @@ sam_msg_test ()
 
     tc = tcase_create ("encode () and decode ()");
     tcase_add_test (tc, test_msg_code);
-    // tcase_add_test (tc, test_msg_code_pop);
+    tcase_add_test (tc, test_msg_code_pop);
     suite_add_tcase (s, tc);
 
     tc = tcase_create ("expect ()");
@@ -881,6 +943,11 @@ sam_msg_test ()
     tcase_add_test (tc, test_msg_expect_nonzero_noframe);
     tcase_add_test (tc, test_msg_expect);
     tcase_add_test (tc, test_msg_expect_nonzero);
+    suite_add_tcase (s, tc);
+
+    tc = tcase_create ("dup ()");
+    tcase_add_test (tc, test_msg_dup);
+    tcase_add_test (tc, test_msg_dup_refc);
     suite_add_tcase (s, tc);
 
     return s;
