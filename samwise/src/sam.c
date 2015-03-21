@@ -54,9 +54,14 @@ handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
 
     int key;
     sam_msg_t *msg;
+    zframe_t *id_frame;
 
     sam_log_trace ("recv () frontend pub");
-    zsock_recv (pll, "ip", &key, &msg);
+    zsock_recv (pll, "ifp", &key, &id_frame, &msg);
+
+    // get mask containing already ack'd backends
+    uint64_t be_acks = *(uint64_t *) zframe_data (id_frame);
+    zframe_destroy (&id_frame);
 
     char *distribution;
     int rc = sam_msg_pop (msg, "s", &distribution);
@@ -68,19 +73,37 @@ handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
         assert (!rc);
     }
 
-    sam_log_tracef ("publish %s(%d)", distribution, n);
-    while (0 < n) {
+    int backend_c = zlist_size (state->backends);
+
+    sam_log_tracef (
+        "publish %s(%d), %d broker(s) available; 0x%" PRIx64 " ack'd",
+        distribution, n, backend_c, be_acks);
+
+    while (0 < n && 0 < backend_c) {
         n -= 1;
+        backend_c -= 1;
+
         sam_backend_t *backend = zlist_next (state->backends);
 
         if (backend == NULL) {
             backend = zlist_first (state->backends);
         }
 
-        if (backend != NULL) {
-            sam_msg_own (msg); // the backend is trying to destroy it
-            sam_log_tracef ("send () message %d to '%s'", key, backend->name);
+        // check that the backend not already ack'd the msg
+        if (!(be_acks & backend->id)) {
+
+            // the backend is trying to destroy it
+            sam_msg_own (msg);
+            sam_log_tracef (
+                "send () message %d to '%s'",
+                key, backend->name);
+
             zsock_send (backend->publish_psh, "ip", key, msg);
+        }
+
+        if (n && !backend_c) {
+            sam_log_error (
+                "discarding redundant msg, not enough backends available");
         }
     }
 
@@ -645,9 +668,14 @@ sam_eval (sam_t *self, sam_msg_t *msg)
         sam_msg_t *dup = sam_msg_dup (msg);
         int key = sam_buf_save (self->buf, dup);
 
-        // pass the message on for distribution
+        // pass the message on for distribution, 0 backends ack'd already
+        uint64_t be_acks = 0;
+        zframe_t *id_frame = zframe_new (&be_acks, sizeof (be_acks));
+
         sam_log_tracef ("send () message '%d' internally", key);
-        zsock_send (self->frontend_pub, "ip", key, msg);
+        zsock_send (self->frontend_pub, "ifp", key, id_frame, msg);
+
+        zframe_destroy (&id_frame);
         return new_ret ();
     }
 
