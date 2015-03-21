@@ -172,6 +172,5 @@ main (int argc, char **argv)
     samd_start (samd);
     samd_destroy (&samd);
     sam_log_info ("exiting");
-    printf ("\033[0m"); // reset all coloring
 }
 #endif

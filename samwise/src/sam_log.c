@@ -58,7 +58,7 @@ out (
 
     // format output string
     fprintf (
-        f, "%s %s [%.*s:%d] (%s): %.*s\n",
+        f, "%s %s [%.*s:%d] (%s): %.*s\033[0m\n",
         prefix,
         date_buf,
         16, filename,
