@@ -23,13 +23,13 @@
 
 
 /// state used by the sam actor
-typedef struct sam_state_t {
+typedef struct state_t {
     sam_be_t be_type;        ///< backend type, used to parse the protocol
     zsock_t *ctl_rep;        ///< reply socket for control commands
     zsock_t *frontend_rpc;   ///< reply socket for rpc requests
     zsock_t *frontend_pub;   ///< pull socket for publishing requests
     zlist_t *backends;       ///< maintains backend handles
-} sam_state_t;
+} state_t;
 
 
 
@@ -50,7 +50,7 @@ new_ret ()
 static int
 handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
 {
-    sam_state_t *state = args;
+    state_t *state = args;
 
     int key;
     sam_msg_t *msg;
@@ -120,7 +120,7 @@ handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
 static int
 handle_frontend_rpc (zloop_t *loop UU, zsock_t *rep, void *args)
 {
-    sam_state_t *state = args;
+    state_t *state = args;
     sam_msg_t *msg;
 
     sam_log_trace ("recv () frontend rpc");
@@ -155,7 +155,7 @@ handle_frontend_rpc (zloop_t *loop UU, zsock_t *rep, void *args)
 static int
 handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
 {
-    sam_state_t *state = args;
+    state_t *state = args;
     int rc = 0;
 
     char *cmd;
@@ -220,7 +220,7 @@ handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
 static void
 actor (zsock_t *pipe, void *args)
 {
-    sam_state_t *state = args;
+    state_t *state = args;
     zloop_t *loop = zloop_new ();
 
     // publishing and rpc calls to backends
@@ -273,7 +273,7 @@ sam_t *
 sam_new (sam_be_t be_type)
 {
     sam_t *self = malloc (sizeof (sam_t));
-    sam_state_t *state = malloc (sizeof (sam_state_t));
+    state_t *state = malloc (sizeof (state_t));
     assert (self);
 
     self->be_id_power = 0;
