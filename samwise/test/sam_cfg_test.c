@@ -235,7 +235,7 @@ START_TEST(test_cfg_buf_retry_interval_s)
     uint64_t interval;
     int rc = sam_cfg_buf_retry_interval (cfg, &interval);
     ck_assert_int_eq (rc, 0);
-    ck_assert (interval == 17 * 100);
+    ck_assert (interval == 17 * 1000);
 
     sam_cfg_destroy (&cfg);
 }
@@ -253,7 +253,7 @@ START_TEST(test_cfg_buf_retry_interval_min)
     uint64_t interval;
     int rc = sam_cfg_buf_retry_interval (cfg, &interval);
     ck_assert_int_eq (rc, 0);
-    ck_assert (interval == 17 * 100 * 60);
+    ck_assert (interval == 17 * 1000 * 60);
 
     sam_cfg_destroy (&cfg);
 }
@@ -271,7 +271,7 @@ START_TEST(test_cfg_buf_retry_interval_h)
     uint64_t interval;
     int rc = sam_cfg_buf_retry_interval (cfg, &interval);
     ck_assert_int_eq (rc, 0);
-    ck_assert (interval == 17 * 100 * 60 * 60);
+    ck_assert (interval == 17 * 1000 * 60 * 60);
 
     sam_cfg_destroy (&cfg);
 }
@@ -289,7 +289,7 @@ START_TEST(test_cfg_buf_retry_interval_d)
     uint64_t interval;
     int rc = sam_cfg_buf_retry_interval (cfg, &interval);
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (interval, 17 * 100 * 60 * 60 * 24);
+    ck_assert_int_eq (interval, 17 * 1000 * 60 * 60 * 24);
 
     sam_cfg_destroy (&cfg);
 }
@@ -360,7 +360,7 @@ START_TEST(test_cfg_buf_retry_threshold_s)
     uint64_t threshold;
     int rc = sam_cfg_buf_retry_threshold (cfg, &threshold);
     ck_assert_int_eq (rc, 0);
-    ck_assert (threshold == 42 * 100);
+    ck_assert (threshold == 42 * 1000);
 
     sam_cfg_destroy (&cfg);
 }
@@ -378,7 +378,7 @@ START_TEST(test_cfg_buf_retry_threshold_min)
     uint64_t threshold;
     int rc = sam_cfg_buf_retry_threshold (cfg, &threshold);
     ck_assert_int_eq (rc, 0);
-    ck_assert (threshold == 42 * 100 * 60);
+    ck_assert (threshold == 42 * 1000 * 60);
 
     sam_cfg_destroy (&cfg);
 }
@@ -396,7 +396,7 @@ START_TEST(test_cfg_buf_retry_threshold_h)
     uint64_t threshold;
     int rc = sam_cfg_buf_retry_threshold (cfg, &threshold);
     ck_assert_int_eq (rc, 0);
-    ck_assert (threshold == 42 * 100 * 60 * 60);
+    ck_assert (threshold == 42 * 1000 * 60 * 60);
 
     sam_cfg_destroy (&cfg);
 }
@@ -414,8 +414,14 @@ START_TEST(test_cfg_buf_retry_threshold_d)
     uint64_t threshold;
     int rc = sam_cfg_buf_retry_threshold (cfg, &threshold);
     ck_assert_int_eq (rc, 0);
-    ck_assert_int_eq (threshold, 42 * 100 * 60 * 60 * 24);
 
+    uint64_t ref = 42;
+    ref *= 1000;
+    ref *= 60;
+    ref *= 60;
+    ref *= 24;
+
+    ck_assert (threshold == ref);
     sam_cfg_destroy (&cfg);
 }
 END_TEST

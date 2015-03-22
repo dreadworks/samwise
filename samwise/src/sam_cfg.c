@@ -134,16 +134,16 @@ conv_time_prefix (char *time_str)
         // do nothing
     }
     else if (prefix == 's') {
-        ms *= 100;
+        ms *= 1000;
     }
     else if (prefix == 'm') {
-        ms *= 100 * 60;
+        ms *= 1000 * 60;
     }
     else if (prefix == 'h') {
-        ms *= 100 * 60 * 60;
+        ms *= 1000 * 60 * 60;
     }
     else if (prefix == 'd') {
-        ms *= 100 * 60 * 60 * 24;
+        ms *= 1000 * 60 * 60 * 24;
     }
     else {
         sam_log_errorf ("unknown time prefix: '%c'", prefix);
