@@ -40,6 +40,19 @@ typedef struct record_header_t {
 } record_header_t;
 
 
+
+//  --------------------------------------------------------------------------
+/// Generic error handler invoked by DB.
+static void
+db_error_handler (
+    const DB_ENV *db_env UU,
+    const char *err_prefix UU,
+    const char *msg)
+{
+    sam_log_errorf ("db error: %s", msg);
+}
+
+
 //  --------------------------------------------------------------------------
 /// Returns a human readable representation for DB error codes.
 static char *
@@ -71,6 +84,35 @@ db_failure_reason (int code)
     }
 
     return reason;
+}
+
+
+static int
+create_db (state_t *state, const char *fname)
+{
+    int rc = db_create (&state->dbp, NULL, 0);
+    if (rc) {
+        sam_log_error ("could not create database");
+        return rc;
+    }
+
+    rc = state->dbp->open (
+        state->dbp,
+        NULL,             // transaction pointer
+        fname,            // on disk file
+        NULL,             // logical db name
+        DB_BTREE,         // access method
+        DB_CREATE,        // open flags
+        0);               // file mode
+
+    if (rc) {
+        sam_log_error ("could not open database");
+        state->dbp->close (state->dbp, 0);
+        return rc;
+    }
+
+    state->dbp->set_errcall (state->dbp, db_error_handler);
+    return rc;
 }
 
 
@@ -502,6 +544,7 @@ static void
 actor (zsock_t *pipe, void *args)
 {
     sam_log_info ("starting actor");
+
     state_t *state = args;
     zloop_t *loop = zloop_new ();
 
@@ -513,32 +556,23 @@ actor (zsock_t *pipe, void *args)
     zsock_signal (pipe, 0);
     zloop_start (loop);
 
+    // tear down
     sam_log_trace ("destroying loop");
     zloop_destroy (&loop);
 
+    // database
+    int rc = state->dbp->close (state->dbp, 0);
+    if (rc) {
+        sam_log_errorf ("could not safely close db: %d", rc);
+    }
 
     // clean up
     zsock_destroy (&state->in);
     zsock_destroy (&state->out);
     zsock_destroy (&state->store_sock);
 
-    // database
-    state->dbp->close (state->dbp, 0);
     free (state);
 }
-
-
-//  --------------------------------------------------------------------------
-/// Generic error handler invoked by DB.
-static void
-db_error_handler (
-    const DB_ENV *db_env UU,
-    const char *err_prefix UU,
-    const char *msg)
-{
-    sam_log_errorf ("db error: %s", msg);
-}
-
 
 
 //  --------------------------------------------------------------------------
@@ -557,43 +591,22 @@ sam_buf_new (const char *fname, zsock_t **in, zsock_t **out)
     assert (self);
     assert (state);
 
-
-    // create and load database
-    int rc = db_create (&state->dbp, NULL, 0);
+    // init
+    int rc = create_db (state, fname);
     if (rc) {
-        sam_log_error ("could not create database");
-        free (self);
-        return NULL;
-    }
-
-    rc = state->dbp->open (
-        state->dbp,
-        NULL,             // transaction pointer
-        fname,            // on disk file
-        NULL,             // logical db name
-        DB_BTREE,         // access method
-        DB_CREATE,        // open flags
-        0);               // file mode
-
-    if (rc) {
-        sam_log_error ("could not open database");
-        state->dbp->close (state->dbp, 0);
         free (self);
         free (state);
         return NULL;
     }
 
-    state->dbp->set_errcall (state->dbp, db_error_handler);
-
+    state->store_sock = zsock_new_pull (actor_endpoint);
+    assert (state->store_sock);
 
     // set sockets, change ownership
     state->in = *in;
     *in = NULL;
     state->out = *out;
     *out = NULL;
-
-    state->store_sock = zsock_new_pull (actor_endpoint);
-    assert (state->store_sock);
 
     // intialize self
     self->seq = 0;
