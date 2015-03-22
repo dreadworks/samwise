@@ -12,12 +12,20 @@ Samwise::Connection.connect endpoint
 
 
 def publish (opts)
-    puts "publishing #{opts.n} messages" unless opts.quiet
+  puts "publishing #{opts.n} messages (#{opts.t})" unless opts.quiet
 
   time_start = Time.now
   opts.n.times do |i|
     puts "publishing message #{i}" if opts.verbose
-    Samwise::RabbitMQ.publish_roundrobin "amq.direct", "", "hi!"
+
+    if opts.t == "redundant"
+      Samwise::RabbitMQ.publish_redundant opts.d, "amq.direct", "", "redundant"
+    end
+
+    if opts.t == "round robin"
+      Samwise::RabbitMQ.publish_roundrobin "amq.direct", "", "round robin"
+    end
+
   end
   time_end = Time.now
 
@@ -47,6 +55,11 @@ class OptionParser
         options.n = n
       end
 
+      opts.on("-t TYPE", String, "Distribution type [redundant, round robin]") do |t|
+        options.t = t
+      end
+
+      # optional
       opts.separator ""
       opts.separator "Common options:"
 
@@ -63,9 +76,21 @@ class OptionParser
         options.quiet = q
         options.verbose = false
       end
+
+      opts.on("-d count", Integer, "For -t redundant") do |d|
+        if not options.t == "redundant"
+          raise "You must provide '-t redundant' to use -d"
+        end
+        options.d = d
+      end
     end
 
-    opt_parser.parse!(args)
+    rc = opt_parser.parse!(args)
+    raise OptionParser::MissingArgument, "-t" if options.t.nil?
+    if options.t == "redundant"
+      raise OptionParser::MissingArgument, "-d" if options.d.nil?
+    end
+
     options
   end
 
