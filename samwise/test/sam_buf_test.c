@@ -17,6 +17,7 @@ zsock_t
     *backend_push,  // messages arriving from backends
     *frontend_pull; // messages distributed by libsam
 
+sam_cfg_t *cfg;
 sam_buf_t *buf;
 
 
@@ -33,7 +34,8 @@ setup ()
     zsock_t *frontend_push = zsock_new_push (endpoint);
     frontend_pull = zsock_new_pull (endpoint);
 
-    buf = sam_buf_new ("test.db", &backend_pull, &frontend_push);
+    cfg = sam_cfg_new ("cfg/test/buf.cfg");
+    buf = sam_buf_new (cfg, &backend_pull, &frontend_push);
 
     if (!buf) {
         ck_abort_msg ("buf instance was not created");
@@ -56,6 +58,7 @@ static void
 destroy ()
 {
     sam_buf_destroy (&buf);
+    sam_cfg_destroy (&cfg);
     zsock_destroy (&backend_push);
     zsock_destroy (&frontend_pull);
 }
@@ -245,24 +248,42 @@ START_TEST(test_buf_save_redundant_race_idempotency)
 END_TEST
 
 
+//  --------------------------------------------------------------------------
+/// ...
+START_TEST(test_buf_resend)
+{
+    sam_selftest_introduce ("test_buf_resend");
+
+    // ...
+}
+END_TEST
+
+
 void *
 sam_buf_test ()
 {
     Suite *s = suite_create ("sam_buf");
 
-    TCase *tc = tcase_create("save round robin");
+    TCase *tc = tcase_create ("save round robin");
     tcase_add_checked_fixture (tc, setup, destroy);
     tcase_add_test (tc, test_buf_save_roundrobin);
     tcase_add_test (tc, test_buf_save_roundrobin_race);
     suite_add_tcase (s, tc);
 
-    tc = tcase_create("save redundant");
+    tc = tcase_create ("save redundant");
     tcase_add_checked_fixture (tc, setup, destroy);
     tcase_add_test (tc, test_buf_save_redundant);
     tcase_add_test (tc, test_buf_save_redundant_race);
     tcase_add_test (tc, test_buf_save_redundant_idempotency);
     tcase_add_test (tc, test_buf_save_redundant_race_idempotency);
     suite_add_tcase (s, tc);
+
+/*
+    tc = tcase_create ("resending");
+    tcase_add_checked_fixture (tc, setup, destroy);
+    tcase_add_test (tc, test_buf_resend);
+    suite_add_tcase (s, tc);
+*/
 
     return s;
 }

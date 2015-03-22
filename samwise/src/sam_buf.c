@@ -28,6 +28,9 @@ typedef struct state_t {
     zsock_t *in;            ///< for arriving acknowledgements
     zsock_t *out;           ///< for re-publishing
     zsock_t *store_sock;    ///< for (internal) storage requests
+
+    uint64_t interval;      ///< how often messages are being tried again
+    uint64_t threshold;     ///< at which point messages are tried again
 } state_t;
 
 
@@ -578,9 +581,12 @@ actor (zsock_t *pipe, void *args)
 //  --------------------------------------------------------------------------
 /// Create a sam buf instance.
 sam_buf_t *
-sam_buf_new (const char *fname, zsock_t **in, zsock_t **out)
+sam_buf_new (
+    sam_cfg_t *cfg,
+    zsock_t **in,
+    zsock_t **out)
 {
-    assert (fname);
+    assert (cfg);
     assert (*in);
     assert (*out);
 
@@ -591,12 +597,24 @@ sam_buf_new (const char *fname, zsock_t **in, zsock_t **out)
     assert (self);
     assert (state);
 
+    // read config
+    char *db_name;
+
+    if (
+        sam_cfg_buf_file (cfg, &db_name) ||
+        sam_cfg_buf_retry_interval (cfg, &state->interval) ||
+        sam_cfg_buf_retry_threshold (cfg, &state->threshold)) {
+
+        sam_log_error ("could not initialize the buffer");
+        goto abort;
+
+    }
+
+
     // init
-    int rc = create_db (state, fname);
+    int rc = create_db (state, db_name);
     if (rc) {
-        free (self);
-        free (state);
-        return NULL;
+        goto abort;
     }
 
     state->store_sock = zsock_new_pull (actor_endpoint);
@@ -616,6 +634,11 @@ sam_buf_new (const char *fname, zsock_t **in, zsock_t **out)
 
     sam_log_info ("created buffer instance");
     return self;
+
+abort:
+    free (self);
+    free (state);
+    return NULL;
 }
 
 

@@ -29,13 +29,13 @@ typedef struct sam_buf_t {
 
 //  --------------------------------------------------------------------------
 /// @brief Create a new buf instance
-/// @param fname Name of the file to save the data in
+/// @param cfg Samwise configuration
 /// @param in To read acknowledgements from
 /// @param out To re-send publishing requests to
 /// @return A new buf instance.
 sam_buf_t *
 sam_buf_new (
-    const char *fname,
+    sam_cfg_t *cfg,
     zsock_t **in,
     zsock_t **out);
 

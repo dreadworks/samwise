@@ -437,7 +437,7 @@ init_buf (sam_t *self, sam_cfg_t *cfg)
         self->frontend_pub_endpoint);
 
     self->buf = sam_buf_new (
-        fname, &backend_pull, &frontend_push);
+        cfg, &backend_pull, &frontend_push);
 
     return rc;
 }
