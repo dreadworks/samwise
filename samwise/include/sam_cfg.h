@@ -67,6 +67,17 @@ sam_cfg_buf_size (
 
 
 //  --------------------------------------------------------------------------
+/// @brief Returns the maximum number of retries
+/// @param self A cfg instance
+/// @param interval Pointer to the value set
+/// @return -1 in case of error, 0 on success
+int
+sam_cfg_buf_retry_count (
+    sam_cfg_t *self,
+    int *count);
+
+
+//  --------------------------------------------------------------------------
 /// @brief Returns the retry interval in milliseconds.
 /// @param self A cfg instance
 /// @param interval Pointer to the value set

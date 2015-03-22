@@ -104,7 +104,13 @@ resolve (
 }
 
 
-
+//  --------------------------------------------------------------------------
+/// Returns and nullifies the prefix of a value (ignoring everything
+/// coming afterwards). Expects the value to be in the following
+/// format:
+///
+/// [0-9]+[a-zA-Z].*
+///
 static char
 get_prefix (char *size_str)
 {
@@ -124,39 +130,18 @@ get_prefix (char *size_str)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Converts a value based on a binary prefix. The following prefixes
+/// are supported:
+///
+/// 'B' or none: Byte
+/// 'K': Kilobyte
+/// 'M': Megabyte
+/// 'G': Gigabyte
+///
 static uint64_t
-conv_time_prefix (char *time_str)
-{
-    char prefix = get_prefix (time_str);
-    uint64_t ms = atoi (time_str);
-
-    if (prefix == 'M' || prefix == '\0') {
-        // do nothing
-    }
-    else if (prefix == 's') {
-        ms *= 1000;
-    }
-    else if (prefix == 'm') {
-        ms *= 1000 * 60;
-    }
-    else if (prefix == 'h') {
-        ms *= 1000 * 60 * 60;
-    }
-    else if (prefix == 'd') {
-        ms *= 1000 * 60 * 60 * 24;
-    }
-    else {
-        sam_log_errorf ("unknown time prefix: '%c'", prefix);
-        return 0;
-    }
-
-    return ms;
-}
-
-
-
-static uint64_t
-conv_binary_prefix (char *size_str)
+conv_binary_prefix (
+    char *size_str)
 {
     char prefix = get_prefix (size_str);
 
@@ -188,8 +173,53 @@ conv_binary_prefix (char *size_str)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Converts a value based on a time prefix. The following prefixes
+/// are supported:
+///
+/// 'M' or none: Milliseconds
+/// 's': Seconds
+/// 'm': Minutes
+/// 'h': Hours
+/// 'd': Days
+///
+static uint64_t
+conv_time_prefix (char *time_str)
+{
+    char prefix = get_prefix (time_str);
+    uint64_t ms = atoi (time_str);
+
+    if (prefix == 'M' || prefix == '\0') {
+        // do nothing
+    }
+    else if (prefix == 's') {
+        ms *= 1000;
+    }
+    else if (prefix == 'm') {
+        ms *= 1000 * 60;
+    }
+    else if (prefix == 'h') {
+        ms *= 1000 * 60 * 60;
+    }
+    else if (prefix == 'd') {
+        ms *= 1000 * 60 * 60 * 24;
+    }
+    else {
+        sam_log_errorf ("unknown time prefix: '%c'", prefix);
+        return 0;
+    }
+
+    return ms;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Loads a configuration value and converts it based on its time prefix.
 static int
-retrieve_time_value (sam_cfg_t *self, const char *path, uint64_t *val)
+retrieve_time_value (
+    sam_cfg_t *self,
+    const char *path,
+    uint64_t *val)
 {
     char *str = zconfig_resolve (self->zcfg, path, NULL);
 
@@ -201,7 +231,7 @@ retrieve_time_value (sam_cfg_t *self, const char *path, uint64_t *val)
         }
     }
 
-    sam_log_error ("could not load retry threshold");
+    sam_log_errorf ("could not load time value of %s", path);
     return -1;
 }
 
@@ -253,6 +283,7 @@ sam_cfg_buf_file (sam_cfg_t *self, char **fname)
         sam_log_error ("could not load buffer file name");
         return -1;
     }
+
     return 0;
 }
 
@@ -276,8 +307,29 @@ sam_cfg_buf_size (sam_cfg_t *self, uint64_t *size)
 
     sam_log_error ("could not load buffer size");
     return -1;
+}
 
 
+//  --------------------------------------------------------------------------
+/// Retrieve the buffers retry count.
+int
+sam_cfg_buf_retry_count (
+    sam_cfg_t *self,
+    int *count)
+{
+    assert (self);
+    assert (count);
+
+    char *count_str = zconfig_resolve (
+        self->zcfg, "buffer/retry/count", NULL);
+
+    if (count_str != NULL) {
+        *count = atoi (count_str);
+        return 0;
+    }
+
+    sam_log_error ("could not load retry count");
+    return -1;
 }
 
 
@@ -292,7 +344,7 @@ sam_cfg_buf_retry_interval (
     assert (interval);
 
     return retrieve_time_value (
-        self, "buffer/retries/interval", interval);
+        self, "buffer/retry/interval", interval);
 }
 
 
@@ -307,7 +359,7 @@ sam_cfg_buf_retry_threshold (
     assert (threshold);
 
     return retrieve_time_value (
-        self, "buffer/retries/threshold", threshold);
+        self, "buffer/retry/threshold", threshold);
 }
 
 

@@ -189,6 +189,41 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
+/// Test cfg_buf_retry_count ().
+START_TEST(test_cfg_buf_retry_count)
+{
+    sam_selftest_introduce ("test_cfg_buf_retry_count");
+
+    sam_cfg_t *cfg = load ("buf_retry_count");
+
+    int count;
+    int rc = sam_cfg_buf_retry_count (cfg, &count);
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (count, 11);
+
+    sam_cfg_destroy (&cfg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Test cfg_buf_retry_count () with empty config.
+START_TEST(test_cfg_buf_retry_count_empty)
+{
+    sam_selftest_introduce ("test_cfg_buf_retry_count_empty");
+
+    sam_cfg_t *cfg = load ("empty");
+
+    int count;
+    int rc = sam_cfg_buf_retry_count (cfg, &count);
+    ck_assert_int_eq (rc, -1);
+
+    sam_cfg_destroy (&cfg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
 /// Test cfg_buf_retry_interval ().
 START_TEST(test_cfg_buf_retry_interval)
 {
@@ -614,6 +649,11 @@ sam_cfg_test ()
     tcase_add_test (tc, test_cfg_buf_size_empty);
     suite_add_tcase (s, tc);
 
+    tc = tcase_create("buffer retry count");
+    tcase_add_test (tc, test_cfg_buf_retry_count);
+    tcase_add_test (tc, test_cfg_buf_retry_count_empty);
+    suite_add_tcase (s, tc);
+
     tc = tcase_create("buffer retry interval");
     tcase_add_test (tc, test_cfg_buf_retry_interval);
     tcase_add_test (tc, test_cfg_buf_retry_interval_ms);
@@ -648,5 +688,4 @@ sam_cfg_test ()
     suite_add_tcase (s, tc);
 
     return s;
-
 }
