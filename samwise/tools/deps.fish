@@ -143,6 +143,8 @@ function __deps \
   mkdir "$dir/lib"
 
   set -Ux LDFLAGS "-L$dir/lib"
+  set -gx LD_LIBRARY_PATH "$dir/lib:$LD_LIBRARY_PATH"
+  set -gx C_INCLUDE_PATH "$dir/include:$C_INCLUDE_PATH"
 
   __deps_libzmq "$dir"
   and __deps_libczmq "$dir"
