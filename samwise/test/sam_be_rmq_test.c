@@ -41,7 +41,8 @@ setup_connection ()
         .heartbeat = 1
     };
 
-    sam_be_rmq_connect (rabbit, &opts);
+    int rc = sam_be_rmq_connect (rabbit, &opts);
+    ck_assert_int_eq (rc, 0);
 }
 
 

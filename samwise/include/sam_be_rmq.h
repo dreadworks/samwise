@@ -84,7 +84,8 @@ sam_be_rmq_destroy (
 //  --------------------------------------------------------------------------
 /// @brief Connect to a RabbitMQ broker
 /// @param opts The connection parameters
-void
+/// @return 0 for succes, -1 for error
+int
 sam_be_rmq_connect (
     sam_be_rmq_t *self,
     sam_be_rmq_opts_t *opts);

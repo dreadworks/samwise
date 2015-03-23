@@ -498,7 +498,7 @@ sam_be_rmq_destroy (
 /// Establish a connection to the RabbitMQ broker. This function opens
 /// the connection on the TCP socket. It then opens a channel for
 /// communication, which it sets into confirm mode.
-void
+int
 sam_be_rmq_connect (
     sam_be_rmq_t *self,
     sam_be_rmq_opts_t *opts)
@@ -514,7 +514,15 @@ sam_be_rmq_connect (
         opts->host,
         opts->port);
 
-    assert (rc == 0);
+    if (rc) {
+        sam_log_errorf (
+            "could not connect to %s:%d (%s)",
+            opts->host,
+            opts->port,
+            self->name);
+
+        return -1;
+    }
 
     // login
     sam_log_tracef (
@@ -562,6 +570,7 @@ sam_be_rmq_connect (
     try ("enable publisher confirms",
          amqp_get_rpc_reply(self->amqp.connection));
 
+    return 0;
 }
 
 
