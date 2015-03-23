@@ -41,8 +41,11 @@ test_fn_t suites [] = {
 
 
 
+//  --------------------------------------------------------------------------
+/// Just prints a little visual seperator to ease reading log files.
 void
-sam_selftest_introduce (const char *name)
+sam_selftest_introduce (
+    const char *name)
 {
     char buf [] = "|---| ----------------------------------------------------------------------------------|\n";
     char *tmpl = " %s |";
@@ -58,7 +61,8 @@ sam_selftest_introduce (const char *name)
 /// Print all necessary information for user invoking this
 /// program. The function calls exit () with the provided return code.
 static void
-rtfm (int rc)
+rtfm (
+    int rc)
 {
     printf ("sam selftest\n");
     printf ("usage: sam_selftest [-h] [--only SAM_MODULE [TESTCASE]]\n");
@@ -80,7 +84,9 @@ rtfm (int rc)
 /// Parses input parameters and sets environmental variables. Exits
 /// the program for invalid arguments.
 static char *
-parse_args (int arg_c, char **arg_v)
+parse_args (
+    int arg_c,
+    char **arg_v)
 {
     arg_c -= 1;
     arg_v += 1;
@@ -123,7 +129,9 @@ parse_args (int arg_c, char **arg_v)
 
 //  --------------------------------------------------------------------------
 /// Run tests.
-int main (int arg_c, char **arg_v)
+int main (
+    int arg_c,
+    char **arg_v)
 {
     char *env = parse_args (arg_c, arg_v);
 

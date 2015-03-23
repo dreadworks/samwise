@@ -1,6 +1,6 @@
 /*  =========================================================================
 
-    samd - send all message daemon (for samwise)
+    sam_gen - generic helper functions
 
     This Source Code Form is subject to the terms of the MIT
     License. If a copy of the MIT License was not distributed with
@@ -13,7 +13,7 @@
    @brief daemon process to accept publishing requests
    @file samd.c
 
-   TODO description
+   Gather all functions commonly used by multiple modules.
 
 */
 
@@ -25,7 +25,10 @@
 /// Generic function to handle $TERM on actor pipes and interrupts for
 /// zactors.
 int
-sam_gen_handle_pipe (zloop_t *loop UU, zsock_t *pipe, void *args UU)
+sam_gen_handle_pipe (
+    zloop_t *loop UU,
+    zsock_t *pipe,
+    void *args UU)
 {
     zmsg_t *msg = zmsg_recv (pipe);
 

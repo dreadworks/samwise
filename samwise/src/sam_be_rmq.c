@@ -26,16 +26,35 @@
    publishing requests, heartbeats and acks by using the following
    channels:
 
-         RabbitMQ broker
-              ^
-              |
-   PUSH       o       REP
-   >     sam_be_rmq     o
-     \        |        /
-      \     PIPE      /
-       \      |      /
-    PULL o  caller < REQ
+   <code>
 
+   libsam actor | sam_be_rmq actor
+   -------------------------------
+     PIPE: libsam actor spawns the rmq actor
+     REQ/REP: Synchronous RPC requests
+     PSH/PLL: Asynchronous publishing requests
+
+   sam_be_rmq_actor | sam_buf
+   --------------------------
+     PSH/PLL: Asynchronous acknowledgments
+
+   sam_be_rmq | RabbitMQ Broker
+   ----------------------------
+     raw TCP: AMQP traffic
+
+
+   Topology:
+   ---------
+                    o  libsam actor  o
+                REQ ^       |       / PUSH
+                     \     PIPE    /
+                      \     |     /
+                   REP v    |    v PULL
+          PULL          o   |    o
+   sam_buf o <----- o sam_be_rmq o <----------> RabbitMQ Broker
+     actor       PUSH    actor
+
+    </code>
 */
 
 #include "../include/sam_prelude.h"
@@ -51,7 +70,8 @@ typedef struct store_item {
 //  --------------------------------------------------------------------------
 /// Destructor function for the store.
 static void
-free_store_item (void **store_item)
+free_store_item (
+    void **store_item)
 {
     free (*store_item);
     *store_item = NULL;
@@ -61,7 +81,9 @@ free_store_item (void **store_item)
 //  --------------------------------------------------------------------------
 /// Create a new store item.
 static store_item *
-new_store_item (int key, int seq)
+new_store_item (
+    int key,
+    int seq)
 {
     store_item *item = malloc (sizeof (store_item));
     assert (item);
@@ -76,7 +98,8 @@ new_store_item (int key, int seq)
 //  --------------------------------------------------------------------------
 /// Checks if the frame returned by the broker is an acknowledgement.
 static void
-check_amqp_ack_frame (amqp_frame_t frame)
+check_amqp_ack_frame (
+    amqp_frame_t frame)
 {
     if (frame.frame_type != AMQP_FRAME_METHOD) {
 
@@ -106,7 +129,10 @@ check_amqp_ack_frame (amqp_frame_t frame)
 /// this data structure with a 0 timeout (NULL as timeout would turn
 /// the call into a blocking read).
 static int
-handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
+handle_amqp (
+    zloop_t *loop UU,
+    zmq_pollitem_t *amqp UU,
+    void *args)
 {
     sam_be_rmq_t *self = args;
 
@@ -167,7 +193,10 @@ handle_amqp (zloop_t *loop UU, zmq_pollitem_t *amqp UU, void *args)
 ///    2 | f | zframe_t * containing the payload
 ///
 static int
-handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
+handle_publish_req (
+    zloop_t *loop UU,
+    zsock_t *pll,
+    void *args)
 {
     sam_be_rmq_t *self = args;
 
@@ -222,7 +251,10 @@ handle_publish_req (zloop_t *loop UU, zsock_t *pll, void *args)
 ///    2 | s | <type> for "exchange.declare"
 ///
 static int
-handle_rpc_req (zloop_t *loop UU, zsock_t *rep, void *args)
+handle_rpc_req (
+    zloop_t *loop UU,
+    zsock_t *rep,
+    void *args)
 {
     sam_be_rmq_t *self = args;
 
@@ -271,7 +303,9 @@ handle_rpc_req (zloop_t *loop UU, zsock_t *rep, void *args)
 /// Entry point for the actor thread. Starts a loop listening on the
 /// PIPE, REP zsock and the AMQP TCP socket.
 static void
-actor (zsock_t *pipe, void *args)
+actor (
+    zsock_t *pipe,
+    void *args)
 {
     sam_be_rmq_t *self = args;
     sam_log_infof ("'%s' started be_rmq actor", self->name);
@@ -305,7 +339,9 @@ actor (zsock_t *pipe, void *args)
 /// call. If the return code is anything other than
 /// AMQP_RESPONSE_NORMAL, an assertion fails.
 static int
-try (char const *ctx, amqp_rpc_reply_t x)
+try (
+    char const *ctx,
+    amqp_rpc_reply_t x)
 {
 
     switch (x.reply_type) {
@@ -376,7 +412,8 @@ try (char const *ctx, amqp_rpc_reply_t x)
 //  --------------------------------------------------------------------------
 /// Returns the underlying TCP connections socket file descriptor.
 int
-sam_be_rmq_sockfd (sam_be_rmq_t *self)
+sam_be_rmq_sockfd (
+    sam_be_rmq_t *self)
 {
     return amqp_get_sockfd (self->amqp.connection);
 }
@@ -388,7 +425,9 @@ sam_be_rmq_sockfd (sam_be_rmq_t *self)
 /// function creates an AMQP connection state and initializes a TCP
 /// socket for the broker connection.
 sam_be_rmq_t *
-sam_be_rmq_new (const char *name, uint64_t id)
+sam_be_rmq_new (
+    const char *name,
+    uint64_t id)
 {
     sam_log_infof (
         "creating rabbitmq message backend (%s:%d)", name, id);
@@ -422,7 +461,8 @@ sam_be_rmq_new (const char *name, uint64_t id)
 /// savely closes the TCP connection to the broker and free's all
 /// allocated memory.
 void
-sam_be_rmq_destroy (sam_be_rmq_t **self)
+sam_be_rmq_destroy (
+    sam_be_rmq_t **self)
 {
     sam_log_tracef (
         "destroying rabbitmq message backend instance '%s'",
@@ -576,7 +616,8 @@ sam_be_rmq_publish (
 /// function currently just serves to "eat" frames and might be
 /// removed.
 void
-sam_be_rmq_handle_ack (sam_be_rmq_t *self)
+sam_be_rmq_handle_ack (
+    sam_be_rmq_t *self)
 {
     amqp_frame_t frame;
     struct timeval timeout = { .tv_sec = 0, .tv_usec = 0 };

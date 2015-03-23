@@ -13,7 +13,8 @@
    @brief daemon process to accept publishing requests
    @file samd.c
 
-   TODO description
+   This is the frontend clients communicate with. Used as a daemon
+   process utilizing libsam.
 
 */
 
@@ -22,8 +23,11 @@
 #include "../include/samd.h"
 
 
+//  --------------------------------------------------------------------------
+/// Helper function to wrap an error message in a sam_ret.
 static sam_ret_t *
-create_error (char *msg)
+create_error (
+    char *msg)
 {
     sam_ret_t *ret = malloc (sizeof (sam_ret_t));
     ret->rc = -1;
@@ -38,7 +42,10 @@ create_error (char *msg)
 /// number to decide if libsam can handle it and then either delegates
 /// or rejects the message.
 static int
-handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
+handle_req (
+    zloop_t *loop UU,
+    zsock_t *client_rep,
+    void *args)
 {
     samd_t *self = args;
     sam_ret_t *ret;
@@ -85,7 +92,8 @@ handle_req (zloop_t *loop UU, zsock_t *client_rep, void *args)
 //  --------------------------------------------------------------------------
 /// Creates a new samd instance and binds the public endpoints socket.
 samd_t *
-samd_new (const char *cfg_file UU)
+samd_new (
+    const char *cfg_file UU)
 {
     samd_t *self = malloc (sizeof (samd_t));
     assert (self);
@@ -123,7 +131,8 @@ samd_new (const char *cfg_file UU)
 //  --------------------------------------------------------------------------
 /// Destroys the samd instance and free's all allocated memory.
 void
-samd_destroy (samd_t **self)
+samd_destroy (
+    samd_t **self)
 {
     sam_log_info ("destroying samd");
 
@@ -139,7 +148,8 @@ samd_destroy (samd_t **self)
 //  --------------------------------------------------------------------------
 /// Start a blocking loop for client requests.
 void
-samd_start (samd_t *self)
+samd_start (
+    samd_t *self)
 {
     zloop_t *loop = zloop_new ();
     zloop_reader (loop, self->client_rep, handle_req, self);
@@ -153,7 +163,9 @@ samd_start (samd_t *self)
 //  --------------------------------------------------------------------------
 /// Main entry point, initializes and starts samd.
 int
-main (int argc, char **argv)
+main (
+    int argc,
+    char **argv)
 {
     argc -= 1;
     argv += 1;

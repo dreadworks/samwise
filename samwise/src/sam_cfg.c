@@ -112,7 +112,8 @@ resolve (
 /// [0-9]+[a-zA-Z].*
 ///
 static char
-get_prefix (char *size_str)
+get_prefix (
+    char *size_str)
 {
     char *str_ptr = size_str;
     while (*str_ptr && '0' <= *str_ptr && *str_ptr <= '9') {
@@ -184,7 +185,8 @@ conv_binary_prefix (
 /// 'd': Days
 ///
 static uint64_t
-conv_time_prefix (char *time_str)
+conv_time_prefix (
+    char *time_str)
 {
     char prefix = get_prefix (time_str);
     uint64_t ms = atoi (time_str);
@@ -239,7 +241,8 @@ retrieve_time_value (
 //  --------------------------------------------------------------------------
 /// Create a new cfg instance.
 sam_cfg_t *
-sam_cfg_new (const char *cfg_file)
+sam_cfg_new (
+    const char *cfg_file)
 {
     assert (cfg_file);
 
@@ -261,7 +264,8 @@ sam_cfg_new (const char *cfg_file)
 /// Destroy a cfg instance. Also clears all allocated memory needed to
 /// store the configuration file.
 void
-sam_cfg_destroy (sam_cfg_t **self)
+sam_cfg_destroy (
+    sam_cfg_t **self)
 {
     assert (*self);
     zconfig_destroy (&(*self)->zcfg);
@@ -274,7 +278,9 @@ sam_cfg_destroy (sam_cfg_t **self)
 //  --------------------------------------------------------------------------
 /// Retrieve the file name of the buffer.
 int
-sam_cfg_buf_file (sam_cfg_t *self, char **fname)
+sam_cfg_buf_file (
+    sam_cfg_t *self,
+    char **fname)
 {
     assert (self);
 
@@ -291,7 +297,9 @@ sam_cfg_buf_file (sam_cfg_t *self, char **fname)
 //  --------------------------------------------------------------------------
 /// Retrieve the maximum size of the buffer.
 int
-sam_cfg_buf_size (sam_cfg_t *self, uint64_t *size)
+sam_cfg_buf_size (
+    sam_cfg_t *self,
+    uint64_t *size)
 {
     assert (self);
     assert (size);
@@ -368,7 +376,9 @@ sam_cfg_buf_retry_threshold (
 /// Retrieve the public endpoint string. Used to bind a socket clients
 /// can connect to.
 int
-sam_cfg_endpoint (sam_cfg_t *self, char **endpoint)
+sam_cfg_endpoint (
+    sam_cfg_t *self,
+    char **endpoint)
 {
     assert (self);
     char *val = zconfig_resolve (self->zcfg, "/endpoint", NULL);
@@ -387,7 +397,9 @@ sam_cfg_endpoint (sam_cfg_t *self, char **endpoint)
 /// Retrieve the backend type. Used to determine what kind of
 /// messaging backend to spawn and what configuration to expect.
 int
-sam_cfg_be_type (sam_cfg_t *self, sam_be_t *be_type)
+sam_cfg_be_type (
+    sam_cfg_t *self,
+    sam_be_t *be_type)
 {
     assert (self);
     assert (be_type);

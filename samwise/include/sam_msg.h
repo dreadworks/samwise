@@ -13,7 +13,9 @@
 
    @brief Wrapper for zmsg
 
-   Wraps zmsg instances and offers garbage collection.
+   Wraps zmsg instances. Offers convenience functions to access the
+   data, encode or decode messages, garbage collection and reference
+   counting for concurrent access.
 
 */
 

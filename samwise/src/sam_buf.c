@@ -13,7 +13,49 @@
    @brief Persists messages
    @file sam_buf.c
 
-   TODO description
+   The samwise buffer encapsulates all persistence layer related
+   operations. Underneath, a Berkeley DB storage engine is used to
+   write message temporarily to a database file. The buffer accepts
+   storage requests to persist a message, demultiplexes
+   acknowledgements arriving from one or more messaging backends and
+   resends messages based on the configuration file.
+
+   <code>
+
+   sam_buf | sam_buf actor
+   -----------------------
+     PIPE: sam_buf spawns its actor internally
+     REQ/REP: storage requests
+
+   sam_buf_actor | libsam actor
+   ----------------------------
+     PSH/PLL: resending publishing requests
+
+   be[i] | sam_buf actor
+   ---------------------
+     PSH/PLL: acknowledgements
+
+
+   Topology:
+   --------
+
+     libsam         sam_buf
+      actor o        |    o
+        PULL ^       |    ^ REQ
+              \    PIPE   |
+         PUSH  \     |    v REP
+                o    |    o
+               sam_buf actor o <-------- o be[i]
+                     |      PULL       PUSH
+                     |
+               -------------
+              | Berkeley DB |
+              |  *.db file  |
+               -------------
+
+
+   </code>
+
 
 */
 
@@ -55,7 +97,8 @@ typedef struct record_header_t {
 /// Create a unique, sortable message id. Order determines message
 /// age. Older keys must have smaller keys.
 static int
-create_msg_id (state_t *state)
+create_msg_id (
+    state_t *state)
 {
     return state->seq += 1;
 }
@@ -77,7 +120,8 @@ db_error_handler (
 //  --------------------------------------------------------------------------
 /// Returns a human readable representation for DB error codes.
 static char *
-db_failure_reason (int code)
+db_failure_reason (
+    int code)
 {
     char *reason;
 
@@ -109,7 +153,9 @@ db_failure_reason (int code)
 
 
 static int
-create_db (state_t *state, const char *fname)
+create_db (
+    state_t *state,
+    const char *fname)
 {
     int rc = db_create (&state->dbp, NULL, 0);
     if (rc) {
@@ -242,7 +288,9 @@ get_next (
 //  --------------------------------------------------------------------------
 /// Checks if the record is inside the bounds of messages to be resent.
 static int
-resend_condition (state_t *state, DBT *val)
+resend_condition (
+    state_t *state,
+    DBT *val)
 {
     record_header_t *header = val->data;
     uint64_t eps = zclock_mono () - header->ts;
@@ -281,7 +329,8 @@ record_size (
 /// acknowledgements needed to consider the distribution guarantee
 /// fulfilled.
 static int
-acks_remaining (sam_msg_t *msg)
+acks_remaining (
+    sam_msg_t *msg)
 {
     char *distribution;
     int rc = sam_msg_get (msg, "s", &distribution);
@@ -307,7 +356,9 @@ acks_remaining (sam_msg_t *msg)
 //  --------------------------------------------------------------------------
 /// Create a new DBT key based on a message id.
 static void
-create_key (int *msg_id, DBT *thang)
+create_key (
+    int *msg_id,
+    DBT *thang)
 {
     memset (thang, 0, DBT_SIZE);
     thang->size = sizeof (*msg_id);
@@ -492,7 +543,10 @@ update_record_ack (
 /// @see create_record_ack
 ///
 static int
-ack (state_t *state, uint64_t backend_id, int msg_id)
+ack (
+    state_t *state,
+    uint64_t backend_id,
+    int msg_id)
 {
     DBT key, val;
 
@@ -526,7 +580,10 @@ ack (state_t *state, uint64_t backend_id, int msg_id)
 //  --------------------------------------------------------------------------
 /// Handles a request sent internally to save the message to the store.
 static int
-handle_storage_req (zloop_t *loop UU, zsock_t *store_sock, void *args)
+handle_storage_req (
+    zloop_t *loop UU,
+    zsock_t *store_sock,
+    void *args)
 {
     state_t *state = args;
 
@@ -580,7 +637,10 @@ handle_storage_req (zloop_t *loop UU, zsock_t *store_sock, void *args)
 ///
 /// @see ack
 static int
-handle_backend_req (zloop_t *loop UU, zsock_t *pll, void *args)
+handle_backend_req (
+    zloop_t *loop UU,
+    zsock_t *pll,
+    void *args)
 {
     state_t *state = args;
     int rc = 0;
@@ -618,7 +678,10 @@ handle_backend_req (zloop_t *loop UU, zsock_t *pll, void *args)
 //  --------------------------------------------------------------------------
 /// Checks in a fixed interval if messages need to be resent.
 static int
-handle_resend (zloop_t *loop UU, int timer_id UU, void *args)
+handle_resend (
+    zloop_t *loop UU,
+    int timer_id UU,
+    void *args)
 {
     sam_log_trace ("resend cycle triggered");
     state_t *state = args;
@@ -709,7 +772,9 @@ handle_resend (zloop_t *loop UU, int timer_id UU, void *args)
 /// The internally started actor. Listens to storage requests and
 /// acknowledgments arriving from the backends.
 static void
-actor (zsock_t *pipe, void *args)
+actor (
+    zsock_t *pipe,
+    void *args)
 {
     sam_log_info ("starting actor");
 
@@ -816,7 +881,8 @@ abort:
 //  --------------------------------------------------------------------------
 /// Destroy a sam buf instance.
 void
-sam_buf_destroy (sam_buf_t **self)
+sam_buf_destroy (
+    sam_buf_t **self)
 {
     assert (*self);
     sam_log_info ("destroying buffer instance");
@@ -832,7 +898,9 @@ sam_buf_destroy (sam_buf_t **self)
 //  --------------------------------------------------------------------------
 /// Save a message, get a message id as the receipt.
 int
-sam_buf_save (sam_buf_t *self, sam_msg_t *msg)
+sam_buf_save (
+    sam_buf_t *self,
+    sam_msg_t *msg)
 {
     assert (self);
     zsock_send (self->store_sock, "p", msg);

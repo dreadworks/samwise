@@ -12,6 +12,9 @@
 
    @brief Handle persisting messages
 
+   This class accepts storage requests, persists un-acknowledged
+   messages to disk and re-sends them after some time.
+
 */
 
 #ifndef __SAM_BUF_H__

@@ -23,7 +23,8 @@
 //  --------------------------------------------------------------------------
 /// Returns the string representation of a specific log level.
 const char *
-get_lvl_repr (sam_log_lvl_t lvl)
+get_lvl_repr (
+    sam_log_lvl_t lvl)
 {
     switch (lvl) {
     case (SAM_LOG_LVL_TRACE):

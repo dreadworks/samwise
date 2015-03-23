@@ -13,7 +13,42 @@
    @brief public API
    @file sam.c
 
-   TODO description
+   Samwise is a store and forward service for messaging.
+   TODO: throrough description when everything's running.
+
+   <code>
+
+   libsam | libsam actor
+   ---------------------
+     PIPE: libsam spawns its actor internally
+     REQ/REP: synchronous requests (rpc, ctl)
+     PSH/PLL: asynchronous requests (publish)
+
+   libsam actor | be[i] actor
+     REQ/REP: synchronous requests (rpc)
+     PSH/PLL: asynchronous requests (publish)
+
+   sam_buf_actor | libsam actor
+     PSH/PLL: resending requests (publish)
+
+   Topology:
+   --------
+
+               o  libsam  o
+          REQ  ^    |     | PUSH
+               |   PIPE   |
+               v    |     v PULL
+          REP  o    |     o
+               libsam actor
+         PULL  o          o o
+              ^      PUSH |  ^ REQ
+             /            |   \
+      PUSH  o        PULL v    v REP
+        sam_buf           o    o
+         actor          be[i] actor
+
+   <code>
+
 
 */
 
@@ -48,7 +83,10 @@ new_ret ()
 //  --------------------------------------------------------------------------
 /// Publish a message to the backends.
 static int
-handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
+handle_frontend_pub (
+    zloop_t *loop UU,
+    zsock_t *pll,
+    void *args)
 {
     state_t *state = args;
 
@@ -118,7 +156,10 @@ handle_frontend_pub (zloop_t *loop UU, zsock_t *pll, void *args)
 /// the protocol to delegate them (based on the distribution method)
 /// to various message backends.
 static int
-handle_frontend_rpc (zloop_t *loop UU, zsock_t *rep, void *args)
+handle_frontend_rpc (
+    zloop_t *loop UU,
+    zsock_t *rep,
+    void *args)
 {
     state_t *state = args;
     sam_msg_t *msg;
@@ -153,7 +194,10 @@ handle_frontend_rpc (zloop_t *loop UU, zsock_t *rep, void *args)
 //  --------------------------------------------------------------------------
 /// Handle control commands like adding or removing backends.
 static int
-handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
+handle_ctl_req (
+    zloop_t *loop UU,
+    zsock_t *rep,
+    void *args)
 {
     state_t *state = args;
     int rc = 0;
@@ -218,7 +262,9 @@ handle_ctl_req (zloop_t *loop UU, zsock_t *rep, void *args)
 /// listening to the various sockets to multiplex and demultiplex
 /// requests to a backend pool.
 static void
-actor (zsock_t *pipe, void *args)
+actor (
+    zsock_t *pipe,
+    void *args)
 {
     state_t *state = args;
     zloop_t *loop = zloop_new ();
@@ -270,7 +316,8 @@ actor (zsock_t *pipe, void *args)
 /// Create a new sam instance. It initializes both the sam_t
 /// object and the internally used state object.
 sam_t *
-sam_new (sam_be_t be_type)
+sam_new (
+    sam_be_t be_type)
 {
     sam_t *self = malloc (sizeof (sam_t));
     state_t *state = malloc (sizeof (state_t));
@@ -333,7 +380,8 @@ sam_new (sam_be_t be_type)
 /// Destroy the sam_t instance. Also closes all sockets and free's
 /// all memory of the internally used state object.
 void
-sam_destroy (sam_t **self)
+sam_destroy (
+    sam_t **self)
 {
     assert (*self);
     sam_log_info ("destroying sam instance");
@@ -417,8 +465,12 @@ sam_be_remove (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Create a new sam_buf instance based on sam_cfg.
 static int
-init_buf (sam_t *self, sam_cfg_t *cfg)
+init_buf (
+    sam_t *self,
+    sam_cfg_t *cfg)
 {
     if (self->buf) {
         sam_buf_destroy (&self->buf);
@@ -443,8 +495,12 @@ init_buf (sam_t *self, sam_cfg_t *cfg)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Creates backend instances based on sam_cfg.
 static int
-init_backends (sam_t *self, sam_cfg_t *cfg)
+init_backends (
+    sam_t *self,
+    sam_cfg_t *cfg)
 {
     int count;
     char **names, **names_ptr;
@@ -497,7 +553,9 @@ init_backends (sam_t *self, sam_cfg_t *cfg)
 //  --------------------------------------------------------------------------
 /// Initialize backends and the store based on a samwise configuration file.
 int
-sam_init (sam_t *self, sam_cfg_t *cfg)
+sam_init (
+    sam_t *self,
+    sam_cfg_t *cfg)
 {
     assert (self);
     assert (cfg);
@@ -520,7 +578,9 @@ sam_init (sam_t *self, sam_cfg_t *cfg)
 //  --------------------------------------------------------------------------
 /// Destroy the message and create a return object with an error message.
 static sam_ret_t *
-error (sam_msg_t *msg, char *error_msg)
+error (
+    sam_msg_t *msg,
+    char *error_msg)
 {
     sam_msg_destroy (&msg);
 
@@ -535,7 +595,8 @@ error (sam_msg_t *msg, char *error_msg)
 //  --------------------------------------------------------------------------
 /// Checks if the protocol for the incoming RabbitMQ RPC message is obeyed.
 static int
-check_rpc_rmq (sam_msg_t *msg)
+check_rpc_rmq (
+    sam_msg_t *msg)
 {
     char *type;
     int rc = sam_msg_get (msg, "?s", &type);
@@ -572,7 +633,9 @@ check_rpc_rmq (sam_msg_t *msg)
 //  --------------------------------------------------------------------------
 /// Checks if the rpc request conforms to the protocol.
 static int
-check_rpc (sam_be_t be_type, sam_msg_t *msg)
+check_rpc (
+    sam_be_t be_type,
+    sam_msg_t *msg)
 {
     int rc = 0;
 
@@ -590,7 +653,8 @@ check_rpc (sam_be_t be_type, sam_msg_t *msg)
 //  --------------------------------------------------------------------------
 /// Checks if the protocol for the RabbitMQ publishing message is obeyed.
 static int
-check_pub_rmq (sam_msg_t *msg)
+check_pub_rmq (
+    sam_msg_t *msg)
 {
     char *distribution;
     int rc = sam_msg_get (msg, "s", &distribution);
@@ -628,7 +692,9 @@ check_pub_rmq (sam_msg_t *msg)
 //  --------------------------------------------------------------------------
 /// Checks if the message contains a valid publishing request.
 static int
-check_pub (sam_be_t be_type, sam_msg_t *msg)
+check_pub (
+    sam_be_t be_type,
+    sam_msg_t *msg)
 {
     if (be_type == SAM_BE_RMQ) {
         return check_pub_rmq (msg);
@@ -641,7 +707,9 @@ check_pub (sam_be_t be_type, sam_msg_t *msg)
 //  --------------------------------------------------------------------------
 /// Send the sam actor thread a message.
 sam_ret_t *
-sam_eval (sam_t *self, sam_msg_t *msg)
+sam_eval (
+    sam_t *self,
+    sam_msg_t *msg)
 {
     assert (self);
     assert (msg);

@@ -25,7 +25,10 @@
 /// Converter function that accepts a type character and a variadic
 /// argument to be set.
 static void *
-resolve (zframe_t *frame, char type, va_list arg_p)
+resolve (
+    zframe_t *frame,
+    char type,
+    va_list arg_p)
 {
     // frames
     if (type == 'f') {
@@ -87,7 +90,8 @@ resolve (zframe_t *frame, char type, va_list arg_p)
 //  --------------------------------------------------------------------------
 /// Used by zlist_purge () and zlist_destroy () for char * list items
 static void
-refs_s_destructor (void **item)
+refs_s_destructor (
+    void **item)
 {
     char **ref =  (char **) item;
     free (*ref);
@@ -98,7 +102,8 @@ refs_s_destructor (void **item)
 //  --------------------------------------------------------------------------
 /// Used by zlist_purge () and zlist_destroy () for zframe_t * list items
 static void
-refs_f_destructor (void **item)
+refs_f_destructor (
+    void **item)
 {
     zframe_t **frame = (zframe_t **) item;
     zframe_destroy (frame);
@@ -142,7 +147,8 @@ new ()
 //  --------------------------------------------------------------------------
 /// Create a new sam_msg instance.
 sam_msg_t *
-sam_msg_new (zmsg_t **zmsg)
+sam_msg_new (
+    zmsg_t **zmsg)
 {
     assert (zmsg);
     sam_msg_t *self = new (true);
@@ -163,7 +169,8 @@ sam_msg_new (zmsg_t **zmsg)
 /// Destroys the sam_msg instance. All allocated memory gets
 /// free'd. This includes all pop ()'d strings.
 void
-sam_msg_destroy (sam_msg_t **self)
+sam_msg_destroy (
+    sam_msg_t **self)
 {
     assert (*self);
 
@@ -195,7 +202,8 @@ sam_msg_destroy (sam_msg_t **self)
 //  --------------------------------------------------------------------------
 /// Duplicate a message.
 sam_msg_t *
-sam_msg_dup (sam_msg_t *self)
+sam_msg_dup (
+    sam_msg_t *self)
 {
     sam_msg_t *dup = new ();
 
@@ -230,7 +238,8 @@ sam_msg_dup (sam_msg_t *self)
 /// used in safe way by owning the messages as many times it gets
 /// destroyed independently, before handing it to other threads.
 void
-sam_msg_own (sam_msg_t *self)
+sam_msg_own (
+    sam_msg_t *self)
 {
     pthread_mutex_lock (&self->owner_lock);
     self->owner_refs += 1;
@@ -241,7 +250,8 @@ sam_msg_own (sam_msg_t *self)
 //  --------------------------------------------------------------------------
 /// Return the amount of frames left.
 int
-sam_msg_size (sam_msg_t *self)
+sam_msg_size (
+    sam_msg_t *self)
 {
     return zlist_size (self->frames);
 }
@@ -253,7 +263,8 @@ sam_msg_size (sam_msg_t *self)
 /// sam_msg instance keeps track of these allocations. This function
 /// free's all recently allocated memory.
 void
-sam_msg_free (sam_msg_t *self)
+sam_msg_free (
+    sam_msg_t *self)
 {
     assert (self);
     zlist_purge (self->refs.s);
@@ -277,7 +288,10 @@ sam_msg_free (sam_msg_t *self)
 /// Proper destruction of 'p' must be handled by the
 /// caller. Obviously, 'i' must not be garbage collected.
 int
-sam_msg_pop (sam_msg_t *self, const char *pic, ...)
+sam_msg_pop (
+    sam_msg_t *self,
+    const char *pic,
+    ...)
 {
     assert (self);
     assert (pic);
@@ -318,7 +332,10 @@ sam_msg_pop (sam_msg_t *self, const char *pic, ...)
 //  --------------------------------------------------------------------------
 /// Get data from the message without removing it.
 int
-sam_msg_get (sam_msg_t *self, const char *pic, ...)
+sam_msg_get (
+    sam_msg_t *self,
+    const char *pic,
+    ...)
 {
     assert (self);
     assert (pic);
@@ -358,8 +375,13 @@ sam_msg_get (sam_msg_t *self, const char *pic, ...)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Tests the message frames if some provided constraints are satisfied.
 int
-sam_msg_expect (sam_msg_t *self, int size, ...)
+sam_msg_expect (
+    sam_msg_t *self,
+    int size,
+    ...)
 {
     if (sam_msg_size (self) < size) {
         return -1;
@@ -384,9 +406,11 @@ sam_msg_expect (sam_msg_t *self, int size, ...)
 }
 
 
-
+//  --------------------------------------------------------------------------
+/// Returns the number of bytes needed to store the fully encoded message.
 size_t
-sam_msg_encoded_size (sam_msg_t *self)
+sam_msg_encoded_size (
+    sam_msg_t *self)
 {
     assert (self);
 
@@ -411,9 +435,11 @@ sam_msg_encoded_size (sam_msg_t *self)
 
 
 //  --------------------------------------------------------------------------
-/// Encode a sam_msg object into an opaque buffer.
+/// Encode a sam_msg object into a buffer.
 void
-sam_msg_encode (sam_msg_t *self, byte **buf)
+sam_msg_encode (
+    sam_msg_t *self,
+    byte **buf)
 {
     assert (self);
     assert (*buf);
@@ -446,7 +472,9 @@ sam_msg_encode (sam_msg_t *self, byte **buf)
 //  --------------------------------------------------------------------------
 /// Decode a sam_msg object from a buffer.
 sam_msg_t *
-sam_msg_decode (byte *buf, size_t size)
+sam_msg_decode (
+    byte *buf,
+    size_t size)
 {
     // taken from zmsg_decode
     sam_msg_t *self = new (false);

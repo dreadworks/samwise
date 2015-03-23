@@ -11,9 +11,10 @@
 */
 /**
 
-   @brief API interface for sam
+   @brief Samwise API interface
 
-   TODO: description
+   Offers all public functions necessary to store and forward
+   messages.
 
 */
 

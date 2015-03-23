@@ -12,6 +12,9 @@
 
    @brief Loads samwise configuration files
 
+   Offers convenience functions to read samwise configuration files
+   and automatically converts values to internally used types.
+
 */
 
 #ifndef __SAM_CFG_H__

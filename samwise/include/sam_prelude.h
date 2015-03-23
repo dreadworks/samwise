@@ -22,10 +22,6 @@
 #define __SAM_PRELUDE_H__
 
 
-// system dependencies
-#include <sys/mman.h>
-
-
 // external dependencies
 #ifdef __SAM_TEST
 #include <check.h>
@@ -47,7 +43,9 @@
 // global configuration
 #define SAM_PROTOCOL_VERSION 100
 
+
 // don't define these to show all log levels
+// TODO offer an option for ./configure
 // #define LOG_THRESHOLD_TRACE   // show info + error
 // #define LOG_THRESHOLD_INFO    // only show error
 // #define LOG_THRESHOLD_ERROR   // disable logging
