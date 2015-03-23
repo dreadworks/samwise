@@ -21,14 +21,19 @@
 #include "../include/sam_prelude.h"
 
 
+#define DBT_SIZE sizeof (DBT)
+
+
 /// State object maintained by the actor
 typedef struct state_t {
+    int seq;                ///< used to assign unique message id's
     DB *dbp;                ///< database pointer
 
     zsock_t *in;            ///< for arriving acknowledgements
     zsock_t *out;           ///< for re-publishing
     zsock_t *store_sock;    ///< for (internal) storage requests
 
+    int tries;              ///< maximum number of retries for a message
     uint64_t interval;      ///< how often messages are being tried again
     uint64_t threshold;     ///< at which point messages are tried again
 } state_t;
@@ -40,7 +45,20 @@ typedef struct record_header_t {
     int acks_remaining;   ///< number of remaining acks, can be
                           ///  negative for early arriving
                           ///  acknowledgements
+    int64_t ts;           ///< insertion time
+    int tries;            ///< total number of retries
 } record_header_t;
+
+
+
+//  --------------------------------------------------------------------------
+/// Create a unique, sortable message id. Order determines message
+/// age. Older keys must have smaller keys.
+static int
+create_msg_id (state_t *state)
+{
+    return state->seq += 1;
+}
 
 
 
@@ -155,6 +173,27 @@ put (
 
 
 //  --------------------------------------------------------------------------
+/// Updates an already existing record.
+static int
+update (
+    state_t *state,
+    DBT *key,
+    DBT *val)
+{
+    int rc = state->dbp->put (state->dbp, NULL, key, val, 0);
+
+    if (rc) {
+        sam_log_errorf (
+            "could not put '%d' in db: %s",
+            *(int *) key->data,
+            db_failure_reason (rc));
+    }
+
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
 /// Delete a database record.
 static int
 del (
@@ -176,6 +215,40 @@ del (
 
     return rc;
 }
+
+
+//  --------------------------------------------------------------------------
+/// Returns the next item in the database.
+static int
+get_next (
+    DBC *cursor,
+    DBT *key,
+    DBT *val)
+{
+    memset (key, 0, DBT_SIZE);
+    memset (val, 0, DBT_SIZE);
+
+    int rc = cursor->get(cursor, key, val, DB_NEXT);
+    if (rc && rc != DB_NOTFOUND) {
+        sam_log_errorf (
+            "could not get next item: %s",
+            db_failure_reason (rc));
+    }
+
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Checks if the record is inside the bounds of messages to be resent.
+static int
+resend_condition (state_t *state, DBT *val)
+{
+    record_header_t *header = val->data;
+    uint64_t eps = zclock_mono () - header->ts;
+    return (state->threshold < eps)? 0: -1;
+}
+
 
 
 //  --------------------------------------------------------------------------
@@ -236,7 +309,7 @@ acks_remaining (sam_msg_t *msg)
 static void
 create_key (int *msg_id, DBT *thang)
 {
-    memset (thang, 0, sizeof (*thang));
+    memset (thang, 0, DBT_SIZE);
     thang->size = sizeof (*msg_id);
     thang->data = msg_id;
 }
@@ -246,13 +319,16 @@ create_key (int *msg_id, DBT *thang)
 /// Create a fresh database record based on a sam_msg enclosed
 /// publishing request.
 static int
-create_record_store (state_t *state, DBT *key, sam_msg_t *msg)
+create_record_store (
+    state_t *state,
+    DBT *key,
+    sam_msg_t *msg)
 {
     DBT val;
     size_t total_size, header_size;
     byte *record;
 
-    memset (&val, 0, sizeof (val));
+    memset (&val, 0, DBT_SIZE);
     record_size (&total_size, &header_size, msg);
 
     record = malloc (total_size);
@@ -264,6 +340,8 @@ create_record_store (state_t *state, DBT *key, sam_msg_t *msg)
     record_header_t *header = (record_header_t *) record;
     header->acks_remaining = acks_remaining (msg);
     header->be_acks = 0;
+    header->ts = zclock_mono ();
+    header->tries = state->tries;
 
     // set content data
     byte *content = record + header_size;
@@ -393,15 +471,7 @@ update_record_ack (
             *(int *) key->data,
             header->acks_remaining);
 
-        rc = state->dbp->put (
-            state->dbp, NULL, key, val, 0);
-
-        if (rc) {
-            sam_log_errorf (
-                "could not put '%d' in db: %s",
-                *(int *) key->data,
-                db_failure_reason (rc));
-        }
+        rc = update (state, key, val);
     }
 
     return rc;
@@ -427,7 +497,7 @@ ack (state_t *state, uint64_t backend_id, int msg_id)
     DBT key, val;
 
     create_key (&msg_id, &key);
-    memset (&val, 0, sizeof (val));
+    memset (&val, 0, DBT_SIZE);
 
     int rc = state->dbp->get (
         state->dbp, NULL, &key, &val, 0);
@@ -460,16 +530,20 @@ handle_storage_req (zloop_t *loop UU, zsock_t *store_sock, void *args)
 {
     state_t *state = args;
 
-    int msg_id = -1;
     sam_msg_t *msg;
     sam_log_trace ("recv () storage request");
-    zsock_recv (store_sock, "ip", &msg_id, &msg);
-    assert (msg_id >= 0);
+    zsock_recv (store_sock, "p", &msg);
 
+    int msg_id = create_msg_id (state);
+    assert (msg_id >= 0);
     sam_log_tracef ("handling storage request for '%d'", msg_id);
 
+    // position of this call handles what guarantee
+    // is promised to the publishing client.
+    zsock_send (store_sock, "i", msg_id);
+
     DBT key, val;
-    memset (&val, 0, sizeof (DBT));
+    memset (&val, 0, DBT_SIZE);
 
     create_key (&msg_id, &key);
     int rc = state->dbp->get (
@@ -540,6 +614,97 @@ handle_backend_req (zloop_t *loop UU, zsock_t *pll, void *args)
 }
 
 
+
+//  --------------------------------------------------------------------------
+/// Checks in a fixed interval if messages need to be resent.
+static int
+handle_resend (zloop_t *loop UU, int timer_id UU, void *args)
+{
+    sam_log_trace ("resend cycle triggered");
+    state_t *state = args;
+
+    DBC *cursor;
+    state->dbp->cursor (state->dbp, NULL, &cursor, 0);
+    if (cursor == NULL) {
+        sam_log_error ("could not initialize cursor");
+        return -1;
+    }
+
+    DBT key, val;
+    int first_requeued_key = 0; // can never be zero
+    int rc = get_next (cursor, &key, &val);
+
+    while (
+        !rc &&                                      // there's another item
+        !resend_condition (state, &val) &&          // crossed the threshold?
+        first_requeued_key != *(int *) key.data) {  // don't send requeued
+
+
+        size_t header_size = sizeof (record_header_t);
+        size_t msg_size = val.size - header_size;
+        byte *msg_buf = ((byte *) val.data) + header_size;
+
+        // check TTL
+        record_header_t *header = val.data;
+        header->tries -= 1;
+        if (!header->tries) {
+            sam_log_errorf (
+                "no retries left, discarding message '%d'",
+                *(int *) key.data);
+
+            del (state, &key);
+            rc = get_next (cursor, &key, &val);
+            continue;
+        }
+
+        // update record (tries, timestamp + requeue)
+        int new_id = create_msg_id (state);
+        if (!first_requeued_key) {
+            first_requeued_key = new_id;
+        }
+
+        sam_log_tracef (
+            "requeue message '%d' as '%d'",
+            *(int *) key.data, new_id);
+
+        key.data = &new_id;
+        header->ts = zclock_mono ();
+
+        // write new record, delete the old one
+        if (update (state, &key, &val)) {
+            return -1;
+        }
+
+        // decode message
+        sam_msg_t *msg = sam_msg_decode (msg_buf, msg_size);
+        if (msg == NULL) {
+            sam_log_error ("could not decode stored message");
+            return -1;
+        }
+
+        zframe_t *id_frame = zframe_new (
+            &((record_header_t *) val.data)->be_acks,
+            sizeof (uint64_t));
+
+        // re-publish message
+        sam_log_tracef ("resending msg '%d'", *(int *) key.data);
+        zsock_send (
+            state->out, "ifp",
+            *(int *) key.data,
+            id_frame,
+            msg);
+
+        zframe_destroy (&id_frame);
+        cursor->del (cursor, 0);
+
+        rc = get_next (cursor, &key, &val);
+    }
+
+    cursor->close (cursor);
+    return 0;
+}
+
+
 //  --------------------------------------------------------------------------
 /// The internally started actor. Listens to storage requests and
 /// acknowledgments arriving from the backends.
@@ -554,6 +719,9 @@ actor (zsock_t *pipe, void *args)
     zloop_reader (loop, state->store_sock, handle_storage_req, state);
     zloop_reader (loop, state->in, handle_backend_req, state);
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
+
+    // is a uint64_t -> size_t conversion okay?
+    zloop_timer (loop, state->interval, 0, handle_resend, state);
 
     sam_log_info ("starting poll loop");
     zsock_signal (pipe, 0);
@@ -602,12 +770,12 @@ sam_buf_new (
 
     if (
         sam_cfg_buf_file (cfg, &db_name) ||
+        sam_cfg_buf_retry_count (cfg, &state->tries) ||
         sam_cfg_buf_retry_interval (cfg, &state->interval) ||
         sam_cfg_buf_retry_threshold (cfg, &state->threshold)) {
 
         sam_log_error ("could not initialize the buffer");
         goto abort;
-
     }
 
 
@@ -617,22 +785,25 @@ sam_buf_new (
         goto abort;
     }
 
-    state->store_sock = zsock_new_pull (actor_endpoint);
-    assert (state->store_sock);
-
     // set sockets, change ownership
     state->in = *in;
     *in = NULL;
     state->out = *out;
     *out = NULL;
 
-    // intialize self
-    self->seq = 0;
-    self->actor = zactor_new (actor, state);
-    self->store_sock = zsock_new_push (actor_endpoint);
+    // storage
+    state->store_sock = zsock_new_rep (actor_endpoint);
+    self->store_sock = zsock_new_req (actor_endpoint);
+
+    assert (state->store_sock);
     assert (self->store_sock);
 
+    state->seq = 0;
+
+    // spawn actor
+    self->actor = zactor_new (actor, state);
     sam_log_info ("created buffer instance");
+
     return self;
 
 abort:
@@ -664,8 +835,10 @@ int
 sam_buf_save (sam_buf_t *self, sam_msg_t *msg)
 {
     assert (self);
+    zsock_send (self->store_sock, "p", msg);
 
-    self->seq += 1;
-    zsock_send (self->store_sock, "ip", self->seq, msg);
-    return self->seq;
+    int msg_id;
+    zsock_recv (self->store_sock, "i", &msg_id);
+
+    return msg_id;
 }

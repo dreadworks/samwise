@@ -117,6 +117,35 @@ save_redundant (const char *n, const char *payload)
 }
 
 
+static void
+consume_resends ()
+{
+    zpoller_t *poller = zpoller_new (frontend_pull, NULL);
+    zsock_t *sock = zpoller_wait (poller, 10);
+
+    while (sock != NULL) {
+
+        int key;
+        zframe_t *id_frame;
+        sam_msg_t *msg;
+
+        zsock_recv (frontend_pull, "ifp", &key, &id_frame, &msg);
+
+        ck_assert (key);
+        ck_assert (*(uint64_t *) zframe_data (id_frame) == 0);
+        ck_assert_int_eq (sam_msg_size (msg), 4);
+
+        zframe_destroy (&id_frame);
+        sam_msg_destroy (&msg);
+        ck_assert (msg == NULL); // refc assertion
+
+        sock = zpoller_wait (poller, 10);
+    }
+
+    zpoller_destroy (&poller);
+}
+
+
 
 //  --------------------------------------------------------------------------
 /// Test saving round robin acknowledged messages.
@@ -248,15 +277,51 @@ START_TEST(test_buf_save_redundant_race_idempotency)
 END_TEST
 
 
+/*
 //  --------------------------------------------------------------------------
-/// ...
+/// Test if a non-ack'd message gets resent.
 START_TEST(test_buf_resend)
 {
-    sam_selftest_introduce ("test_buf_resend");
+    setup ();
 
-    // ...
+    sam_selftest_introduce ("test_buf_resend");
+    int ref_key = save_roundrobin ("resend");
+
+    zclock_sleep (60);
+    send_ack (1, ref_key);
+    zclock_sleep (10);
+
+    destroy ();
+
+    zclock_sleep (10);
+    consume_resends ();
 }
 END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Checks if a message gets resent multiple times and if multiple
+/// messages are resent.
+START_TEST(test_buf_resend_multiple)
+{
+    setup ();
+
+    sam_selftest_introduce ("test_buf_resend");
+    int ref_key1 = save_roundrobin ("resend 1");
+
+    zclock_sleep (70);
+    int ref_key2 = save_roundrobin ("resend 2");
+
+    send_ack (1, ref_key1);
+    send_ack (1, ref_key2);
+
+    destroy ();
+
+    consume_resends ();
+    zclock_sleep (10);
+}
+END_TEST
+*/
 
 
 void *
@@ -280,8 +345,8 @@ sam_buf_test ()
 
 /*
     tc = tcase_create ("resending");
-    tcase_add_checked_fixture (tc, setup, destroy);
     tcase_add_test (tc, test_buf_resend);
+    tcase_add_test (tc, test_buf_resend_multiple);
     suite_add_tcase (s, tc);
 */
 

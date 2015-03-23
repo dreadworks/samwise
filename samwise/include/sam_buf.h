@@ -20,7 +20,6 @@
 
 /// buf instance wrapping the buffer
 typedef struct sam_buf_t {
-    int seq;               ///< used to assign unique message id's
     zsock_t *store_sock;   ///< for (internal) storage requests
     zactor_t *actor;       ///< maintaining the event loop
 } sam_buf_t;
