@@ -418,7 +418,11 @@ create_be_rmq (
     self->be_id_power += 1;
     assert (rabbit);
 
-    sam_be_rmq_connect (rabbit, rabbit_opts); // TODO handle erors
+    int rc = sam_be_rmq_connect (rabbit, rabbit_opts);
+    if (rc) {
+        return NULL;
+    }
+
     sam_backend_t *be = sam_be_rmq_start (
         &rabbit, self->backend_pull_endpoint);
 
@@ -520,6 +524,10 @@ init_backends (
     while (count) {
         const char *name = *names_ptr;
         sam_backend_t *be = sam_be_create (self, name, opts_ptr);
+        if (be == NULL) {
+            continue;
+        }
+
         sam_log_tracef ("send () 'be.add' to '%s'", name);
         zsock_send (self->ctl_req, "sp", "be.add", be);
 
