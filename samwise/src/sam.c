@@ -524,19 +524,18 @@ init_backends (
     while (count) {
         const char *name = *names_ptr;
         sam_backend_t *be = sam_be_create (self, name, opts_ptr);
-        if (be == NULL) {
-            continue;
-        }
+        if (be != NULL) {
+            sam_log_tracef ("send () 'be.add' to '%s'", name);
+            zsock_send (self->ctl_req, "sp", "be.add", be);
 
-        sam_log_tracef ("send () 'be.add' to '%s'", name);
-        zsock_send (self->ctl_req, "sp", "be.add", be);
+            rc = -1;
+            sam_log_tracef ("recv () for return code of 'be.add' for '%s'", name);
+            zsock_recv (self->ctl_req, "i", &rc);
+            if (rc) {
+                sam_log_errorf (
+                    "could not create backend %s", name);
+            }
 
-        rc = -1;
-        sam_log_tracef ("recv () for return code of 'be.add' for '%s'", name);
-        zsock_recv (self->ctl_req, "i", &rc);
-        if (rc) {
-            sam_log_errorf (
-                "could not create backend %s", name);
         }
 
         // advance pointers, maybe there is a more elegant way
