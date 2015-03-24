@@ -166,11 +166,15 @@ START_TEST(test_be_rmq_async_beprops)
         ck_abort_msg ("backend id not available");
     }
 
-    if (!backend->publish_psh) {
+    if (!backend->sock_sig) {
+        ck_abort_msg ("backend signal socket not available");
+    }
+
+    if (!backend->sock_pub) {
         ck_abort_msg ("backend push socket not available");
     }
 
-    if (!backend->rpc_req) {
+    if (!backend->sock_rpc) {
         ck_abort_msg ("backend rpc request socket not available");
     }
 }
@@ -189,11 +193,11 @@ START_TEST(test_be_rmq_async_xdecl)
     zmsg_pushstr (zmsg, "exchange.declare");
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    int rc = zsock_send (backend->rpc_req, "p", msg);
+    int rc = zsock_send (backend->sock_rpc, "p", msg);
     ck_assert_int_eq (rc, 0);
 
     int ret = -1;
-    rc = zsock_recv (backend->rpc_req, "i", &ret);
+    rc = zsock_recv (backend->sock_rpc, "i", &ret);
     ck_assert_int_eq (rc, 0);
     ck_assert_int_eq (ret, 0);
 
@@ -213,11 +217,11 @@ START_TEST(test_be_rmq_async_xdel)
     zmsg_pushstr (zmsg, "exchange.delete");
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    int rc = zsock_send (backend->rpc_req, "p", msg);
+    int rc = zsock_send (backend->sock_rpc, "p", msg);
     ck_assert_int_eq (rc, 0);
 
     int ret = -1;
-    rc = zsock_recv (backend->rpc_req, "i", &ret);
+    rc = zsock_recv (backend->sock_rpc, "i", &ret);
     ck_assert_int_eq (rc, 0);
     ck_assert_int_eq (ret, 0);
 
@@ -242,28 +246,20 @@ START_TEST(test_be_rmq_async_publish)
 
     int msg_id = 17;
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    int rc = zsock_send (backend->publish_psh, "ip", msg_id, msg);
+    int rc = zsock_send (backend->sock_pub, "ip", msg_id, msg);
     ck_assert_int_eq (rc, 0);
 
     // wait for ack
-    sam_res_t res_t;
     uint64_t returned_be_id;
     zframe_t *id_frame;
     int returned_msg_id;
 
-    rc = zsock_recv (
-        pll, "fii",
-        &id_frame,
-        &res_t,
-        &returned_msg_id);
-
+    rc = zsock_recv (pll, "fi", &id_frame, &returned_msg_id);
     returned_be_id = *(uint64_t *) zframe_data (id_frame);
     zframe_destroy (&id_frame);
 
     ck_assert_int_eq (rc, 0);
-
     ck_assert_int_eq (returned_be_id, be_id);
-    ck_assert (res_t == SAM_RES_ACK);
     ck_assert_int_eq (returned_msg_id, msg_id);
 }
 END_TEST

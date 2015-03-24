@@ -96,28 +96,52 @@ new_store_item (
 
 
 //  --------------------------------------------------------------------------
-/// Checks if the frame returned by the broker is an acknowledgement.
-static void
-check_amqp_ack_frame (
-    amqp_frame_t frame)
+/// Signals the connection loss and prepares the instance for destruction.
+static int
+connection_loss (sam_be_rmq_t *self)
 {
-    if (frame.frame_type != AMQP_FRAME_METHOD) {
+    self->connected = false;
+    zsock_send (
+        self->sock_sig, "is",
+        SAM_BE_SIG_CONNECTION_LOSS, self->name);
+    return -1;
+}
 
-        sam_log_errorf (
-            "amqp: got %d instead of METHOD\n",
-            frame.frame_type);
 
-        assert (false);
+//  --------------------------------------------------------------------------
+/// This function reads all necessary information from a frame and
+/// publishes the acknowledgement.
+static void
+handle_ack (
+    sam_be_rmq_t *self,
+    amqp_frame_t *frame)
+{
+    // retrieve frame contents
+    amqp_basic_ack_t *props = frame->payload.method.decoded;
+
+    assert (props);
+    sam_log_tracef (
+        "'%s' received ack no %d", self->name, props->delivery_tag);
+
+
+    // look the msg key up and update the store
+    store_item *item = zlist_first (self->store);
+    while (item && item->seq != props->delivery_tag) {
+        item = zlist_next (self->store);
     }
 
-    if (frame.payload.method.id != AMQP_BASIC_ACK_METHOD) {
+    assert (item);
+    sam_log_tracef ("send () ack for '%d'", item->key);
 
-        sam_log_errorf (
-            "amqp: got %d instead of BASIC_ACK",
-            frame.payload.properties.class_id);
+    zframe_t *id = zframe_new (&self->id, sizeof (self->id));
+    zsock_send (self->sock_ack, "fi", id, item->key);
+    zframe_destroy (&id);
 
-        assert (false);
-    }
+    sam_log_tracef (
+        "'%s' removes %d (seq: %d) from the store",
+        self->name, item->key, item->seq);
+
+    zlist_remove (self->store, item);
 }
 
 
@@ -142,42 +166,32 @@ handle_amqp (
     int rc = amqp_simple_wait_frame_noblock (
         self->amqp.connection, &frame, &timeout);
 
-    while (rc != AMQP_STATUS_TIMEOUT) {
 
-        // retrieve frame contents
-        check_amqp_ack_frame (frame);
-        amqp_basic_ack_t *props = frame.payload.method.decoded;
-        assert (props);
-        sam_log_tracef (
-            "'%s' received ack no %d", self->name, props->delivery_tag);
+    // rabbitmq-c acts edge triggered, so this loop needs to
+    // eat all currently buffered frames
+    while (rc == AMQP_STATUS_OK) {
 
-
-        // look the msg key up and update the store
-        store_item *item = zlist_first (self->store);
-        while (item && item->seq != props->delivery_tag) {
-            item = zlist_next (self->store);
+        // this must be handled
+        if (frame.payload.method.id != AMQP_BASIC_ACK_METHOD) {
+            sam_log_errorf (
+                "got something different than an ack: %d",
+                frame.payload.method.id);
+            assert (false);
         }
 
-        assert (item);
-        sam_log_tracef ("send () ack for '%d'", item->key);
-
-        zframe_t *id = zframe_new (&self->id, sizeof (self->id));
-        zsock_send (
-            self->psh, "fii", id, SAM_RES_ACK, item->key);
-        zframe_destroy (&id);
-
-        sam_log_tracef (
-            "'%s' removes %d (seq: %d) from the store",
-            self->name,
-            item->key,
-            item->seq);
-
-        zlist_remove (self->store, item);
-
-
-        // rabbitmq-c acts edge triggered
+        // handle acknowledgement
+        handle_ack (self, &frame);
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.connection, &frame, &timeout);
+    }
+
+    // handle disconnect
+    if (rc != AMQP_STATUS_TIMEOUT) {
+        sam_log_errorf (
+            "looks like '%s' is no longer available (%d)",
+            self->name, rc);
+
+        return connection_loss (self);
     }
 
     return 0;
@@ -321,8 +335,8 @@ actor (
     self->amqp_pollitem = &amqp_pollitem;
 
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
-    zloop_reader (loop, self->publish_pll, handle_publish_req, self);
-    zloop_reader (loop, self->rpc_rep, handle_rpc_req, self);
+    zloop_reader (loop, self->sock_pub, handle_publish_req, self);
+    zloop_reader (loop, self->sock_rpc, handle_rpc_req, self);
 
     zloop_poller (loop, &amqp_pollitem, handle_amqp, self);
 
@@ -452,6 +466,7 @@ sam_be_rmq_new (
     self->store = zlist_new ();
     zlist_set_destructor (self->store, free_store_item);
 
+    self->connected = false;
     return self;
 }
 
@@ -470,23 +485,25 @@ sam_be_rmq_destroy (
 
     zlist_destroy (&(*self)->store);
 
+    if ((*self)->connected) {
+        try ("closing message channel", amqp_channel_close (
+                 (*self)->amqp.connection,
+                 (*self)->amqp.message_channel,
+                 AMQP_REPLY_SUCCESS));
 
-    try ("closing message channel", amqp_channel_close (
-             (*self)->amqp.connection,
-             (*self)->amqp.message_channel,
-             AMQP_REPLY_SUCCESS));
+        try ("closing method channel", amqp_channel_close (
+                 (*self)->amqp.connection,
+                 (*self)->amqp.method_channel,
+                 AMQP_REPLY_SUCCESS));
 
-    try ("closing method channel", amqp_channel_close (
-             (*self)->amqp.connection,
-             (*self)->amqp.method_channel,
-             AMQP_REPLY_SUCCESS));
-
-    try ("closing connection", amqp_connection_close (
-             (*self)->amqp.connection,
-             AMQP_REPLY_SUCCESS));
+        try ("closing connection", amqp_connection_close (
+                 (*self)->amqp.connection,
+                 AMQP_REPLY_SUCCESS));
+    }
 
     int rc = amqp_destroy_connection ((*self)->amqp.connection);
     assert (rc >= 0);
+
 
     free ((*self)->name);
     free (*self);
@@ -570,6 +587,7 @@ sam_be_rmq_connect (
     try ("enable publisher confirms",
          amqp_get_rpc_reply(self->amqp.connection));
 
+    self->connected = true;
     return 0;
 }
 
@@ -610,8 +628,7 @@ sam_be_rmq_publish (
             "'%s' connection lost while publishing!",
             self->name);
 
-        zsock_send (self->psh, "i", SAM_RES_CONNECTION_LOSS);
-        return -1;
+        return connection_loss (self);
     }
 
     assert (rc == 0);
@@ -637,7 +654,21 @@ sam_be_rmq_handle_ack (
     int ack_c = 0;
 
     while (rc != AMQP_STATUS_TIMEOUT) {
-        check_amqp_ack_frame (frame);
+        if (frame.frame_type != AMQP_FRAME_METHOD) {
+            sam_log_errorf (
+                "amqp: got %d instead of METHOD\n",
+                frame.frame_type);
+
+            assert (false);
+        }
+
+        if (frame.payload.method.id != AMQP_BASIC_ACK_METHOD) {
+            sam_log_errorf (
+                "amqp: got %d instead of BASIC_ACK",
+                frame.payload.properties.class_id);
+
+            assert (false);
+        }
 
         rc = amqp_simple_wait_frame_noblock (
             self->amqp.connection, &frame, &timeout);
@@ -709,12 +740,13 @@ sam_be_rmq_exchange_delete (
 sam_backend_t *
 sam_be_rmq_start (
     sam_be_rmq_t **self,
-    char *pll_endpoint)
+    char *ack_endpoint)
 {
     char buf [64];
     sam_log_tracef (
         "'%s' starting message backend actor",
         (*self)->name);
+
 
     // create backend
     sam_backend_t *backend = malloc (sizeof (sam_backend_t));
@@ -722,42 +754,49 @@ sam_be_rmq_start (
     backend->name = (*self)->name;
     backend->id = (*self)->id;
 
+
+    // signals
+    snprintf (buf, 64, "inproc://be_rmq-%s-signal", (*self)->name);
+    (*self)->sock_sig = zsock_new_push (buf);
+    backend->sock_sig = zsock_new_pull (buf);
+
+    assert ((*self)->sock_sig);
+    assert (backend->sock_sig);
+    sam_log_tracef (
+        "'%s' created pair sockets on '%s'",
+        (*self)->name, buf);
+
+
     // publish PUSH/PULL
     snprintf (buf, 64, "inproc://be_rmq-%s-publish", (*self)->name);
+    (*self)->sock_pub = zsock_new_pull (buf);
+    backend->sock_pub = zsock_new_push (buf);
 
-    (*self)->publish_pll = zsock_new_pull (buf);
-    assert ((*self)->publish_pll);
-
-    backend->publish_psh = zsock_new_push (buf);
-    assert (backend->publish_psh);
-
+    assert ((*self)->sock_pub);
+    assert (backend->sock_pub);
     sam_log_tracef (
         "'%s' created psh/pull pair on '%s'",
-        (*self)->name,
-        buf);
+        (*self)->name, buf);
 
 
     // rpc REQ/REP
     snprintf (buf, 64, "inproc://be_rmq-%s-rpc", (*self)->name);
+    (*self)->sock_rpc = zsock_new_rep (buf);
+    backend->sock_rpc = zsock_new_req (buf);
 
-    (*self)->rpc_rep = zsock_new_rep (buf);
-    assert ((*self)->rpc_rep);
-
-    backend->rpc_req = zsock_new_req (buf);
-    assert (backend->rpc_req);
-
+    assert ((*self)->sock_rpc);
+    assert (backend->sock_rpc);
     sam_log_tracef (
         "'%s' created req/rep pair for rpc '%s'",
         (*self)->name, buf);
 
 
-    // feedback PUSH
-    (*self)->psh = zsock_new_push (pll_endpoint);
-    assert ((*self)->psh);
+    // ack PUSH
+    (*self)->sock_ack = zsock_new_push (ack_endpoint);
+    assert ((*self)->sock_ack);
     sam_log_tracef (
         "'%s' connected push socket to '%s'",
-        (*self)->name,
-        pll_endpoint);
+        (*self)->name, ack_endpoint);
 
 
     // change ownership
@@ -782,16 +821,20 @@ sam_be_rmq_stop (
     sam_be_rmq_t *self = (*backend)->_self;
     zactor_destroy (&(*backend)->_actor);
 
+    // signals
+    zsock_destroy (&(*backend)->sock_sig);
+    zsock_destroy (&self->sock_sig);
+
     // publish PUSH/PULL
-    zsock_destroy (&(*backend)->publish_psh);
-    zsock_destroy (&self->publish_pll);
+    zsock_destroy (&(*backend)->sock_pub);
+    zsock_destroy (&self->sock_pub);
 
     // rpc REQ/REP
-    zsock_destroy (&(*backend)->rpc_req);
-    zsock_destroy (&self->rpc_rep);
+    zsock_destroy (&(*backend)->sock_rpc);
+    zsock_destroy (&self->sock_rpc);
 
-    // feedback PUSH
-    zsock_destroy (&self->psh);
+    // ack PUSH
+    zsock_destroy (&self->sock_ack);
 
     free (*backend);
     *backend = NULL;

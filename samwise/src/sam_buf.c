@@ -647,10 +647,9 @@ handle_backend_req (
 
     zframe_t *id_frame;
     uint64_t be_id = 0;
-    sam_res_t res_t;
     int msg_id = -1;
 
-    zsock_recv (pll, "fii", &id_frame, &res_t, &msg_id);
+    zsock_recv (pll, "fi", &id_frame, &msg_id);
     be_id = *(uint64_t *) zframe_data (id_frame);
 
     assert (id_frame);
@@ -659,17 +658,11 @@ handle_backend_req (
 
     zframe_destroy (&id_frame);
 
-    if (res_t == SAM_RES_ACK) {
-        sam_log_tracef (
-            "ack from '%" PRIu64 "' for msg: '%d'",
-            be_id, msg_id);
+    sam_log_tracef (
+        "ack from '%" PRIu64 "' for msg: '%d'",
+        be_id, msg_id);
 
-        rc = ack (state, be_id, msg_id);
-    }
-    else {
-        sam_log_errorf ("got non-ack answer: %d", res_t);
-    }
-
+    rc = ack (state, be_id, msg_id);
     return rc;
 }
 

@@ -37,9 +37,8 @@
 
 /// response types
 typedef enum {
-    SAM_RES_ACK,                ///< acknowledgement from be[i]
-    SAM_RES_CONNECTION_LOSS     ///< connection loss registered in be[i]
-} sam_res_t;
+    SAM_BE_SIG_CONNECTION_LOSS ///< if a backend suffered a connection loss
+} sam_be_sig_t;
 
 
 /// return type for client responses

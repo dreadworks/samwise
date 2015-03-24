@@ -61,12 +61,14 @@ typedef enum {
 /// of different message backends
 typedef struct sam_backend_t {
     // public interface
-    char *name;            ///< name of the backend
-    uint64_t id;           ///< id (power of 2) > 0
-    zsock_t *publish_psh;  ///< push messages to be published
-    zsock_t *rpc_req;      ///< request an rpc call
+    char *name;          ///< name of the backend
+    uint64_t id;         ///< id (power of 2) > 0
 
-    // privates
+    zsock_t *sock_sig;   ///< socket for signaling state changes
+    zsock_t *sock_pub;   ///< push messages to be published
+    zsock_t *sock_rpc;   ///< request an rpc call
+
+    // privates, do not touch!
     zactor_t *_actor;   ///< thread handling the broker connection
     void *_self;        ///< reference used by stop() give back control
 } sam_backend_t;

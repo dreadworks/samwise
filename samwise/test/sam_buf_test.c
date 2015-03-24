@@ -72,8 +72,8 @@ send_ack (uint64_t be_id, int key)
     zframe_t *id_frame = zframe_new (&be_id, sizeof (be_id));
 
     zsock_send (
-        backend_push, "fii",
-        id_frame, SAM_RES_ACK, key);
+        backend_push, "fi",
+        id_frame, key);
 
     zframe_destroy (&id_frame);
 

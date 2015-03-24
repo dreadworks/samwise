@@ -38,11 +38,13 @@ typedef struct sam_be_rmq_t {
         unsigned int seq;                   ///< incremented number for acks
     } amqp;
 
-    zsock_t *publish_pll;          ///< accepting publishing requests
-    zsock_t *rpc_rep;              ///< accepting rpc requests
-    zsock_t *psh;                  ///< pushing ack's as a generic backend
+    zsock_t *sock_sig;             ///< send signals to the be maintainer
+    zsock_t *sock_pub;             ///< accepting publishing requests
+    zsock_t *sock_rpc;             ///< accepting rpc requests
+    zsock_t *sock_ack;             ///< pushing ack's as a generic backend
     zmq_pollitem_t *amqp_pollitem; ///< amqp tcp socket wrapped as pollitem
 
+    bool connected;  ///< indicator needed for destroy ()
 } sam_be_rmq_t;
 
 
@@ -143,7 +145,7 @@ sam_be_rmq_exchange_delete (
 sam_backend_t *
 sam_be_rmq_start (
     sam_be_rmq_t **self,
-    char *pll_endpoint);
+    char *ack_endpoint);
 
 
 //  --------------------------------------------------------------------------

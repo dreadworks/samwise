@@ -81,6 +81,65 @@ new_ret ()
 
 
 //  --------------------------------------------------------------------------
+/// This removes a backend and all event listener from its signal socket.
+static int
+remove_backend (
+    state_t *state,
+    zloop_t *loop,
+    const char *name)
+{
+    int rc = -1;
+    sam_backend_t *be = zlist_first (state->backends);
+
+    while (be != NULL) {
+        if (!strcmp (name, be->name)) {
+            sam_log_infof ("removing backend %s", name);
+
+            zlist_remove (state->backends, be);
+            zloop_reader_end (loop, be->sock_sig);
+
+            sam_be_rmq_t *rabbit = sam_be_rmq_stop (&be);
+            sam_be_rmq_destroy (&rabbit);
+            rc = 0;
+        }
+    }
+
+    return rc;
+}
+
+
+
+//  --------------------------------------------------------------------------
+/// Handle signals from backends. Currently, the only existing signal
+/// is a connection loss.
+static int
+handle_sig (
+    zloop_t *loop,
+    zsock_t *sig,
+    void *args)
+{
+    state_t *state = args;
+
+    int code;
+    char *be_name;
+
+    int rc = zsock_recv (sig, "is", &code, &be_name);
+    if (rc) {
+        sam_log_error ("could not receive signal");
+        return rc;
+    }
+
+    sam_log_errorf ("got signal %d from '%s'!", code, be_name);
+    assert (code == SAM_BE_SIG_CONNECTION_LOSS);
+
+    rc = remove_backend (state, loop, be_name);
+    free (be_name);
+
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
 /// Publish a message to the backends.
 static int
 handle_frontend_pub (
@@ -112,10 +171,17 @@ handle_frontend_pub (
     }
 
     int backend_c = zlist_size (state->backends);
+    if (!backend_c) {
+        sam_log_error ("discarding message, no backends available");
+        sam_msg_destroy (&msg);
+        return 0;
+    }
+
 
     sam_log_tracef (
         "publish %s(%d), %d broker(s) available; 0x%" PRIx64 " ack'd",
         distribution, n, backend_c, be_acks);
+
 
     while (0 < n && 0 < backend_c) {
         n -= 1;
@@ -136,7 +202,7 @@ handle_frontend_pub (
                 "send () message %d to '%s'",
                 key, backend->name);
 
-            zsock_send (backend->publish_psh, "ip", key, msg);
+            zsock_send (backend->sock_pub, "ip", key, msg);
         }
 
         if (n && !backend_c) {
@@ -176,11 +242,11 @@ handle_frontend_rpc (
     sam_backend_t *backend = zlist_first (state->backends);
     while (backend != NULL) {
         sam_log_tracef ("send () rpc req to '%s'", backend->name);
-        rc = zsock_send (backend->rpc_req, "p", msg);
+        rc = zsock_send (backend->sock_rpc, "p", msg);
 
         int status = -1;
         sam_log_tracef ("recv () reply from backend '%s'", backend->name);
-        rc = zsock_recv (backend->rpc_req, "i", &status);
+        rc = zsock_recv (backend->sock_rpc, "i", &status);
         backend = zlist_next (state->backends);
     }
 
@@ -195,7 +261,7 @@ handle_frontend_rpc (
 /// Handle control commands like adding or removing backends.
 static int
 handle_ctl_req (
-    zloop_t *loop UU,
+    zloop_t *loop,
     zsock_t *rep,
     void *args)
 {
@@ -219,6 +285,7 @@ handle_ctl_req (
         if (!rc) {
             sam_log_infof ("inserting backend '%s'", be->name);
             rc = zlist_append (state->backends, be);
+            zloop_reader (loop, be->sock_sig, handle_sig, state);
         }
     }
 
@@ -227,18 +294,7 @@ handle_ctl_req (
         char *name;
         rc = sam_msg_pop (msg, "s", &name);
         if (!rc) {
-
-            rc = -1;
-            sam_backend_t *be = zlist_first (state->backends);
-            while (be != NULL) {
-                if (!strcmp (name, be->name)) {
-                    sam_log_infof ("removing backend %s", name);
-                    zlist_remove (state->backends, be);
-                    sam_be_rmq_t *rabbit = sam_be_rmq_stop (&be);
-                    sam_be_rmq_destroy (&rabbit);
-                    rc = 0;
-                }
-            }
+            rc = remove_backend (state, loop, name);
         }
     }
 
@@ -273,7 +329,7 @@ actor (
     zloop_reader (loop, state->frontend_pub, handle_frontend_pub, state);
     zloop_reader (loop, state->frontend_rpc, handle_frontend_rpc, state);
 
-    // internal channel for control commands
+    // internal channels for control commands
     zloop_reader (loop, state->ctl_rep, handle_ctl_req, state);
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
 
@@ -420,6 +476,7 @@ create_be_rmq (
 
     int rc = sam_be_rmq_connect (rabbit, rabbit_opts);
     if (rc) {
+        sam_be_rmq_destroy (&rabbit);
         return NULL;
     }
 
