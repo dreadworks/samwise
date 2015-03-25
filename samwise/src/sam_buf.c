@@ -69,7 +69,12 @@
 /// State object maintained by the actor
 typedef struct state_t {
     int seq;                ///< used to assign unique message id's
-    DB *dbp;                ///< database pointer
+
+    /// all database related stuff
+    struct db {
+        DB_ENV *e;           ///< database environment
+        DB *p;               ///< database pointer
+    } db;
 
     zsock_t *in;            ///< for arriving acknowledgements
     zsock_t *out;           ///< for re-publishing
@@ -152,33 +157,95 @@ db_failure_reason (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Close (partially) initialized database and environment.
+static void
+close_db (
+    state_t *state)
+{
+    int rc = 0;
+
+    if (state->db.p) {
+        rc = state->db.p->close (state->db.p, 0);
+        if (rc) {
+            sam_log_errorf (
+                "could not safely close db: %s",
+                db_strerror (rc));
+        }
+    }
+
+    if (state->db.e) {
+        rc = state->db.e->close (state->db.e, 0);
+        if (rc) {
+            sam_log_errorf (
+                "could not safely close db environment: %s",
+                db_strerror (rc));
+        }
+    }
+}
+
+
 static int
 create_db (
     state_t *state,
-    const char *fname)
+    const char *db_home_name,
+    const char *db_file_name)
 {
-    int rc = db_create (&state->dbp, NULL, 0);
+
+    // initialize the environment
+    uint32_t env_flags =
+        DB_CREATE      |    // create environment if it's not there
+        DB_INIT_TXN    |    // initialize transactions
+        DB_INIT_LOCK   |    // locking (is this needed for st?)
+        DB_INIT_LOG    |    // for recovery
+        DB_INIT_MPOOL;      // in-memory cache
+
+    int rc = db_env_create (&state->db.e, 0);
     if (rc) {
-        sam_log_error ("could not create database");
+        sam_log_errorf (
+            "could not create db environment: %s",
+            db_strerror (rc));
         return rc;
     }
 
-    rc = state->dbp->open (
-        state->dbp,
+    rc = state->db.e->open (state->db.e, db_home_name, env_flags, 0);
+    if (rc) {
+        sam_log_errorf (
+            "could not open db environment: %s",
+            db_strerror (rc));
+        close_db (state);
+        return rc;
+    }
+
+
+    // open the database
+    uint32_t db_flags =
+        DB_CREATE |       // create db if it's not there
+        DB_AUTO_COMMIT;   // make all ops. transactional
+
+    rc = db_create (&state->db.p, state->db.e, 0);
+    if (rc) {
+        state->db.e->err (state->db.e, rc, "database creation failed");
+        close_db (state);
+        return rc;
+    }
+
+   rc = state->db.p->open (
+        state->db.p,
         NULL,             // transaction pointer
-        fname,            // on disk file
+        db_file_name,     // on disk file
         NULL,             // logical db name
         DB_BTREE,         // access method
-        DB_CREATE,        // open flags
+        db_flags,         // open flags
         0);               // file mode
 
     if (rc) {
-        sam_log_error ("could not open database");
-        state->dbp->close (state->dbp, 0);
+        state->db.e->err (state->db.e, rc, "database open failed");
+        state->db.p->close (state->db.p, 0);
         return rc;
     }
 
-    state->dbp->set_errcall (state->dbp, db_error_handler);
+    state->db.p->set_errcall (state->db.p, db_error_handler);
     return rc;
 }
 
@@ -201,8 +268,8 @@ put (
     val->size = size;
     val->data = *record;
 
-    int rc = state->dbp->put (
-        state->dbp, NULL, key, val, 0);
+    int rc = state->db.p->put (
+        state->db.p, NULL, key, val, 0);
 
     free (*record);
     *record = NULL;
@@ -226,7 +293,7 @@ update (
     DBT *key,
     DBT *val)
 {
-    int rc = state->dbp->put (state->dbp, NULL, key, val, 0);
+    int rc = state->db.p->put (state->db.p, NULL, key, val, 0);
 
     if (rc) {
         sam_log_errorf (
@@ -250,7 +317,7 @@ del (
         "deleting '%d' from the buffer",
         *(int *) key->data);
 
-    int rc = state->dbp->del (state->dbp, NULL, key, 0);
+    int rc = state->db.p->del (state->db.p, NULL, key, 0);
 
     if (rc) {
         sam_log_errorf (
@@ -553,8 +620,8 @@ ack (
     create_key (&msg_id, &key);
     memset (&val, 0, DBT_SIZE);
 
-    int rc = state->dbp->get (
-        state->dbp, NULL, &key, &val, 0);
+    int rc = state->db.p->get (
+        state->db.p, NULL, &key, &val, 0);
 
     // record already there, update data
     if (rc == 0) {
@@ -603,8 +670,8 @@ handle_storage_req (
     memset (&val, 0, DBT_SIZE);
 
     create_key (&msg_id, &key);
-    int rc = state->dbp->get (
-        state->dbp, NULL, &key, &val, 0);
+    int rc = state->db.p->get (
+        state->db.p, NULL, &key, &val, 0);
 
 
     // record already there, update data
@@ -680,7 +747,7 @@ handle_resend (
     state_t *state = args;
 
     DBC *cursor;
-    state->dbp->cursor (state->dbp, NULL, &cursor, 0);
+    state->db.p->cursor (state->db.p, NULL, &cursor, 0);
     if (cursor == NULL) {
         sam_log_error ("could not initialize cursor");
         return -1;
@@ -790,10 +857,7 @@ actor (
     zloop_destroy (&loop);
 
     // database
-    int rc = state->dbp->close (state->dbp, 0);
-    if (rc) {
-        sam_log_errorf ("could not safely close db: %d", rc);
-    }
+    close_db (state);
 
     // clean up
     zsock_destroy (&state->in);
@@ -823,11 +887,18 @@ sam_buf_new (
     assert (self);
     assert (state);
 
+    // to check for null values
+    state->db.p = NULL;
+    state->db.e = NULL;
+
     // read config
-    char *db_name;
+    char
+        *db_file_name,
+        *db_home_name;
 
     if (
-        sam_cfg_buf_file (cfg, &db_name) ||
+        sam_cfg_buf_home (cfg, &db_home_name) ||
+        sam_cfg_buf_file (cfg, &db_file_name) ||
         sam_cfg_buf_retry_count (cfg, &state->tries) ||
         sam_cfg_buf_retry_interval (cfg, &state->interval) ||
         sam_cfg_buf_retry_threshold (cfg, &state->threshold)) {
@@ -838,7 +909,7 @@ sam_buf_new (
 
 
     // init
-    int rc = create_db (state, db_name);
+    int rc = create_db (state, db_home_name, db_file_name);
     if (rc) {
         goto abort;
     }
