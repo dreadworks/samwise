@@ -295,6 +295,26 @@ sam_cfg_buf_file (
 
 
 //  --------------------------------------------------------------------------
+/// Retrieve the home directory location of the buffer.
+int
+sam_cfg_buf_home (
+    sam_cfg_t *self,
+    char **dname)
+{
+    assert (self);
+
+    *dname = zconfig_resolve (self->zcfg, "buffer/home", NULL);
+    if (*dname == NULL) {
+        sam_log_error ("could not load buffer home directory");
+        return -1;
+    }
+
+    return 0;
+}
+
+
+
+//  --------------------------------------------------------------------------
 /// Retrieve the maximum size of the buffer.
 int
 sam_cfg_buf_size (

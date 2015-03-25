@@ -59,6 +59,14 @@ sam_cfg_buf_file (
 
 
 //  --------------------------------------------------------------------------
+/// @brief Load the buffers file location
+int
+sam_cfg_buf_home (
+    sam_cfg_t *self,
+    char **dname);
+
+
+//  --------------------------------------------------------------------------
 /// @brief Returns the buffer size in bytes
 /// @param self A cfg instance
 /// @param size Pointer to the value set
