@@ -185,6 +185,8 @@ close_db (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Create a database environment and a database handle.
 static int
 create_db (
     state_t *state,
@@ -258,7 +260,8 @@ put (
     int size,
     byte **record,
     DBT *key,
-    DBT *val)
+    DBT *val,
+    DB_TXN *txn)
 {
     sam_log_tracef (
         "putting '%d' into the buffer (acks remaining: %d)",
@@ -269,7 +272,7 @@ put (
     val->data = *record;
 
     int rc = state->db.p->put (
-        state->db.p, NULL, key, val, 0);
+        state->db.p, txn, key, val, 0);
 
     free (*record);
     *record = NULL;
@@ -291,9 +294,10 @@ static int
 update (
     state_t *state,
     DBT *key,
-    DBT *val)
+    DBT *val,
+    DB_TXN *txn)
 {
-    int rc = state->db.p->put (state->db.p, NULL, key, val, 0);
+    int rc = state->db.p->put (state->db.p, txn, key, val, 0);
 
     if (rc) {
         sam_log_errorf (
@@ -311,13 +315,14 @@ update (
 static int
 del (
     state_t *state,
-    DBT *key)
+    DBT *key,
+    DB_TXN *txn)
 {
     sam_log_tracef (
         "deleting '%d' from the buffer",
         *(int *) key->data);
 
-    int rc = state->db.p->del (state->db.p, NULL, key, 0);
+    int rc = state->db.p->del (state->db.p, txn, key, 0);
 
     if (rc) {
         sam_log_errorf (
@@ -349,6 +354,40 @@ get_next (
     }
 
     return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Create a transaction handle.
+static DB_TXN *
+create_txn (state_t *state)
+{
+    DB_TXN *txn = NULL;
+    int rc = state->db.e->txn_begin (state->db.e, NULL, &txn, 0);
+
+    if (rc) {
+        state->db.e->err (state->db.e, rc, "transaction begin failed");
+    }
+
+    return txn;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Either abort or commit a transaction based on rc.
+static void
+end_txn (int rc, DB_TXN *txn)
+{
+    if (rc) {
+        sam_log_error ("aborting transaction");
+        txn->abort (txn);
+    }
+    else {
+        if (txn->commit (txn, 0)) {
+            sam_log_error ("transaction failed!");
+            // TODO do I need to return with some error indication here?
+        }
+    }
 }
 
 
@@ -440,6 +479,7 @@ static int
 create_record_store (
     state_t *state,
     DBT *key,
+    DB_TXN *txn,
     sam_msg_t *msg)
 {
     DBT val;
@@ -465,7 +505,7 @@ create_record_store (
     byte *content = record + header_size;
     sam_msg_encode (msg, &content);
 
-    return put (state, total_size, &record, key, &val);
+    return put (state, total_size, &record, key, &val, txn);
 }
 
 
@@ -479,6 +519,7 @@ update_record_store (
     state_t *state,
     DBT *key,
     DBT *val,
+    DB_TXN *txn,
     sam_msg_t *msg)
 {
     int rc = 0;
@@ -494,7 +535,7 @@ update_record_store (
 
     // remove if there are no outstanding acks
     if (!header->acks_remaining) {
-        rc = del (state, key);
+        rc = del (state, key, txn);
     }
 
     // add encoded message to the record
@@ -516,7 +557,7 @@ update_record_store (
         byte *content = record + header_size;
         sam_msg_encode (msg, &content);
 
-        rc = put (state, total_size, &record, key, val);
+        rc = put (state, total_size, &record, key, val, txn);
     }
 
     return rc;
@@ -531,6 +572,7 @@ create_record_ack (
     state_t *state,
     DBT *key,
     DBT *val,
+    DB_TXN *txn,
     uint64_t backend_id)
 {
     size_t record_size = sizeof (record_header_t);
@@ -545,7 +587,7 @@ create_record_ack (
     header->acks_remaining = -1;
     header->be_acks = backend_id;
 
-    return put (state, record_size, &record, key, val);
+    return put (state, record_size, &record, key, val, txn);
 }
 
 
@@ -561,6 +603,7 @@ update_record_ack (
     state_t *state,
     DBT *key,
     DBT *val,
+    DB_TXN *txn,
     uint64_t backend_id)
 {
     int rc = 0;
@@ -579,7 +622,7 @@ update_record_ack (
 
     // enough acks arrived, delete record
     if (!header->acks_remaining) {
-        rc = del (state, key);
+        rc = del (state, key, txn);
     }
 
     // not enough acks, update record
@@ -589,7 +632,7 @@ update_record_ack (
             *(int *) key->data,
             header->acks_remaining);
 
-        rc = update (state, key, val);
+        rc = update (state, key, val, txn);
     }
 
     return rc;
@@ -616,29 +659,32 @@ ack (
     int msg_id)
 {
     DBT key, val;
+    DB_TXN *txn = create_txn (state);
 
     create_key (&msg_id, &key);
     memset (&val, 0, DBT_SIZE);
 
     int rc = state->db.p->get (
-        state->db.p, NULL, &key, &val, 0);
+        state->db.p, txn, &key, &val, 0);
 
     // record already there, update data
     if (rc == 0) {
-        rc = update_record_ack (state, &key, &val, backend_id);
+        rc = update_record_ack (state, &key, &val, txn, backend_id);
     }
 
     // record not yet there, create db entry
     else if (rc == DB_NOTFOUND) {
-        rc = create_record_ack (state, &key, &val, backend_id);
+        rc = create_record_ack (state, &key, &val, txn, backend_id);
     }
 
     else {
         sam_log_errorf (
             "could not retrieve '%d': %s",
             msg_id, db_failure_reason (rc));
+        rc = -1;
     }
 
+    end_txn (rc, txn);
     return rc;
 }
 
@@ -663,36 +709,39 @@ handle_storage_req (
     sam_log_tracef ("handling storage request for '%d'", msg_id);
 
     // position of this call handles what guarantee
-    // is promised to the publishing client.
+    // is promised to the publishing client. See #66
     zsock_send (store_sock, "i", msg_id);
 
     DBT key, val;
     memset (&val, 0, DBT_SIZE);
 
+
+    // try to retrieve the record
     create_key (&msg_id, &key);
-    int rc = state->db.p->get (
-        state->db.p, NULL, &key, &val, 0);
+    DB_TXN *txn = create_txn (state);
+    int rc = state->db.p->get (state->db.p, txn, &key, &val, 0);
 
 
     // record already there, update data
     if (rc == 0) {
         assert (val.size == sizeof (record_header_t));
-        update_record_store (state, &key, &val, msg);
+        rc = update_record_store (state, &key, &val, txn, msg);
     }
 
 
     // record not yet there, create db entry
     else if (rc == DB_NOTFOUND) {
-        rc = create_record_store (state, &key, msg);
+        rc = create_record_store (state, &key, txn, msg);
     }
 
     else {
         sam_log_errorf (
             "could not retrieve '%d': %s",
             msg_id, db_failure_reason (rc));
+        rc = -1;
     }
 
-
+    end_txn (rc, txn);
     sam_msg_destroy (&msg);
     return rc;
 }
@@ -746,10 +795,15 @@ handle_resend (
     sam_log_trace ("resend cycle triggered");
     state_t *state = args;
 
+    // create transaction handle
+    DB_TXN *txn = create_txn (state);
+
+    // create cursor
     DBC *cursor;
-    state->db.p->cursor (state->db.p, NULL, &cursor, 0);
+    state->db.p->cursor (state->db.p, txn, &cursor, 0);
     if (cursor == NULL) {
         sam_log_error ("could not initialize cursor");
+        end_txn (-1, txn);
         return -1;
     }
 
@@ -775,7 +829,7 @@ handle_resend (
                 "no retries left, discarding message '%d'",
                 *(int *) key.data);
 
-            del (state, &key);
+            cursor->del (cursor, 0);
             rc = get_next (cursor, &key, &val);
             continue;
         }
@@ -794,14 +848,18 @@ handle_resend (
         header->ts = zclock_mono ();
 
         // write new record, delete the old one
-        if (update (state, &key, &val)) {
+        rc = update (state, &key, &val, txn);
+        if (rc) {
+            end_txn (rc, txn);
             return -1;
         }
+
 
         // decode message
         sam_msg_t *msg = sam_msg_decode (msg_buf, msg_size);
         if (msg == NULL) {
             sam_log_error ("could not decode stored message");
+            end_txn (rc, txn);
             return -1;
         }
 
@@ -809,21 +867,26 @@ handle_resend (
             &((record_header_t *) val.data)->be_acks,
             sizeof (uint64_t));
 
+
         // re-publish message
         sam_log_tracef ("resending msg '%d'", *(int *) key.data);
-        zsock_send (
-            state->out, "ifp",
-            *(int *) key.data,
-            id_frame,
-            msg);
-
+        zsock_send (state->out, "ifp", *(int *) key.data, id_frame, msg);
         zframe_destroy (&id_frame);
-        cursor->del (cursor, 0);
+
+
+        // delete old record
+        rc = cursor->del (cursor, 0);
+        if (rc) {
+            sam_log_error ("could not delete record");
+            end_txn (rc, txn);
+            return -1;
+        }
 
         rc = get_next (cursor, &key, &val);
     }
 
     cursor->close (cursor);
+    end_txn (0, txn);
     return 0;
 }
 
