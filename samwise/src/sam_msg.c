@@ -151,7 +151,7 @@ sam_msg_new (
     zmsg_t **zmsg)
 {
     assert (zmsg);
-    sam_msg_t *self = new (true);
+    sam_msg_t *self = new ();
 
     // optimally, this could just access zmsg->frames...
     zframe_t *frame = zmsg_pop (*zmsg);
@@ -477,7 +477,7 @@ sam_msg_decode (
     size_t size)
 {
     // taken from zmsg_decode
-    sam_msg_t *self = new (false);
+    sam_msg_t *self = new ();
     if (!self) {
         return NULL;
     }
