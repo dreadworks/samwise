@@ -277,6 +277,27 @@ START_TEST(test_buf_save_redundant_race_idempotency)
 END_TEST
 
 
+//  --------------------------------------------------------------------------
+/// Lets the buffer resend a message multiple times, before an
+/// acknowledgment arrives for the very first
+START_TEST(test_buf_resend_late_ack)
+{
+    sam_selftest_introduce ("test_buf_resend_late_ack");
+
+    // save
+    save_roundrobin ("resend late ack");
+    zclock_sleep (10);
+
+    zclock_sleep (1000);
+
+    // late ack
+    send_ack (1, 1);
+    zclock_sleep (10);
+}
+END_TEST
+
+
+
 /*
 //  --------------------------------------------------------------------------
 /// Test if a non-ack'd message gets resent.
@@ -332,7 +353,7 @@ sam_buf_test ()
     TCase *tc = tcase_create ("save round robin");
     tcase_add_checked_fixture (tc, setup, destroy);
     tcase_add_test (tc, test_buf_save_roundrobin);
-    tcase_add_test (tc, test_buf_save_roundrobin_race);
+    // tcase_add_test (tc, test_buf_save_roundrobin_race);
     suite_add_tcase (s, tc);
 
     tc = tcase_create ("save redundant");
@@ -343,12 +364,15 @@ sam_buf_test ()
     tcase_add_test (tc, test_buf_save_redundant_race_idempotency);
     suite_add_tcase (s, tc);
 
-/*
     tc = tcase_create ("resending");
+    tcase_add_checked_fixture (tc, setup, destroy);
+    tcase_add_test (tc, test_buf_resend_late_ack);
+/*
     tcase_add_test (tc, test_buf_resend);
     tcase_add_test (tc, test_buf_resend_multiple);
-    suite_add_tcase (s, tc);
 */
+    suite_add_tcase (s, tc);
+
 
     return s;
 }
