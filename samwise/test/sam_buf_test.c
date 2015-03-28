@@ -356,6 +356,21 @@ START_TEST(test_buf_resend_multiple)
 END_TEST
 
 
+//  --------------------------------------------------------------------------
+/// Re-initializes the buffer before acknowledging the stored message.
+START_TEST(test_buf_restore)
+{
+    sam_selftest_introduce ("test_buf_restore");
+    int ref_key = save_roundrobin ("restore");
+
+    destroy ();
+    setup ();
+
+    send_ack (1, ref_key);
+    eat ();
+}
+END_TEST
+
 
 void *
 sam_buf_test ()
@@ -378,10 +393,14 @@ sam_buf_test ()
 
     tc = tcase_create ("resending");
     tcase_add_checked_fixture (tc, setup, destroy);
-    // tcase_add_test (tc, test_buf_resend);
+    tcase_add_test (tc, test_buf_resend);
     tcase_add_test (tc, test_buf_resend_multiple);
     suite_add_tcase (s, tc);
 
+    tc = tcase_create ("restore state");
+    tcase_add_checked_fixture (tc, setup, destroy);
+    tcase_add_test (tc, test_buf_restore);
+    suite_add_tcase (s, tc);
 
     return s;
 }

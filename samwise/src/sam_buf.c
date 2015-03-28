@@ -73,6 +73,7 @@
 
 /// State object maintained by the actor
 typedef struct state_t {
+    // data to be restored after restart
     int seq;                ///< used to assign unique message id's
     int last_stored;        ///< used to decide if it's a premature ack
 
@@ -111,6 +112,7 @@ typedef struct dbop_t {
 /// used to define how to read record_header_t.content
 typedef enum {
     RECORD = 0x10,    // arbitrary value, prevents false positives
+    RECORD_ACK,
     RECORD_TOMBSTONE
 } record_type_t;
 
@@ -407,16 +409,22 @@ get (
 //  --------------------------------------------------------------------------
 /// Returns the next item in the database.
 static int
-get_next (
+get_sibling (
     state_t *state,
-    dbop_t *op)
+    dbop_t *op,
+    uint32_t flag)
 {
+    assert (state);
+    assert (op);
+    assert (flag == DB_NEXT || flag == DB_PREV);
+
     memset (&op->key, 0, DBT_SIZE);
     memset (&op->val, 0, DBT_SIZE);
 
-    int rc = op->cursor->get(op->cursor, &op->key, &op->val, DB_NEXT);
+    int rc = op->cursor->get(op->cursor, &op->key, &op->val, flag);
     if (rc && rc != DB_NOTFOUND) {
-        state->db.e->err (state->db.e, rc, "could not get next item");
+        state->db.e->err (
+            state->db.e, rc, "could not get next/previous item");
     }
 
     return rc;
@@ -812,7 +820,7 @@ create_record_ack (
     }
 
     record_t *header = (record_t *) record;
-    header->type = RECORD;
+    header->type = RECORD_ACK;
     header->c.record.acks_remaining = -1;
     header->c.record.be_acks = backend_id;
 
@@ -873,6 +881,7 @@ update_record_ack (
             *(int *) op->key.data,
             header->c.record.acks_remaining);
 
+        header->type = RECORD;
         rc = update (state, op, DB_CURRENT);
     }
 
@@ -1035,7 +1044,7 @@ handle_resend (
     start_dbop (state, &op);
 
     int first_requeued_key = 0; // can never be zero
-    int rc = get_next (state, &op);
+    int rc = get_sibling (state, &op, DB_NEXT);
 
     while (
         !rc &&                                         // there's another item
@@ -1045,10 +1054,15 @@ handle_resend (
         int cur_id = *(int *) op.key.data;
         record_t *header = op.val.data;
 
+        // if early acks are reached, no record can follow
+        if (header->type == RECORD_ACK) {
+            break;
+        }
+
 
         // skip tombstones
         if (header->type == RECORD_TOMBSTONE) {
-            rc = get_next (state, &op);
+            rc = get_sibling (state, &op, DB_NEXT);
             continue;
         }
 
@@ -1056,7 +1070,7 @@ handle_resend (
         //  decrement tries
         assert (header->type == RECORD);
         if (update_record_tries (state, &op)) {
-            rc = get_next (state, &op);
+            rc = get_sibling (state, &op, DB_NEXT);
             continue;
         }
 
@@ -1077,6 +1091,8 @@ handle_resend (
             break;
         }
         state->last_stored += 1;
+        sam_log_tracef (
+            "requeued message '%d' (formerly '%d')", new_id, cur_id);
 
 
         //  resend message
@@ -1094,7 +1110,7 @@ handle_resend (
             break;
         }
 
-        rc = get_next (state, &op);
+        rc = get_sibling (state, &op, DB_NEXT);
     }
 
     if (rc == DB_NOTFOUND) {
@@ -1147,6 +1163,67 @@ actor (
 
 
 //  --------------------------------------------------------------------------
+/// If records are saved in the db, the global sequence number and
+/// last_stored property must be set accordingly.
+static int
+restore_state (state_t *state)
+{
+    state->seq = 0;
+    state->last_stored = 0;
+
+    dbop_t op;
+    if (start_dbop (state, &op)) {
+        return -1;
+    }
+
+    int rc = get_sibling (state, &op, DB_PREV);
+    if (rc && rc == DB_NOTFOUND) {
+        rc = 0;
+    }
+
+    // there are records in the db, update seq and last_stored
+    else if (!rc) {
+        state->seq = *(int *) op.key.data;
+        record_t *header = op.val.data;
+
+        if (header->type == RECORD) {
+            state->last_stored = state->seq;
+        }
+
+        // find RECORD with highest key
+        else {
+            do {
+                rc = get_sibling (state, &op, DB_PREV);
+                if (rc == DB_NOTFOUND) {
+                    state->last_stored = 0;
+                    rc = 0;
+                    break;
+                }
+
+                else if (!rc) {
+                    record_t *header = op.val.data;
+                    if (header->type == RECORD) {
+                        state->last_stored = *(int *) op.key.data;
+                        break;
+                    }
+                }
+
+            } while (rc);
+        }
+
+    }
+
+    end_dbop (state, &op, (rc)? true: false);
+
+    sam_log_infof (
+        "restored state; seq: %d, last_stored: %d",
+        state->seq, state->last_stored);
+
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
 /// Create a sam buf instance.
 sam_buf_t *
 sam_buf_new (
@@ -1187,8 +1264,7 @@ sam_buf_new (
 
 
     // init
-    int rc = create_db (state, db_home_name, db_file_name);
-    if (rc) {
+    if (create_db (state, db_home_name, db_file_name)) {
         goto abort;
     }
 
@@ -1205,8 +1281,10 @@ sam_buf_new (
     assert (state->store_sock);
     assert (self->store_sock);
 
-    state->seq = 0;
-    state->last_stored = 0;
+    // restore state
+    if (restore_state (state)) {
+        goto abort;
+    }
 
     // spawn actor
     self->actor = zactor_new (actor, state);
