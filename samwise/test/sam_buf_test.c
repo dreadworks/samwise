@@ -65,6 +65,18 @@ destroy ()
 
 
 //  --------------------------------------------------------------------------
+/// Retrieves the retry interval.
+static uint64_t
+get_interval ()
+{
+    uint64_t interval;
+    int rc = sam_cfg_buf_retry_interval (cfg, &interval);
+    ck_assert_int_eq (rc, 0);
+    return interval;
+}
+
+
+//  --------------------------------------------------------------------------
 /// Emulates a backend sending an acknowledgement.
 void
 send_ack (uint64_t be_id, int key)
@@ -91,6 +103,32 @@ save (zmsg_t *zmsg, const char *payload)
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
     return sam_buf_save (buf, msg);
+}
+
+
+//  --------------------------------------------------------------------------
+/// Eat all re-sent messages up.
+static void
+eat ()
+{
+    // sleep at least one resend interval
+    uint64_t interval = get_interval ();
+
+    zclock_sleep (interval + 100);
+    zpoller_t *poller = zpoller_new (frontend_pull, NULL);
+    while (zpoller_wait (poller, 0) != NULL) {
+
+        int msg_id;
+        zframe_t *be_acks;
+        sam_msg_t *msg;
+
+        zsock_recv (frontend_pull, "ifp", &msg_id, &be_acks, &msg);
+        zframe_destroy (&be_acks);
+        sam_msg_destroy (&msg);
+
+    }
+
+    zpoller_destroy (&poller);
 }
 
 
@@ -280,44 +318,23 @@ END_TEST
 //  --------------------------------------------------------------------------
 /// Lets the buffer resend a message multiple times, before an
 /// acknowledgment arrives for the very first
-START_TEST(test_buf_resend_late_ack)
+START_TEST(test_buf_resend)
 {
-    sam_selftest_introduce ("test_buf_resend_late_ack");
+    sam_selftest_introduce ("test_buf_resend");
 
     // save
     save_roundrobin ("resend late ack");
     zclock_sleep (10);
 
-    zclock_sleep (1000);
+    zclock_sleep (get_interval () * 3);
 
     // late ack
     send_ack (1, 1);
-    zclock_sleep (10);
+
+    eat ();
 }
 END_TEST
 
-
-
-/*
-//  --------------------------------------------------------------------------
-/// Test if a non-ack'd message gets resent.
-START_TEST(test_buf_resend)
-{
-    setup ();
-
-    sam_selftest_introduce ("test_buf_resend");
-    int ref_key = save_roundrobin ("resend");
-
-    zclock_sleep (60);
-    send_ack (1, ref_key);
-    zclock_sleep (10);
-
-    destroy ();
-
-    zclock_sleep (10);
-    consume_resends ();
-}
-END_TEST
 
 
 //  --------------------------------------------------------------------------
@@ -325,24 +342,19 @@ END_TEST
 /// messages are resent.
 START_TEST(test_buf_resend_multiple)
 {
-    setup ();
-
     sam_selftest_introduce ("test_buf_resend");
     int ref_key1 = save_roundrobin ("resend 1");
-
-    zclock_sleep (70);
     int ref_key2 = save_roundrobin ("resend 2");
+
+    zclock_sleep (get_interval () * 3);
 
     send_ack (1, ref_key1);
     send_ack (1, ref_key2);
 
-    destroy ();
-
-    consume_resends ();
-    zclock_sleep (10);
+    eat ();
 }
 END_TEST
-*/
+
 
 
 void *
@@ -353,7 +365,7 @@ sam_buf_test ()
     TCase *tc = tcase_create ("save round robin");
     tcase_add_checked_fixture (tc, setup, destroy);
     tcase_add_test (tc, test_buf_save_roundrobin);
-    // tcase_add_test (tc, test_buf_save_roundrobin_race);
+    tcase_add_test (tc, test_buf_save_roundrobin_race);
     suite_add_tcase (s, tc);
 
     tc = tcase_create ("save redundant");
@@ -366,11 +378,8 @@ sam_buf_test ()
 
     tc = tcase_create ("resending");
     tcase_add_checked_fixture (tc, setup, destroy);
-    tcase_add_test (tc, test_buf_resend_late_ack);
-/*
-    tcase_add_test (tc, test_buf_resend);
+    // tcase_add_test (tc, test_buf_resend);
     tcase_add_test (tc, test_buf_resend_multiple);
-*/
     suite_add_tcase (s, tc);
 
 

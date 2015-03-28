@@ -66,6 +66,11 @@
 #define DBT_SIZE sizeof (DBT)
 
 
+/*
+ *    HANDLE DEFINITIONS
+ */
+
+
 /// State object maintained by the actor
 typedef struct state_t {
     int seq;                ///< used to assign unique message id's
@@ -87,9 +92,25 @@ typedef struct state_t {
 } state_t;
 
 
+/// Object used to acces the database
+typedef struct dbop_t {
+    DB_TXN *txn;
+    DBC *cursor;
+
+    DBT key;
+    DBT val;
+} dbop_t;
+
+
+
+/*
+ *    RECORD DEFINITIONS
+ */
+
+
 /// used to define how to read record_header_t.content
 typedef enum {
-    RECORD = 0x10,
+    RECORD = 0x10,    // arbitrary value, prevents false positives
     RECORD_TOMBSTONE
 } record_type_t;
 
@@ -121,6 +142,42 @@ typedef struct record_t {
 
 
 
+
+static void
+stat_db_size (state_t *state)
+{
+    DB_BTREE_STAT *statp;
+    state->db.p->stat (state->db.p, NULL, &statp, 0);
+    sam_log_infof ("db contains %d record(s)", statp->bt_nkeys);
+    free (statp);
+}
+
+
+
+/*
+static void
+PRINT_DB_INFO (state_t *state)
+{
+    stat_db_size (state);
+
+    DBT key, data;
+    memset (&key, 0, DBT_SIZE);
+    memset (&data, 0, DBT_SIZE);
+
+    printf ("records: \n");
+
+    DBC *cursor;
+    state->db.p->cursor (state->db.p, NULL, &cursor, 0);
+    while (!cursor->get (cursor, &key, &data, DB_NEXT)) {
+        printf ("%d - ", *(int *) key.data);
+    }
+
+    cursor->close (cursor);
+    printf ("\n");
+}
+*/
+
+
 //  --------------------------------------------------------------------------
 /// Create a unique, sortable message id. Order determines message
 /// age. Older keys must have smaller keys.
@@ -131,6 +188,18 @@ create_msg_id (
     return state->seq += 1;
 }
 
+
+//  --------------------------------------------------------------------------
+/// Sets the database records key.
+static void
+set_key (
+    dbop_t *op,
+    int *key)
+{
+    memset (&op->key, 0, DBT_SIZE);
+    op->key.size = sizeof (*key);
+    op->key.data = key;
+}
 
 
 //  --------------------------------------------------------------------------
@@ -146,45 +215,12 @@ db_error_handler (
 
 
 //  --------------------------------------------------------------------------
-/// Returns a human readable representation for DB error codes.
-static char *
-db_failure_reason (
-    int code)
-{
-    char *reason;
-
-    if (code == DB_LOCK_DEADLOCK) {
-        reason = "The operation was selected to resolve a deadlock";
-    }
-    else if (code == DB_SECONDARY_BAD) {
-        reason = "A secondary index references a nonexistent primary key";
-    }
-    else if (code ==  DB_NOTFOUND) {
-        reason = "Key was not found";
-    }
-    else if (code == EACCES) {
-        reason = "An attempt was made to modify a read-only database";
-    }
-    else if (code == EINVAL) {
-        reason = "EINVAL (could be various, consult db manual)";
-    }
-    else if (code == ENOSPC) {
-        reason = "BTREE max depth exceeded";
-    }
-    else {
-        reason = "Unknown";
-    }
-
-    return reason;
-}
-
-
-//  --------------------------------------------------------------------------
 /// Close (partially) initialized database and environment.
 static void
 close_db (
     state_t *state)
 {
+    stat_db_size (state);
     int rc = 0;
 
     if (state->db.p) {
@@ -243,9 +279,7 @@ create_db (
 
 
     // open the database
-    uint32_t db_flags =
-        DB_CREATE |       // create db if it's not there
-        DB_AUTO_COMMIT;   // make all ops. transactional
+    uint32_t db_flags = DB_CREATE | DB_AUTO_COMMIT;
 
     rc = db_create (&state->db.p, state->db.e, 0);
     if (rc) {
@@ -269,90 +303,72 @@ create_db (
         return rc;
     }
 
+
+    stat_db_size (state);
     state->db.p->set_errcall (state->db.p, db_error_handler);
     return rc;
 }
 
 
+//  --------------------------------------------------------------------------
+/// Close the database cursor and end the transaction based on the
+/// abort parameter: Either commit or abort.
+static void
+end_dbop (
+    state_t *state,
+    dbop_t *op,
+    bool abort)
+{
+    // handle cursor
+    if (op->cursor != NULL) {
+        op->cursor->close (op->cursor);
+        op->cursor = NULL;
+    }
+
+    // handle transaction
+    if (op->txn) {
+        if (abort) {
+            sam_log_error ("aborting transaction");
+            op->txn->abort (op->txn);
+        }
+
+        else {
+            int rc = op->txn->commit (op->txn, 0);
+            if (rc) {
+                state->db.e->err (state->db.e, rc, "transaction failed");
+            }
+            // TODO do I need to return with some error indication here?
+        }
+
+        op->txn = NULL;
+    }
+}
 
 
 //  --------------------------------------------------------------------------
-/// Create a transaction handle.
-static DB_TXN *
-create_txn (
-    state_t *state)
+/// Create a database cursor and transaction handle.
+static int
+start_dbop (
+    state_t *state,
+    dbop_t *op)
 {
-    DB_TXN *txn = NULL;
-    int rc = state->db.e->txn_begin (state->db.e, NULL, &txn, 0);
+    memset (op, 0, sizeof (dbop_t));
+
+    // create transaction handle
+    op->txn = NULL;
+    int rc = state->db.e->txn_begin (state->db.e, NULL, &op->txn, 0);
 
     if (rc) {
         state->db.e->err (state->db.e, rc, "transaction begin failed");
+        return -1;
     }
 
-    return txn;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Either abort or commit a transaction based on rc.
-static void
-end_txn (
-    state_t *state,
-    int rc,
-    DB_TXN *txn)
-{
-    if (rc) {
-        sam_log_error ("aborting transaction");
-        txn->abort (txn);
-    }
-    else if (txn != NULL) {
-        if (txn->commit (txn, 0)) {
-            state->db.e->err (state->db.e, rc, "transaction failed");
-            // TODO do I need to return with some error indication here?
-        }
-    }
-}
-
-
-//  --------------------------------------------------------------------------
-/// Create a new DBT key based on a message id.
-static void
-create_key (
-    int *msg_id,
-    DBT *thang)
-{
-    memset (thang, 0, DBT_SIZE);
-    thang->size = sizeof (*msg_id);
-    thang->data = msg_id;
-}
-
-
-static int
-insert_tombstone (
-    state_t *state,
-    DBC *cursor,
-    int prev,
-    int next)
-{
-    size_t size = sizeof (record_t);
-
-    record_t tombstone;
-    memset (&tombstone, 0, size);
-
-    sam_log_tracef ("creating tombstone: %d | %d", prev, next);
-
-    tombstone.type = RECORD_TOMBSTONE;
-    tombstone.c.tombstone.prev = prev;
-    tombstone.c.tombstone.next = next;
-
-    DBT val;
-    memset (&val, 0, DBT_SIZE);
-    val.size = size;
-    val.data = &tombstone;
-
-    int rc = cursor->put (cursor, NULL, &val, DB_CURRENT);
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "could not create tombstone");
+    // create database cursor
+    op->cursor = NULL;
+    state->db.p->cursor (state->db.p, op->txn, &op->cursor, 0);
+    if (op->cursor == NULL) {
+        sam_log_error ("could not initialize cursor");
+        end_dbop (state, op, true);
         return -1;
     }
 
@@ -361,152 +377,28 @@ insert_tombstone (
 
 
 //  --------------------------------------------------------------------------
-/// Create or update a database record.
+/// This function searches the db for the provided id and either fills
+/// the dbop structure (return code 0), or returns DB_NOTFOUND or
+/// another DB error code.
 static int
-put_record (
+get (
     state_t *state,
-    int size,
-    byte **record,
-    DBT *key,
-    DBT *val,
-    DB_TXN *txn)
+    dbop_t *op,
+    int *msg_id)
 {
-    assert (state);
-    assert (*record);
-    assert (((record_t *) *record)->type == RECORD);
+    memset (&op->val, 0, DBT_SIZE);
+    set_key (op, msg_id);
 
-    sam_log_tracef (
-        "putting '%d' into the buffer (acks remaining: %d)",
-        *(int *) key->data,
-        ((record_t *) *record)->c.record.acks_remaining);
+    int rc = op->cursor->get (op->cursor, &op->key, &op->val, DB_SET);
+    // int rc = state->db.p->get (state->db.p, op->txn, &op->key, &op->val, 0);
 
-    val->size = size;
-    val->data = *record;
-
-    int rc = state->db.p->put (
-        state->db.p, txn, key, val, 0);
-
-    free (*record);
-    *record = NULL;
-
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "could not put");
+    if (rc == DB_NOTFOUND) {
+        sam_log_tracef ("'%d' was not found!", *(int *) op->key.data);
     }
 
-    return rc;
-}
-
-
-static int
-update_record (
-    state_t *state,
-    DBT *key,
-    DBT *val,
-    DB_TXN *txn)
-{
-    int rc = state->db.p->put (state->db.p, txn, key, val, 0);
-
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "could not update record");
+    if (rc && rc != DB_NOTFOUND) {
+        state->db.e->err (state->db.e, rc, "could not get record");
     }
-
-    return rc;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Updates an already existing record.
-static int
-update_existing_record (
-    state_t *state,
-    DBT *val,
-    DB_TXN *txn,
-    int new_id,
-    int cur_id)
-{
-    DBT key;
-    create_key (&new_id, &key);
-
-    record_t *header = val->data;
-
-    header->c.record.ts = zclock_mono ();
-    header->c.record.prev = cur_id;
-
-    int rc = state->db.p->put (state->db.p, txn, &key, val, 0);
-
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "could not update record");
-    }
-
-    return rc;
-}
-
-
-static int
-update_record_tries (DBT *val)
-{
-    int rc = 0;
-    record_t *header = val->data;
-
-    header->c.record.tries -= 1;
-    if (!header->c.record.tries) {
-        rc = -1; // to indicate skipping
-    }
-
-    return rc;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Delete a database record.
-static int
-del (
-    state_t *state,
-    DBT *key,
-    DBT *val,
-    DB_TXN *txn)
-{
-    int rc = 0,
-        curr_key = 0,
-        prev_key = 0;
-
-    do {
-        // determine previous tombstone - if any
-        record_t *header = (record_t *) val->data;
-        if (header->type == RECORD) {
-            prev_key = header->c.record.prev;
-        }
-        else if (header->type == RECORD_TOMBSTONE) {
-            prev_key = header->c.tombstone.prev;
-        }
-
-
-        // delete current record
-        sam_log_tracef (
-            "deleting '%d' (prev: '%d') from the buffer",
-            *(int *) key->data,
-            prev_key);
-
-        rc = state->db.p->del (state->db.p, txn, key, 0);
-
-        if (rc) {
-            state->db.e->err (state->db.e, rc, "could not delete record");
-            return -1;
-        }
-
-        // obtain previous tombstone
-        if (prev_key) {
-            curr_key = prev_key;
-            create_key (&curr_key, key);
-
-            rc = state->db.p->get (state->db.p, txn, key, val, 0);
-            if (rc) {
-                state->db.e->err (
-                    state->db.e, rc, "could not get previous tombstone");
-            }
-        }
-
-    } while (prev_key);
 
     return rc;
 }
@@ -517,14 +409,12 @@ del (
 static int
 get_next (
     state_t *state,
-    DBC *cursor,
-    DBT *key,
-    DBT *val)
+    dbop_t *op)
 {
-    memset (key, 0, DBT_SIZE);
-    memset (val, 0, DBT_SIZE);
+    memset (&op->key, 0, DBT_SIZE);
+    memset (&op->val, 0, DBT_SIZE);
 
-    int rc = cursor->get(cursor, key, val, DB_NEXT);
+    int rc = op->cursor->get(op->cursor, &op->key, &op->val, DB_NEXT);
     if (rc && rc != DB_NOTFOUND) {
         state->db.e->err (state->db.e, rc, "could not get next item");
     }
@@ -534,13 +424,189 @@ get_next (
 
 
 //  --------------------------------------------------------------------------
+/// Update current database record.
+static int
+put (
+    state_t *state,
+    dbop_t *op,
+    size_t size,
+    byte **record,
+    uint32_t flags)
+{
+    assert (state);
+    assert (op);
+    assert (*record);
+
+    sam_log_tracef (
+        "putting '%d' (size %d) into the buffer",
+        *(int *) op->key.data, size);
+
+    memset (&op->val, 0, DBT_SIZE);
+    op->val.size = size;
+    op->val.data = *record;
+
+    int rc = op->cursor->put (op->cursor, &op->key, &op->val, flags);
+    // int rc = state->db.p->put (state->db.p, op->txn, &op->key, &op->val, 0);
+
+    free (*record);
+    *record = NULL;
+
+    if (rc) {
+        state->db.e->err (state->db.e, rc, "could not put record");
+    }
+
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Update a database record. If the flag is DB_CURRENT, op's key is
+/// ignored and the cursors position is updated, if the flag is
+/// DB_KEYFIRST, the key is used to determine where to put the record.
+static int
+update (
+    state_t *state,
+    dbop_t *op,
+    uint32_t flags)
+{
+    assert (state);
+    assert (op);
+    assert (flags == DB_CURRENT || flags == DB_KEYFIRST);
+
+    int rc = op->cursor->put (op->cursor, &op->key, &op->val, flags);
+    if (rc) {
+        state->db.e->err (state->db.e, rc, "could not update record");
+    }
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Delete the record the cursor currently points to.
+static int
+del_current (
+    state_t *state,
+    dbop_t *op)
+{
+    assert (state);
+    assert (op);
+
+    int rc = op->cursor->del (op->cursor, 0);
+    if (rc) {
+        state->db.e->err (state->db.e, rc, "could not delete record");
+        return rc;
+    }
+
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Delete a database record and all its tombstones.
+static int
+del (
+    state_t *state,
+    dbop_t *op)
+{
+    assert (state);
+    assert (op);
+
+    int rc, curr_key, prev_key;
+    rc = curr_key = prev_key = 0;
+
+    do {
+        del_current (state, op);
+
+        // determine previous tombstone - if any
+        record_t *header = (record_t *) op->val.data;
+        if (header->type == RECORD) {
+            prev_key = header->c.record.prev;
+        }
+        else if (header->type == RECORD_TOMBSTONE) {
+            prev_key = header->c.tombstone.prev;
+        }
+
+        // prepare next round
+        if (prev_key) {
+            curr_key = prev_key;
+            rc = get (state, op, &prev_key);
+
+            if (rc) {
+                // either DB_NOTFOUND or an error, abort
+                // deletion regardless; errors are handled
+                // one level up via rc
+                prev_key = 0;
+            }
+        }
+
+    } while (prev_key);
+
+    return rc;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Creates a new tombstone record.
+static int
+insert_tombstone (
+    state_t *state,
+    dbop_t *op,
+    int prev,
+    int *position)
+{
+    size_t size = sizeof (record_t);
+    int next = *(int *) op->key.data;
+
+    record_t tombstone;
+    memset (&tombstone, 0, size);
+
+    sam_log_tracef ("creating tombstone: %d | %d", prev, *position, next);
+
+    tombstone.type = RECORD_TOMBSTONE;
+    tombstone.c.tombstone.prev = prev;
+    tombstone.c.tombstone.next = next;
+
+    // write new key
+    set_key (op, position);
+
+    // write new data
+    memset (&op->val, 0, DBT_SIZE);
+    op->val.size = size;
+    op->val.data = &tombstone;
+
+    return update (state, op, DB_KEYFIRST);
+}
+
+
+//  --------------------------------------------------------------------------
+/// Decrements the try-counter and returns a non-zero value for
+/// to-be-discarded messages.
+static int
+update_record_tries (
+    state_t *state,
+    dbop_t *op)
+{
+    record_t *header = op->val.data;
+
+    header->c.record.tries -= 1;
+    if (!header->c.record.tries) {
+        sam_log_infof ("discarding message '%d'", *(int *) op->key.data);
+        del (state, op);
+        return -1;
+    }
+
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
 /// Checks if the record is inside the bounds of messages to be resent.
 static int
 resend_condition (
     state_t *state,
-    DBT *val)
+    dbop_t *op)
 {
-    record_t *header = val->data;
+    record_t *header = op->val.data;
     if (header->type == RECORD) {
         uint64_t eps = zclock_mono () - header->c.record.ts;
         return (state->threshold < eps)? 0: -1;
@@ -550,18 +616,20 @@ resend_condition (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Takes a database record, reconstruct the message and sends a copy
+/// it via output channel.
 static int
 resend_message (
     state_t *state,
-    DBT *val,
-    int msg_id)
+    dbop_t *op)
 {
-    record_t *header = val->data;
+    record_t *header = op->val.data;
     size_t header_size = sizeof (record_t);
 
     // decode message
-    size_t msg_size = val->size - header_size;
-    byte *encoded_msg = ((byte *) val->data) + header_size;
+    size_t msg_size = op->val.size - header_size;
+    byte *encoded_msg = ((byte *) op->val.data) + header_size;
     sam_msg_t *msg = sam_msg_decode (encoded_msg, msg_size);
     if (msg == NULL) {
         sam_log_error ("could not decode stored message");
@@ -571,6 +639,7 @@ resend_message (
     // wrap backend acknowledgments
     uint64_t be_acks = header->c.record.be_acks;
     zframe_t *id_frame = zframe_new (&be_acks, sizeof (be_acks));
+    int msg_id = *(int *) op->key.data;
 
     sam_log_tracef ("resending msg '%d'", msg_id);
     zsock_send (state->out, "ifp", msg_id, id_frame, msg);
@@ -641,26 +710,20 @@ acks_remaining (
 static int
 create_record_store (
     state_t *state,
-    DBT *key,
-    DB_TXN *txn,
+    dbop_t *op,
     sam_msg_t *msg)
 {
-    DBT val;
-    size_t total_size, header_size;
+    size_t size, header_size;
+    record_size (&size, &header_size, msg);
+
     byte *record;
-
-    memset (&val, 0, DBT_SIZE);
-    record_size (&total_size, &header_size, msg);
-
-    record = malloc (total_size);
+    record = malloc (size);
     if (!record) {
         return -1;
     }
 
     sam_log_tracef (
-        "creating record for msg '%d' (%p)",
-        *(int *) key->data,
-        (void *) record);
+        "creating record for msg '%d'", *(int *) op->key.data);
 
     // set header data
     record_t *header = (record_t *) record;
@@ -677,7 +740,7 @@ create_record_store (
     sam_msg_encode (msg, &content);
 
     state->last_stored += 1;
-    return put_record (state, total_size, &record, key, &val, txn);
+    return put (state, op, size, &record, DB_KEYFIRST);
 }
 
 
@@ -689,16 +752,14 @@ create_record_store (
 static int
 update_record_store (
     state_t *state,
-    DBT *key,
-    DBT *val,
-    DB_TXN *txn,
+    dbop_t *op,
     sam_msg_t *msg)
 {
     int rc = 0;
     size_t total_size, header_size;
     record_size (&total_size, &header_size, msg);
 
-    record_t *header = (record_t *) val->data;
+    record_t *header = (record_t *) op->val.data;
     assert (header->type == RECORD);
 
     sam_log_tracef (
@@ -708,7 +769,7 @@ update_record_store (
 
     // remove if there are no outstanding acks
     if (!header->c.record.acks_remaining) {
-        rc = del (state, key, val, txn);
+        rc = del (state, op);
     }
 
     // add encoded message to the record
@@ -719,18 +780,13 @@ update_record_store (
         }
 
         // copy header
-        byte *header_cpy = memmove (record, val->data, header_size);
-        if (header_cpy - record) {
-            free (record);
-            sam_log_error ("error while copying header data");
-            return -1;
-        }
+        byte
+            *header_cpy = memmove (record, op->val.data, header_size),
+            *content = record + header_size;
 
-        // encode message
-        byte *content = record + header_size;
+        assert (header_cpy);
         sam_msg_encode (msg, &content);
-
-        rc = put_record (state, total_size, &record, key, val, txn);
+        rc = put (state, op, total_size, &record, DB_CURRENT);
     }
 
     return rc;
@@ -743,29 +799,25 @@ update_record_store (
 static int
 create_record_ack (
     state_t *state,
-    DBT *key,
-    DBT *val,
-    DB_TXN *txn,
+    dbop_t *op,
     uint64_t backend_id)
 {
-    size_t record_size = sizeof (record_t);
+    size_t size = sizeof (record_t);
 
     // only the header is needed
-    byte *record = malloc (record_size);
+    byte *record = malloc (size);
     if (!record) {
         sam_log_error ("could not create record");
         return -1;
     }
-
-    sam_log_tracef (
-        "creating premature ack record for '%d'", *(int *) key->data);
 
     record_t *header = (record_t *) record;
     header->type = RECORD;
     header->c.record.acks_remaining = -1;
     header->c.record.be_acks = backend_id;
 
-    return put_record (state, record_size, &record, key, val, txn);
+    sam_log_tracef ("created record (ack) '%d'", *(int *) op->key.data);
+    return put (state, op, size, &record, DB_KEYFIRST);
 }
 
 
@@ -779,31 +831,23 @@ create_record_ack (
 static int
 update_record_ack (
     state_t *state,
-    DBT *key,
-    DBT *val,
-    DB_TXN *txn,
+    dbop_t *op,
     uint64_t backend_id)
 {
     int rc = 0;
 
     // skip all tombstones up to the record
-    record_t *header = (record_t *) val->data;
+    record_t *header = (record_t *) op->val.data;
     while (header->type == RECORD_TOMBSTONE) {
-        int new_key = header->c.tombstone.next;
-        sam_log_tracef ("following tombstone chain to '%d'", new_key);
 
-        create_key (&new_key, key);
-        rc = state->db.p->get (state->db.p, txn, key, val, 0);
-        if (rc) {
-            state->db.e->err (state->db.e, rc, "could not follow tombstone");
+        int new_id = header->c.tombstone.next;
+        sam_log_tracef ("following tombstone chain to '%d'", new_id);
+        if (get (state, op, &new_id)) {
             return -1;
         }
 
-        header = val->data;
+        header = op->val.data;
     }
-
-    assert (header->type == RECORD);
-
 
     // if ack arrives multiple times, do nothing
     // -> redundancy guarantee applies only to distinct acks
@@ -818,7 +862,7 @@ update_record_ack (
 
     // enough acks arrived, delete record
     if (!header->c.record.acks_remaining) {
-        rc = del (state, key, val, txn);
+        rc = del (state, op);
     }
 
 
@@ -826,10 +870,10 @@ update_record_ack (
     else {
         sam_log_tracef (
             "updating '%d', acks remaining: %d",
-            *(int *) key->data,
+            *(int *) op->key.data,
             header->c.record.acks_remaining);
 
-        rc = update_record (state, key, val, txn);
+        rc = update (state, op, DB_CURRENT);
     }
 
     return rc;
@@ -856,35 +900,33 @@ handle_ack (
     uint64_t backend_id,
     int ack_id)
 {
-    DBT key, val;
-    DB_TXN *txn = create_txn (state);
+    dbop_t op;
+    if (start_dbop (state, &op)) {
+        return -1;
+    }
 
-    create_key (&ack_id, &key);
-    memset (&val, 0, DBT_SIZE);
-
-    int rc = state->db.p->get (state->db.p, txn, &key, &val, 0);
+    int rc = get (state, &op, &ack_id);
 
     // record already there, update data
     if (rc == 0) {
-        rc = update_record_ack (state, &key, &val, txn, backend_id);
+        rc = update_record_ack (state, &op, backend_id);
     }
 
     // record not yet there, create db entry
     else if (rc == DB_NOTFOUND) {
-        if (state->last_stored <= ack_id) {
+        if (ack_id < state->last_stored) {
             sam_log_tracef ("ignoring late ack '%d'", ack_id);
             rc = 0;
         } else {
-            rc = create_record_ack (state, &key, &val, txn, backend_id);
+            rc = create_record_ack (state, &op, backend_id);
         }
     }
 
     else {
-        state->db.e->err (state->db.e, rc, "could not retrieve record");
         rc = -1;
     }
 
-    end_txn (state, rc, txn);
+    end_dbop (state, &op, (rc)? true: false);
     return rc;
 }
 
@@ -912,36 +954,30 @@ handle_storage_req (
     // is promised to the publishing client. See #66
     zsock_send (store_sock, "i", msg_id);
 
-    DBT key, val;
-    memset (&val, 0, DBT_SIZE);
-
-
-    // try to retrieve the record
-    create_key (&msg_id, &key);
-    DB_TXN *txn = create_txn (state);
-    int rc = state->db.p->get (state->db.p, txn, &key, &val, 0);
-
-
-    // record already there, update data
-    if (rc == 0) {
-        assert (val.size == sizeof (record_t));
-        rc = update_record_store (state, &key, &val, txn, msg);
+    dbop_t op;
+    if (start_dbop (state, &op)) {
+        return -1;
     }
 
+    int rc = get (state, &op, &msg_id);
+
+    // record already there (ack arrived early), update data
+    if (rc == 0) {
+        rc = update_record_store (state, &op, msg);
+    }
 
     // record not yet there, create db entry
     else if (rc == DB_NOTFOUND) {
-        rc = create_record_store (state, &key, txn, msg);
+        // key was already set by get ()
+        rc = create_record_store (state, &op, msg);
     }
 
+    // an error occured
     else {
-        sam_log_errorf (
-            "could not retrieve '%d': %s",
-            msg_id, db_failure_reason (rc));
         rc = -1;
     }
 
-    end_txn (state, rc, txn);
+    end_dbop (state, &op, (rc)? true: false);
     sam_msg_destroy (&msg);
     return rc;
 }
@@ -994,90 +1030,79 @@ handle_resend (
 {
     sam_log_trace ("resend cycle triggered");
     state_t *state = args;
+    dbop_t op;
 
-    // create transaction handle
-    DB_TXN *txn = create_txn (state);
+    start_dbop (state, &op);
 
-    // create cursor
-    DBC *cursor;
-    state->db.p->cursor (state->db.p, txn, &cursor, 0);
-    if (cursor == NULL) {
-        sam_log_error ("could not initialize cursor");
-        end_txn (state, -1, txn);
-        return -1;
-    }
-
-    DBT key, val;
     int first_requeued_key = 0; // can never be zero
-    int rc = get_next (state, cursor, &key, &val);
+    int rc = get_next (state, &op);
 
     while (
-        !rc &&                                      // there's another item
-        !resend_condition (state, &val) &&          // threshold/tombstone?
-        first_requeued_key != *(int *) key.data) {  // don't send requeued
+        !rc &&                                         // there's another item
+        !resend_condition (state, &op) &&              // check threshold
+        first_requeued_key != *(int *) op.key.data) {  // don't send requeued
 
-        int cur_id = *(int *) key.data;
+        int cur_id = *(int *) op.key.data;
+        record_t *header = op.val.data;
 
-        //
+
         // skip tombstones
-        //
-        record_t *header = val.data;
         if (header->type == RECORD_TOMBSTONE) {
-            sam_log_tracef ("skipping tombstone '%d'", cur_id);
-            rc = get_next (state, cursor, &key, &val);
+            rc = get_next (state, &op);
             continue;
         }
 
-        //
+
         //  decrement tries
-        //
-        //  TODO this can be refactored and completely wrapped in
-        //  update_record_tries (). Requirement: Completely work with
-        //  cursors, at least in del ().
         assert (header->type == RECORD);
-        if (update_record_tries (&val)) {
-            sam_log_infof ("discarding message '%d'", cur_id);
-            rc = del (state, &key, &val, txn);
-            if (rc) {
-                state->db.e->err (
-                    state->db.e, rc, "could not discard record");
-            }
-
-            rc = get_next (state, cursor, &key, &val);
+        if (update_record_tries (state, &op)) {
+            rc = get_next (state, &op);
             continue;
         }
 
-        //
-        //  update record, resend message, insert tombstone
-        //
+
+        //  update record
+        //  cursor gets positioned to the new records location
         int new_id = create_msg_id (state);
+        op.key.data = &new_id;
         if (!first_requeued_key) {
             first_requeued_key = new_id;
         }
 
         int prev_id = header->c.record.prev;
-        if (
-            update_existing_record (state, &val, txn, new_id, cur_id) ||
-            resend_message (state, &val, cur_id) ||
-            insert_tombstone (state, cursor, prev_id, new_id)) {
+        header->c.record.ts = zclock_mono ();
+        header->c.record.prev = cur_id;
+        if (update (state, &op, DB_KEYFIRST)) {
+            rc = -1;
+            break;
+        }
+        state->last_stored += 1;
 
+
+        //  resend message
+        //  use current dbop state to read the message
+        if (resend_message (state, &op)) {
             rc = -1;
             break;
         }
 
-        // overwrites key & val
-        rc = get_next (state, cursor, &key, &val);
+
+        //  create tombstone
+        //  resets cursor position
+        if (insert_tombstone (state, &op, prev_id, &cur_id)) {
+            rc = -1;
+            break;
+        }
+
+        rc = get_next (state, &op);
     }
 
-    cursor->close (cursor);
-
-    if (rc && rc != DB_NOTFOUND) {
-        end_txn (state, rc, txn);
-        return rc;
+    if (rc == DB_NOTFOUND) {
+        rc = 0;
     }
 
-    end_txn (state, 0, txn);
-    return 0;
+    end_dbop (state, &op, (rc)? true: false);
+    return rc;
 }
 
 
