@@ -1,11 +1,12 @@
 # SAMWISE #
 
+Samwise the stoutharted. A store and forward messaging service.
+
 ## Installation ##
 
 ```
 ./autogen.sh
 make
-make install # if you want
 ```
 
 This compiles `samd`, `sam_selftest` and `libsam.so`. The library `libsam` gets linked statically to the binaries. The dependencies are linked dynamically and you are responsible for their proper installation.
@@ -17,12 +18,12 @@ This compiles `samd`, `sam_selftest` and `libsam.so`. The library `libsam` gets 
 
 Samwise relies on some libraries:
 
-| Library name                                       | Version |
-|----------------------------------------------------|---------|
-| [ZeroMQ](http://zeromq.org/)                       | 4.0.5   |
-| [CZMQ](http://czmq.zeromq.org/)                    | 3.0.0   |
-| Berkeley DB                                        | 5.1     |
-| [RabbitMQ-C](https://github.com/alanxz/rabbitmq-c) | 0.5.2   |
+| Library name                                       | Version  |
+|----------------------------------------------------|----------|
+| [ZeroMQ](http://zeromq.org/)                       |    4.0.5 |
+| [CZMQ](http://czmq.zeromq.org/)                    |    3.0.0 |
+| [Berkeley DB](http://www.oracle.com/technetwork/database/database-technologies/berkeleydb/overview/index.html)| >= 5.1 |
+| [RabbitMQ-C](https://github.com/alanxz/rabbitmq-c) |    0.5.2 |
 
 
 ### Render documentation ###
