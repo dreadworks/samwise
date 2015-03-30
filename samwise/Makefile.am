@@ -65,7 +65,9 @@ samd_LDFLAGS = -static
 #
 samctl_SOURCES = src/samctl.c
 samctl_LDFLAGS = -lzmq -lczmq
-
+samctl_CFLAGS = \
+	$(AM_CFLAGS)  \
+	-Wno-missing-field-initializers
 
 #
 #  selftest
