@@ -21,11 +21,8 @@
 #include <argp.h>
 #include "../include/sam_prelude.h"
 
-typedef enum out_t {
-    NORMAL,
-    VERBOSE
-} out_t;
 
+#define SAM_PROTOCOL_VERSION 100
 
 
 /*
@@ -47,9 +44,15 @@ typedef struct args_t {
 
 } args_t;
 
+typedef struct ctl_t {
+    zsock_t *sam_sock;
+} ctl_t;
+
+
 
 static args_t *
-args_new () {
+args_new ()
+{
     args_t *args = malloc (sizeof (args_t));
     assert (args);
 
@@ -63,9 +66,13 @@ args_new () {
 
 
 static void
-args_destroy (args_t **args)
+args_destroy (
+    args_t **args)
 {
     assert (*args);
+
+    sam_cfg_destroy (&(*args)->cfg);
+
     free (*args);
     *args = NULL;
 }
@@ -103,6 +110,26 @@ static struct argp_option options [] = {
 };
 
 
+typedef enum out_t {
+    NORMAL,
+    VERBOSE
+} out_t;
+
+static void
+out (
+    out_t lvl,
+    args_t *args,
+    const char *line)
+{
+    if (
+        (lvl == VERBOSE && args->verbose) ||
+        (lvl == NORMAL && !args->quiet)) {
+
+        printf ("%s", line);
+    }
+}
+
+
 static error_t
 parse_opt (
     int key,
@@ -122,6 +149,7 @@ parse_opt (
         }
 
         args->verbose = true;
+        out (VERBOSE, args, "setting output verbose\n");
         break;
 
     // quiet
@@ -148,6 +176,7 @@ parse_opt (
             return -1;
         }
 
+        out (VERBOSE, args, "loading configuration\n");
         args->cfg = sam_cfg_new (arg);
         if (args->cfg == NULL) {
             fprintf (stderr, "error: could not load config file\n");
@@ -187,28 +216,96 @@ static struct argp argp = {
  *    CTL
  *
  */
-static void
-out (
-    out_t lvl,
-    args_t *args,
-    const char *line)
+static ctl_t *
+ctl_new (
+    args_t *args)
 {
-    if (
-        (lvl == VERBOSE && args->verbose) ||
-        (lvl == NORMAL && !args->quiet)) {
+    ctl_t *ctl = malloc (sizeof (ctl_t));
+    assert (ctl);
 
-        printf ("%s", line);
+    char *endpoint;
+    if (sam_cfg_endpoint (args->cfg, &endpoint)) {
+        fprintf (stderr, "could not load endpoint\n");
+        goto abort;
     }
+
+    ctl->sam_sock = zsock_new_req (endpoint);
+    if (ctl->sam_sock == NULL) {
+        fprintf (stderr, "could not establish connection\n");
+        goto abort;
+    }
+
+    return ctl;
+
+
+abort:
+    free (ctl);
+    return NULL;
+}
+
+
+static void
+ctl_destroy (
+    ctl_t **ctl)
+{
+    assert (*ctl);
+
+    zsock_destroy (&(*ctl)->sam_sock);
+
+    free (*ctl);
+    *ctl = NULL;
+}
+
+
+
+/*
+ *    CMD
+ *
+ */
+static void
+cmd_ping (
+    ctl_t *ctl)
+{
+    int rc = zsock_send (
+        ctl->sam_sock, "is", SAM_PROTOCOL_VERSION, "ping");
+
+    if (rc) {
+        fprintf (stderr, "could not send ping\n");
+        return;
+    }
+
+    zsock_set_rcvtimeo (ctl->sam_sock, 1000);
+
+    int reply_code;
+    char *reply_msg;
+    rc = zsock_recv (
+        ctl->sam_sock, "is", &reply_code, &reply_msg);
+
+    if (rc) {
+        fprintf (
+            stderr, "could not receive ping (interrupt or timeout)\n");
+        return;
+    }
+
+    if (reply_code) {
+        fprintf (stderr, "sam returned an error: %s\n", reply_msg);
+        free (reply_msg);
+        return;
+    }
+
+    printf ("pong\n");
 }
 
 
 static int
-eval (args_t *args)
+eval (
+    ctl_t *ctl,
+    args_t *args)
 {
     switch (args->cmd)
     {
     case CMD_PING:
-        out (VERBOSE, args, "ping\n");
+        cmd_ping (ctl);
         break;
 
     default:
@@ -231,11 +328,14 @@ main (
         fprintf (stderr, "Argument error\n");
         rc = EXIT_FAILURE;
     }
+
     else {
-        rc = eval (args);
+        ctl_t *ctl = ctl_new (args);
+        rc = eval (ctl, args);
+        ctl_destroy (&ctl);
     }
 
-    out (VERBOSE, args, "exiting.\n");
+    out (VERBOSE, args, "exiting\n");
     args_destroy (&args);
     return rc;
 }
