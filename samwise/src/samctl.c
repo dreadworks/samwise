@@ -38,18 +38,26 @@ typedef enum cmd_t {
 } cmd_t;
 
 typedef struct args_t {
+    int argc;
+
     bool verbose;
     bool quiet;
     cmd_t cmd;
+    sam_cfg_t *cfg;
+
 } args_t;
 
 
 static args_t *
 args_new () {
     args_t *args = malloc (sizeof (args_t));
+    assert (args);
+
+    args->argc = 0;
     args->quiet = false;
     args->verbose = false;
     args->cmd = CMD_NONE;
+
     return args;
 }
 
@@ -104,6 +112,8 @@ parse_opt (
     args_t *args = state->input;
 
     switch (key) {
+
+    // verbose
     case 'v':
         if (args->quiet) {
             printf ("error: -q and -v are mutually exclusive\n");
@@ -114,9 +124,10 @@ parse_opt (
         args->verbose = true;
         break;
 
+    // quiet
     case 'q':
         if (args->verbose) {
-            printf ("error: -q and -v are mutually exclusive\n");
+            fprintf (stderr, "error: -q and -v are mutually exclusive\n");
             argp_usage (state);
             return -1;
         }
@@ -124,10 +135,37 @@ parse_opt (
         args->quiet = true;
         break;
 
-
+    // ping
     case 'p':
         args->cmd = CMD_PING;
         break;
+
+    // key args (config)
+    case ARGP_KEY_ARG:
+        if (state->arg_num >= 1) {
+            fprintf (stderr, "error: too many arguments\n");
+            argp_usage (state);
+            return -1;
+        }
+
+        args->cfg = sam_cfg_new (arg);
+        if (args->cfg == NULL) {
+            fprintf (stderr, "error: could not load config file\n");
+            return -1;
+        }
+        break;
+
+    case ARGP_KEY_END:
+        if (state->arg_num < 1) {
+            fprintf (stderr, "error: not enough arguments\n");
+            argp_usage (state);
+            return -1;
+        }
+        break;
+
+
+    default:
+        return ARGP_ERR_UNKNOWN;
     }
 
     return 0;

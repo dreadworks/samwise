@@ -63,7 +63,11 @@ samd_LDFLAGS = -static
 #
 #  samctl
 #
-samctl_SOURCES = src/samctl.c
+samctl_SOURCES = \
+	src/samctl.c   \
+	src/sam_cfg.c  \
+  src/sam_log.c
+
 samctl_LDFLAGS = -lzmq -lczmq
 samctl_CFLAGS = \
 	$(AM_CFLAGS)  \
