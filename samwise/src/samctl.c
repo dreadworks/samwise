@@ -25,28 +25,25 @@
 #define SAM_PROTOCOL_VERSION 100
 
 
-/// possible commands
-typedef enum cmd_t {
-    CMD_NONE,    ///< used to indicate unknown commands
-    CMD_PING,    ///< play ping pong with samwise
-    CMD_STATUS   ///< obtain status informations
-} cmd_t;
+typedef struct args_t args_t;
+typedef struct ctl_t ctl_t;
+typedef void (cmd_fn) (ctl_t *ctl, args_t *args);
 
 
 /// argparse object
-typedef struct args_t {
+struct args_t {
     bool verbose;      ///< output additional information
     bool quiet;        ///< suppress output
-    cmd_t cmd;         ///< command enum
+    cmd_fn *fn;        ///< command function
     sam_cfg_t *cfg;    ///< samwise configuration
 
-} args_t;
+};
 
 
 /// control object
-typedef struct ctl_t {
+struct ctl_t {
     zsock_t *sam_sock;   ///< socket to communicate with samd
-} ctl_t;
+};
 
 
 
@@ -85,21 +82,58 @@ out (
 }
 
 
-static cmd_t
-get_cmd (const char *cmd_name)
+
+/*
+ *    ---- CMD ----
+ *
+ */
+
+//  --------------------------------------------------------------------------
+/// Ping samwise.
+static void
+cmd_ping (
+    ctl_t *ctl,
+    args_t *args)
 {
-    cmd_t cmd = CMD_NONE;
+    int rc = zsock_send (
+        ctl->sam_sock, "is", SAM_PROTOCOL_VERSION, "ping");
 
-    if (!strcmp (cmd_name, "ping")) {
-        cmd = CMD_PING;
+    if (rc) {
+        out (ERROR, args, "could not send ping");
+        return;
     }
 
-    if (!strcmp (cmd_name, "status")) {
-        cmd = CMD_STATUS;
+    zsock_set_rcvtimeo (ctl->sam_sock, 1000);
+
+    int reply_code;
+    char *reply_msg;
+    rc = zsock_recv (
+        ctl->sam_sock, "is", &reply_code, &reply_msg);
+
+    if (rc) {
+        out (
+            ERROR, args, "could not receive ping (interrupt or timeout)");
+        return;
     }
 
-    return cmd;
+    if (reply_code) {
+        out (ERROR, args, reply_msg);
+        free (reply_msg);
+        return;
+    }
+
+    out (NORMAL, args, "pong");
 }
+
+
+static void
+cmd_status (
+    ctl_t *ctl UU,
+    args_t *args UU)
+{
+    printf ("TODO\n");
+}
+
 
 
 /*
@@ -117,7 +151,7 @@ args_new ()
 
     args->quiet = false;
     args->verbose = false;
-    args->cmd = CMD_NONE;
+    args->fn = NULL;
 
     return args;
 }
@@ -180,6 +214,23 @@ static struct argp_option options [] = {
 
 
 //  --------------------------------------------------------------------------
+/// Determine the desired command function.
+static void
+set_cmd (
+    args_t *args,
+    const char *fn_name)
+{
+    if (!strcmp (fn_name, "ping")) {
+        args->fn = cmd_ping;
+    }
+
+    if (!strcmp (fn_name, "status")) {
+        args->fn = cmd_status;
+    }
+}
+
+
+//  --------------------------------------------------------------------------
 /// Parse the argument vector.
 static error_t
 parse_opt (
@@ -188,7 +239,6 @@ parse_opt (
     struct argp_state *state)
 {
     args_t *args = state->input;
-    cmd_t cmd;
 
     switch (key) {
 
@@ -217,15 +267,12 @@ parse_opt (
 
     // cmd
     case 'c':
-        cmd = get_cmd (arg);
-
-        if (cmd == CMD_NONE) {
+        set_cmd (args, arg);
+        if (args->fn == NULL) {
             out (ERROR, args, "unknown command");
             argp_usage (state);
             return -1;
         }
-
-        args->cmd = cmd;
         break;
 
     // key args (config)
@@ -323,70 +370,6 @@ ctl_destroy (
 
 
 
-/*
- *    ---- CMD ----
- *
- */
-
-//  --------------------------------------------------------------------------
-/// Ping samwise.
-static void
-cmd_ping (
-    ctl_t *ctl,
-    args_t *args)
-{
-    int rc = zsock_send (
-        ctl->sam_sock, "is", SAM_PROTOCOL_VERSION, "ping");
-
-    if (rc) {
-        out (ERROR, args, "could not send ping");
-        return;
-    }
-
-    zsock_set_rcvtimeo (ctl->sam_sock, 1000);
-
-    int reply_code;
-    char *reply_msg;
-    rc = zsock_recv (
-        ctl->sam_sock, "is", &reply_code, &reply_msg);
-
-    if (rc) {
-        out (
-            ERROR, args, "could not receive ping (interrupt or timeout)");
-        return;
-    }
-
-    if (reply_code) {
-        out (ERROR, args, reply_msg);
-        free (reply_msg);
-        return;
-    }
-
-    out (NORMAL, args, "pong");
-}
-
-
-//  --------------------------------------------------------------------------
-/// Evaluate args->cmd and invoke the associated function.
-static int
-eval (
-    ctl_t *ctl,
-    args_t *args)
-{
-    switch (args->cmd)
-    {
-    case CMD_PING:
-        cmd_ping (ctl, args);
-        break;
-
-    default:
-        assert (false);
-    }
-
-    return 0;
-}
-
-
 //  --------------------------------------------------------------------------
 /// Evaluates its argument vector and interacts with a running samd
 /// instance.
@@ -398,14 +381,14 @@ main (
     args_t *args = args_new ();
     error_t rc = argp_parse (&argp, argc, argv, 0, 0, args);
 
-    if (rc || args->cmd == CMD_NONE) {
+    if (rc) {
         out (ERROR, args, "Argument error");
         rc = EXIT_FAILURE;
     }
 
     else {
         ctl_t *ctl = ctl_new (args);
-        rc = eval (ctl, args);
+        args->fn (ctl, args);
         ctl_destroy (&ctl);
     }
 
