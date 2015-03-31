@@ -25,38 +25,79 @@
 #define SAM_PROTOCOL_VERSION 100
 
 
-/*
- *    ARGUMENT PARSING
- *
- */
+/// possible commands
 typedef enum cmd_t {
-    CMD_NONE,
-    CMD_PING
+    CMD_NONE,  ///< used to indicate unknown commands
+    CMD_PING   ///< play ping pong with samwise
 } cmd_t;
 
-typedef struct args_t {
-    int argc;
 
-    bool verbose;
-    bool quiet;
-    cmd_t cmd;
-    sam_cfg_t *cfg;
+/// argparse object
+typedef struct args_t {
+    bool verbose;      ///< output additional information
+    bool quiet;        ///< suppress output
+    cmd_t cmd;         ///< command enum
+    sam_cfg_t *cfg;    ///< samwise configuration
 
 } args_t;
 
+
+/// control object
 typedef struct ctl_t {
-    zsock_t *sam_sock;
+    zsock_t *sam_sock;   ///< socket to communicate with samd
 } ctl_t;
 
 
 
+/*
+ *   ---- HELPER ----
+ *
+ */
+
+/// output levels
+typedef enum out_t {
+    NORMAL,    ///< print to stdout unless -q
+    ERROR,     ///< print to stderr unless -q
+    VERBOSE    ///< print to stdout if -v
+} out_t;
+
+
+//  --------------------------------------------------------------------------
+/// Print a message to std* based on the level and either -q or -v.
+static void
+out (
+    out_t lvl,
+    args_t *args,
+    const char *line)
+{
+    if (
+        (lvl == VERBOSE && args->verbose) ||
+        (lvl == NORMAL && !args->quiet)) {
+
+        fprintf (stdout, "%s\n", line);
+    }
+
+    if (lvl == ERROR && !args->quiet) {
+        fprintf (stderr, "error: %s\n", line);
+    }
+
+}
+
+
+
+/*
+ *    ---- ARGP ----
+ *
+ */
+
+//  --------------------------------------------------------------------------
+/// Create a new args object. Gets its values set by parse_opt.
 static args_t *
 args_new ()
 {
     args_t *args = malloc (sizeof (args_t));
     assert (args);
 
-    args->argc = 0;
     args->quiet = false;
     args->verbose = false;
     args->cmd = CMD_NONE;
@@ -65,13 +106,17 @@ args_new ()
 }
 
 
+//  --------------------------------------------------------------------------
+/// Free all memory allocated by the args object.
 static void
 args_destroy (
     args_t **args)
 {
     assert (*args);
 
-    sam_cfg_destroy (&(*args)->cfg);
+    if (&(*args)->cfg) {
+        sam_cfg_destroy (&(*args)->cfg);
+    }
 
     free (*args);
     *args = NULL;
@@ -84,6 +129,7 @@ const char
     *argp_program_bug_address = "TODO release.fish";
 // ---
 
+
 static char doc [] =
     "Samwise Control Interface -- samctl";
 
@@ -91,6 +137,7 @@ static char args_doc [] =
     "CONFIG";
 
 
+/// possible options to pass to samctl
 static struct argp_option options [] = {
 
     { .name = "verbose", .key = 'v', .arg = 0,
@@ -102,34 +149,12 @@ static struct argp_option options [] = {
     { .name = "ping", .key = 'p', .arg = 0,
       .doc = "Ping samwise" },
 
-/*
-    { .name = "cmd", .key = 'c', .arg = "CMD", .flags = 0,
-      .doc = "Command to send to samwise" },
-*/
     { 0 }
 };
 
 
-typedef enum out_t {
-    NORMAL,
-    VERBOSE
-} out_t;
-
-static void
-out (
-    out_t lvl,
-    args_t *args,
-    const char *line)
-{
-    if (
-        (lvl == VERBOSE && args->verbose) ||
-        (lvl == NORMAL && !args->quiet)) {
-
-        printf ("%s", line);
-    }
-}
-
-
+//  --------------------------------------------------------------------------
+/// Parse the argument vector.
 static error_t
 parse_opt (
     int key,
@@ -143,19 +168,19 @@ parse_opt (
     // verbose
     case 'v':
         if (args->quiet) {
-            printf ("error: -q and -v are mutually exclusive\n");
+            out (ERROR, args, "-q and -v are mutually exclusive");
             argp_usage (state);
             return -1;
         }
 
         args->verbose = true;
-        out (VERBOSE, args, "setting output verbose\n");
+        out (VERBOSE, args, "setting output verbose");
         break;
 
     // quiet
     case 'q':
         if (args->verbose) {
-            fprintf (stderr, "error: -q and -v are mutually exclusive\n");
+            out (ERROR, args, "-q and -v are mutually exclusive");
             argp_usage (state);
             return -1;
         }
@@ -171,22 +196,22 @@ parse_opt (
     // key args (config)
     case ARGP_KEY_ARG:
         if (state->arg_num >= 1) {
-            fprintf (stderr, "error: too many arguments\n");
+            out (ERROR, args, "too many arguments");
             argp_usage (state);
             return -1;
         }
 
-        out (VERBOSE, args, "loading configuration\n");
+        out (VERBOSE, args, "loading configuration");
         args->cfg = sam_cfg_new (arg);
         if (args->cfg == NULL) {
-            fprintf (stderr, "error: could not load config file\n");
+            out (ERROR, args, "could not load config file");
             return -1;
         }
         break;
 
     case ARGP_KEY_END:
         if (state->arg_num < 1) {
-            fprintf (stderr, "error: not enough arguments\n");
+            out (ERROR, args, "not enough arguments");
             argp_usage (state);
             return -1;
         }
@@ -201,6 +226,7 @@ parse_opt (
 }
 
 
+/// configures argp
 static struct argp argp = {
     .options = options,
     .parser = parse_opt,
@@ -211,11 +237,13 @@ static struct argp argp = {
 
 
 
-
 /*
- *    CTL
+ *    ---- CTL ----
  *
  */
+
+//  --------------------------------------------------------------------------
+/// Create a new control object.
 static ctl_t *
 ctl_new (
     args_t *args)
@@ -225,13 +253,13 @@ ctl_new (
 
     char *endpoint;
     if (sam_cfg_endpoint (args->cfg, &endpoint)) {
-        fprintf (stderr, "could not load endpoint\n");
+        out (ERROR, args, "could not load endpoint");
         goto abort;
     }
 
     ctl->sam_sock = zsock_new_req (endpoint);
     if (ctl->sam_sock == NULL) {
-        fprintf (stderr, "could not establish connection\n");
+        out (ERROR, args, "could not establish connection");
         goto abort;
     }
 
@@ -244,6 +272,8 @@ abort:
 }
 
 
+//  --------------------------------------------------------------------------
+/// Close all connections and free all control object memory.
 static void
 ctl_destroy (
     ctl_t **ctl)
@@ -259,18 +289,22 @@ ctl_destroy (
 
 
 /*
- *    CMD
+ *    ---- CMD ----
  *
  */
+
+//  --------------------------------------------------------------------------
+/// Ping samwise.
 static void
 cmd_ping (
-    ctl_t *ctl)
+    ctl_t *ctl,
+    args_t *args)
 {
     int rc = zsock_send (
         ctl->sam_sock, "is", SAM_PROTOCOL_VERSION, "ping");
 
     if (rc) {
-        fprintf (stderr, "could not send ping\n");
+        out (ERROR, args, "could not send ping");
         return;
     }
 
@@ -282,21 +316,23 @@ cmd_ping (
         ctl->sam_sock, "is", &reply_code, &reply_msg);
 
     if (rc) {
-        fprintf (
-            stderr, "could not receive ping (interrupt or timeout)\n");
+        out (
+            ERROR, args, "could not receive ping (interrupt or timeout)");
         return;
     }
 
     if (reply_code) {
-        fprintf (stderr, "sam returned an error: %s\n", reply_msg);
+        out (ERROR, args, reply_msg);
         free (reply_msg);
         return;
     }
 
-    printf ("pong\n");
+    out (NORMAL, args, "pong");
 }
 
 
+//  --------------------------------------------------------------------------
+/// Evaluate args->cmd and invoke the associated function.
 static int
 eval (
     ctl_t *ctl,
@@ -305,7 +341,7 @@ eval (
     switch (args->cmd)
     {
     case CMD_PING:
-        cmd_ping (ctl);
+        cmd_ping (ctl, args);
         break;
 
     default:
@@ -316,6 +352,9 @@ eval (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Evaluates its argument vector and interacts with a running samd
+/// instance.
 int
 main (
     int argc,
@@ -325,7 +364,7 @@ main (
     error_t rc = argp_parse (&argp, argc, argv, 0, 0, args);
 
     if (rc || args->cmd == CMD_NONE) {
-        fprintf (stderr, "Argument error\n");
+        out (ERROR, args, "Argument error");
         rc = EXIT_FAILURE;
     }
 
@@ -335,7 +374,7 @@ main (
         ctl_destroy (&ctl);
     }
 
-    out (VERBOSE, args, "exiting\n");
+    out (VERBOSE, args, "exiting");
     args_destroy (&args);
     return rc;
 }
