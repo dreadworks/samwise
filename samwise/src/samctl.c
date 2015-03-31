@@ -27,8 +27,9 @@
 
 /// possible commands
 typedef enum cmd_t {
-    CMD_NONE,  ///< used to indicate unknown commands
-    CMD_PING   ///< play ping pong with samwise
+    CMD_NONE,    ///< used to indicate unknown commands
+    CMD_PING,    ///< play ping pong with samwise
+    CMD_STATUS   ///< obtain status informations
 } cmd_t;
 
 
@@ -84,6 +85,22 @@ out (
 }
 
 
+static cmd_t
+get_cmd (const char *cmd_name)
+{
+    cmd_t cmd = CMD_NONE;
+
+    if (!strcmp (cmd_name, "ping")) {
+        cmd = CMD_PING;
+    }
+
+    if (!strcmp (cmd_name, "status")) {
+        cmd = CMD_STATUS;
+    }
+
+    return cmd;
+}
+
 
 /*
  *    ---- ARGP ----
@@ -131,7 +148,15 @@ const char
 
 
 static char doc [] =
-    "Samwise Control Interface -- samctl";
+    "\n======================================================================\n"
+    " * * * * Samwise Control Interface -- samctl * * * *\n"
+    "======================================================================\n\n"
+    "Send a command with the option -c or --cmd=CMD.\n"
+    "Currently the following commands are supported:\n"
+    "  ping      Ping samwise\n"
+    "  status    Get extensive status information about samd's state"
+
+    "\n\nAdditionally the following options can be provided:\n";
 
 static char args_doc [] =
     "CONFIG";
@@ -146,8 +171,9 @@ static struct argp_option options [] = {
     { .name = "quiet", .key = 'q', .arg = 0,
       .doc = "Suppress output" },
 
-    { .name = "ping", .key = 'p', .arg = 0,
-      .doc = "Ping samwise" },
+    { .name = "command", .key = 'c', .arg = "CMD",
+      .doc = "Specify the command to send to samwise"
+    },
 
     { 0 }
 };
@@ -162,6 +188,7 @@ parse_opt (
     struct argp_state *state)
 {
     args_t *args = state->input;
+    cmd_t cmd;
 
     switch (key) {
 
@@ -188,9 +215,17 @@ parse_opt (
         args->quiet = true;
         break;
 
-    // ping
-    case 'p':
-        args->cmd = CMD_PING;
+    // cmd
+    case 'c':
+        cmd = get_cmd (arg);
+
+        if (cmd == CMD_NONE) {
+            out (ERROR, args, "unknown command");
+            argp_usage (state);
+            return -1;
+        }
+
+        args->cmd = cmd;
         break;
 
     // key args (config)
