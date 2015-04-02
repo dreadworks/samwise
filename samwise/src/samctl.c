@@ -80,7 +80,7 @@ out (
     }
 
 }
-
+p
 
 
 /*
@@ -89,18 +89,16 @@ out (
  */
 
 //  --------------------------------------------------------------------------
-/// Ping samwise.
-static void
-cmd_ping (
-    ctl_t *ctl,
-    args_t *args)
+/// Generic function to send a message to samd.
+static zmsg_t *
+send_cmd (const char *cmd_name)
 {
     int rc = zsock_send (
-        ctl->sam_sock, "is", SAM_PROTOCOL_VERSION, "ping");
+        ctl->sam_sock, "is", SAM_PROTOCOL_VERSION, cmd_name);
 
     if (rc) {
-        out (ERROR, args, "could not send ping");
-        return;
+        out (ERROR, args, "could not send command");
+        return NULL;
     }
 
     zsock_set_rcvtimeo (ctl->sam_sock, 1000);
@@ -112,17 +110,29 @@ cmd_ping (
 
     if (rc) {
         out (
-            ERROR, args, "could not receive ping (interrupt or timeout)");
-        return;
+            ERROR, args, "could not receive answer (interrupt or timeout)");
+        return NULL;
     }
 
     if (reply_code) {
         out (ERROR, args, reply_msg);
         free (reply_msg);
-        return;
+        return NULL;
     }
+}
 
-    out (NORMAL, args, "pong");
+
+
+//  --------------------------------------------------------------------------
+/// Ping samwise.
+static void
+cmd_ping (
+    ctl_t *ctl,
+    args_t *args)
+{
+    if (!send_cmd ("ping")) {
+        out (NORMAL, args, "pong");
+    }
 }
 
 
