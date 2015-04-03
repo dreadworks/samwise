@@ -150,6 +150,50 @@ sam_db_val (
 }
 
 
+static void
+reset (
+    DBT *key,
+    DBT *val)
+{
+    memset (key, 0, DBT_SIZE);
+    memset (val, 0, DBT_SIZE);
+}
+
+
+
+//  --------------------------------------------------------------------------
+/// This function searches the db for the provided id and either fills
+/// the dbop structure (return code 0), or returns DB_NOTFOUND or
+/// another DB error code.
+int
+sam_db_get (
+    sam_db_t *self,
+    int *key)
+{
+    DBT
+        *key = &self->op.key,
+        *val = &self->op.val;
+
+    reset (key, val);
+    key.size = sizeof (*key);
+    key.data = key;
+
+    DBC *cursor = self->op.cursor;
+    int rc = op->cursor->get (cursor, key, val, DB_SET);
+
+    if (rc == DB_NOTFOUND) {
+        sam_log_tracef ("'%d' was not found!", sam_db_key (self));
+        return SAM_DB_NOTFOUND;
+    }
+
+    if (rc && rc != DB_NOTFOUND) {
+        state->db.e->err (state->db.e, rc, "could not get record");
+        return SAM_DB_ERROR;
+    }
+
+    return SAM_DB_OK;
+}
+
 
 sam_db_ret_t
 sam_db_sibling (
@@ -166,12 +210,7 @@ sam_db_sibling (
         flag = DB_NEXT;
     }
 
-    DBT
-        *key = &self->op.key,
-        *val = &self->op.val;
-
-    memset (key, 0, DBT_SIZE);
-    memset (val, 0, DBT_SIZE);
+    reset (self);
 
     DBC *cursor = self->op.cursor;
     int rc = cursor->get(cursor, key, val, flag);

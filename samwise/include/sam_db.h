@@ -65,6 +65,11 @@ sam_db_val (
 
 
 sam_db_ret_t
+sam_db_get (
+    sam_db_t *self,
+    int key);
+
+sam_db_ret_t
 sam_db_sibling (
     sam_db_t *self,
     sam_db_trav_t trav);

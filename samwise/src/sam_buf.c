@@ -77,11 +77,7 @@ typedef struct state_t {
     int seq;                ///< used to assign unique message id's
     int last_stored;        ///< used to decide if it's a premature ack
 
-    /// all database related stuff
-    struct db {
-        DB_ENV *e;           ///< database environment
-        DB *p;               ///< database pointer
-    } db;
+    sam_db_t *db;           ///< storage engine
 
     zsock_t *in;            ///< for arriving acknowledgements
     zsock_t *out;           ///< for re-publishing
@@ -91,16 +87,6 @@ typedef struct state_t {
     uint64_t interval;      ///< how often messages are being tried again
     uint64_t threshold;     ///< at which point messages are tried again
 } state_t;
-
-
-/// Object used to acces the database
-typedef struct dbop_t {
-    DB_TXN *txn;
-    DBC *cursor;
-
-    DBT key;
-    DBT val;
-} dbop_t;
 
 
 
@@ -308,125 +294,6 @@ create_db (
 
     stat_db_size (state);
     state->db.p->set_errcall (state->db.p, db_error_handler);
-    return rc;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Close the database cursor and end the transaction based on the
-/// abort parameter: Either commit or abort.
-static void
-end_dbop (
-    state_t *state,
-    dbop_t *op,
-    bool abort)
-{
-    // handle cursor
-    if (op->cursor != NULL) {
-        op->cursor->close (op->cursor);
-        op->cursor = NULL;
-    }
-
-    // handle transaction
-    if (op->txn) {
-        if (abort) {
-            sam_log_error ("aborting transaction");
-            op->txn->abort (op->txn);
-        }
-
-        else {
-            int rc = op->txn->commit (op->txn, 0);
-            if (rc) {
-                state->db.e->err (state->db.e, rc, "transaction failed");
-            }
-            // TODO do I need to return with some error indication here?
-        }
-
-        op->txn = NULL;
-    }
-}
-
-
-//  --------------------------------------------------------------------------
-/// Create a database cursor and transaction handle.
-static int
-start_dbop (
-    state_t *state,
-    dbop_t *op)
-{
-    memset (op, 0, sizeof (dbop_t));
-
-    // create transaction handle
-    op->txn = NULL;
-    int rc = state->db.e->txn_begin (state->db.e, NULL, &op->txn, 0);
-
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "transaction begin failed");
-        return -1;
-    }
-
-    // create database cursor
-    op->cursor = NULL;
-    state->db.p->cursor (state->db.p, op->txn, &op->cursor, 0);
-    if (op->cursor == NULL) {
-        sam_log_error ("could not initialize cursor");
-        end_dbop (state, op, true);
-        return -1;
-    }
-
-    return 0;
-}
-
-
-//  --------------------------------------------------------------------------
-/// This function searches the db for the provided id and either fills
-/// the dbop structure (return code 0), or returns DB_NOTFOUND or
-/// another DB error code.
-static int
-get (
-    state_t *state,
-    dbop_t *op,
-    int *msg_id)
-{
-    memset (&op->val, 0, DBT_SIZE);
-    set_key (op, msg_id);
-
-    int rc = op->cursor->get (op->cursor, &op->key, &op->val, DB_SET);
-    // int rc = state->db.p->get (state->db.p, op->txn, &op->key, &op->val, 0);
-
-    if (rc == DB_NOTFOUND) {
-        sam_log_tracef ("'%d' was not found!", *(int *) op->key.data);
-    }
-
-    if (rc && rc != DB_NOTFOUND) {
-        state->db.e->err (state->db.e, rc, "could not get record");
-    }
-
-    return rc;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Returns the next item in the database.
-static int
-get_sibling (
-    state_t *state,
-    dbop_t *op,
-    uint32_t flag)
-{
-    assert (state);
-    assert (op);
-    assert (flag == DB_NEXT || flag == DB_PREV);
-
-    memset (&op->key, 0, DBT_SIZE);
-    memset (&op->val, 0, DBT_SIZE);
-
-    int rc = op->cursor->get(op->cursor, &op->key, &op->val, flag);
-    if (rc && rc != DB_NOTFOUND) {
-        state->db.e->err (
-            state->db.e, rc, "could not get next/previous item");
-    }
-
     return rc;
 }
 
@@ -950,6 +817,7 @@ handle_storage_req (
     void *args)
 {
     state_t *state = args;
+    sam_db_t *db = state->db;
 
     sam_msg_t *msg;
     sam_log_trace ("recv () storage request");
@@ -963,8 +831,7 @@ handle_storage_req (
     // is promised to the publishing client. See #66
     zsock_send (store_sock, "i", msg_id);
 
-    dbop_t op;
-    if (start_dbop (state, &op)) {
+    if (sam_db_begin (db)) {
         return -1;
     }
 
@@ -1151,7 +1018,7 @@ actor (
     zloop_destroy (&loop);
 
     // database
-    close_db (state);
+    sam_db_destroy (&state->db);
 
     // clean up
     zsock_destroy (&state->in);
@@ -1162,29 +1029,28 @@ actor (
 }
 
 
+
 //  --------------------------------------------------------------------------
 /// If records are saved in the db, the global sequence number and
 /// last_stored property must be set accordingly.
-static int
-restore_state (state_t *state)
+int
+sam_db_restore (
+    state_t *state)
 {
     state->seq = 0;
     state->last_stored = 0;
 
-    dbop_t op;
-    if (start_dbop (state, &op)) {
-        return -1;
-    }
+    sam_db_t *db = state->db;
 
-    int rc = get_sibling (state, &op, DB_PREV);
-    if (rc && rc == DB_NOTFOUND) {
+    int rc = sam_db_sibling (db, SAM_DB_PREV);
+    if (rc && rc == SAM_DB_NOTFOUND) {
         rc = 0;
     }
 
     // there are records in the db, update seq and last_stored
     else if (!rc) {
-        state->seq = *(int *) op.key.data;
-        record_t *header = op.val.data;
+        state->seq = sam_db_key (db);
+        record_t *header = sam_db_val (db);
 
         if (header->type == RECORD) {
             state->last_stored = state->seq;
@@ -1193,17 +1059,17 @@ restore_state (state_t *state)
         // find RECORD with highest key
         else {
             do {
-                rc = get_sibling (state, &op, DB_PREV);
-                if (rc == DB_NOTFOUND) {
+                rc = sam_db_sibling (db, SAM_DB_PREV);
+                if (rc == SAM_DB_NOTFOUND) {
                     state->last_stored = 0;
                     rc = 0;
                     break;
                 }
 
                 else if (!rc) {
-                    record_t *header = op.val.data;
+                    record_t *header = sam_db_val (db);
                     if (header->type == RECORD) {
-                        state->last_stored = *(int *) op.key.data;
+                        state->last_stored = sam_db_val (db);
                         break;
                     }
                 }
@@ -1213,7 +1079,7 @@ restore_state (state_t *state)
 
     }
 
-    end_dbop (state, &op, (rc)? true: false);
+    sam_db_end (db, (rc)? true: false);
 
     sam_log_infof (
         "restored state; seq: %d, last_stored: %d",
@@ -1242,19 +1108,13 @@ sam_buf_new (
     assert (self);
     assert (state);
 
-    // to check for null values
-    state->db.p = NULL;
-    state->db.e = NULL;
 
     // read config
     char
         *db_file_name,
         *db_home_name;
 
-    if (
-        sam_cfg_buf_home (cfg, &db_home_name) ||
-        sam_cfg_buf_file (cfg, &db_file_name) ||
-        sam_cfg_buf_retry_count (cfg, &state->tries) ||
+    if (sam_cfg_buf_retry_count (cfg, &state->tries) ||
         sam_cfg_buf_retry_interval (cfg, &state->interval) ||
         sam_cfg_buf_retry_threshold (cfg, &state->threshold)) {
 
@@ -1262,11 +1122,6 @@ sam_buf_new (
         goto abort;
     }
 
-
-    // init
-    if (create_db (state, db_home_name, db_file_name)) {
-        goto abort;
-    }
 
     // set sockets, change ownership
     state->in = *in;
@@ -1282,7 +1137,10 @@ sam_buf_new (
     assert (self->store_sock);
 
     // restore state
-    if (restore_state (state)) {
+    if (sam_db_restore (
+            sam_db_t *db,
+            &state->seq,
+            &state->last_stored) {
         goto abort;
     }
 
@@ -1293,6 +1151,10 @@ sam_buf_new (
     return self;
 
 abort:
+    if (state->db) {
+        sam_db_destroy (&state->db);
+    }
+
     free (self);
     free (state);
     return NULL;
@@ -1307,6 +1169,7 @@ sam_buf_destroy (
 {
     assert (*self);
     sam_log_info ("destroying buffer instance");
+    sam_db_destroy (&(*self)->db);
 
     zsock_destroy (&(*self)->store_sock);
     zactor_destroy (&(*self)->actor);
