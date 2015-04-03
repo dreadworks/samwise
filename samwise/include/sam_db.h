@@ -48,25 +48,26 @@ sam_db_destroy (
 
 int
 sam_db_begin (
-    sam_db_t *db);
+    sam_db_t *self);
 
 void
 sam_db_end (
-    sam_db_t *db
+    sam_db_t *self
     bool abort);
 
 int
 sam_db_key (
-    sam_db_t *db);
+    sam_db_t *self);
 
 void *
 sam_db_val (
-    sam_db_t *db);
+    sam_db_t *self);
 
 
 sam_db_ret_t
 sam_db_sibling (
-    sam_db_t *db);
+    sam_db_t *self,
+    sam_db_trav_t trav);
 
 
 
