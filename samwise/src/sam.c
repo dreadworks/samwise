@@ -552,6 +552,12 @@ init_buf (
     self->buf = sam_buf_new (
         cfg, &backend_pull, &frontend_push);
 
+    if (self->buf == NULL) {
+        zsock_destroy (&backend_pull);
+        zsock_destroy (&frontend_push);
+        return -1;
+    }
+
     return rc;
 }
 

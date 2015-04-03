@@ -66,6 +66,7 @@ samd_LDFLAGS = -static
 samctl_SOURCES = \
 	src/samctl.c   \
 	src/sam_cfg.c  \
+	src/sam_msg.c  \
   src/sam_log.c
 
 samctl_LDFLAGS = -lzmq -lczmq

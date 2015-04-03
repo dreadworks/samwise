@@ -120,6 +120,7 @@ samd_new (
 
     rc = sam_init (self->sam, self->cfg);
     if (rc) {
+        samd_destroy (&self);
         return NULL;
     }
 

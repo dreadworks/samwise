@@ -222,10 +222,10 @@ static void
 close_db (
     state_t *state)
 {
-    stat_db_size (state);
     int rc = 0;
 
     if (state->db.p) {
+        stat_db_size (state);
         rc = state->db.p->close (state->db.p, 0);
         if (rc) {
             sam_log_errorf (

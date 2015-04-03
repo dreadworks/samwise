@@ -80,7 +80,7 @@ out (
     }
 
 }
-p
+
 
 
 /*
@@ -90,8 +90,11 @@ p
 
 //  --------------------------------------------------------------------------
 /// Generic function to send a message to samd.
-static zmsg_t *
-send_cmd (const char *cmd_name)
+static sam_msg_t *
+send_cmd (
+    ctl_t *ctl,
+    args_t *args,
+    const char *cmd_name)
 {
     int rc = zsock_send (
         ctl->sam_sock, "is", SAM_PROTOCOL_VERSION, cmd_name);
@@ -102,23 +105,30 @@ send_cmd (const char *cmd_name)
     }
 
     zsock_set_rcvtimeo (ctl->sam_sock, 1000);
+    zmsg_t *zmsg = zmsg_recv (ctl->sam_sock);
 
-    int reply_code;
-    char *reply_msg;
-    rc = zsock_recv (
-        ctl->sam_sock, "is", &reply_code, &reply_msg);
-
-    if (rc) {
+    if (zmsg == NULL) {
         out (
             ERROR, args, "could not receive answer (interrupt or timeout)");
         return NULL;
     }
 
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    int reply_code;
+    rc = sam_msg_pop (msg, "i", &reply_code);
+    assert (!rc);
+
     if (reply_code) {
-        out (ERROR, args, reply_msg);
-        free (reply_msg);
+        char *err_msg;
+        rc = sam_msg_pop (msg, "s", &err_msg);
+        assert (!rc);
+
+        out (ERROR, args, err_msg);
+        sam_msg_destroy (&msg);
         return NULL;
     }
+
+    return msg;
 }
 
 
@@ -130,8 +140,10 @@ cmd_ping (
     ctl_t *ctl,
     args_t *args)
 {
-    if (!send_cmd ("ping")) {
+    sam_msg_t *msg = send_cmd (ctl, args, "ping");
+    if (msg) {
         out (NORMAL, args, "pong");
+        sam_msg_destroy (&msg);
     }
 }
 
