@@ -834,6 +834,7 @@ sam_eval (
 
     // ping
     else if (!strcmp (action, "ping")) {
+        sam_msg_destroy (&msg);
         return new_ret ();
     }
 
