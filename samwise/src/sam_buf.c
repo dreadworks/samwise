@@ -63,9 +63,6 @@
 #include "../include/sam_prelude.h"
 
 
-#define DBT_SIZE sizeof (DBT)
-
-
 /*
  *    HANDLE DEFINITIONS
  */
@@ -299,89 +296,10 @@ create_db (
 
 
 //  --------------------------------------------------------------------------
-/// Update current database record.
-static int
-put (
-    state_t *state,
-    dbop_t *op,
-    size_t size,
-    byte **record,
-    uint32_t flags)
-{
-    assert (state);
-    assert (op);
-    assert (*record);
-
-    sam_log_tracef (
-        "putting '%d' (size %d) into the buffer",
-        *(int *) op->key.data, size);
-
-    memset (&op->val, 0, DBT_SIZE);
-    op->val.size = size;
-    op->val.data = *record;
-
-    int rc = op->cursor->put (op->cursor, &op->key, &op->val, flags);
-    // int rc = state->db.p->put (state->db.p, op->txn, &op->key, &op->val, 0);
-
-    free (*record);
-    *record = NULL;
-
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "could not put record");
-    }
-
-    return rc;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Update a database record. If the flag is DB_CURRENT, op's key is
-/// ignored and the cursors position is updated, if the flag is
-/// DB_KEYFIRST, the key is used to determine where to put the record.
-static int
-update (
-    state_t *state,
-    dbop_t *op,
-    uint32_t flags)
-{
-    assert (state);
-    assert (op);
-    assert (flags == DB_CURRENT || flags == DB_KEYFIRST);
-
-    int rc = op->cursor->put (op->cursor, &op->key, &op->val, flags);
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "could not update record");
-    }
-    return rc;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Delete the record the cursor currently points to.
-static int
-del_current (
-    state_t *state,
-    dbop_t *op)
-{
-    assert (state);
-    assert (op);
-
-    int rc = op->cursor->del (op->cursor, 0);
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "could not delete record");
-        return rc;
-    }
-
-    return 0;
-}
-
-
-//  --------------------------------------------------------------------------
 /// Delete a database record and all its tombstones.
 static int
 del (
-    state_t *state,
-    dbop_t *op)
+    state_t *state)
 {
     assert (state);
     assert (op);
@@ -389,11 +307,13 @@ del (
     int rc, curr_key, prev_key;
     rc = curr_key = prev_key = 0;
 
+    sam_db_t *db = state->db;
+
     do {
-        del_current (state, op);
+        sam_db_del (db);
 
         // determine previous tombstone - if any
-        record_t *header = (record_t *) op->val.data;
+        record_t *header = sam_db_val (db);
         if (header->type == RECORD) {
             prev_key = header->c.record.prev;
         }
@@ -404,9 +324,9 @@ del (
         // prepare next round
         if (prev_key) {
             curr_key = prev_key;
-            rc = get (state, op, &prev_key);
+            rc = sam_db_get (db, &prev_key);
 
-            if (rc) {
+            if (rc != SAM_DB_OK) {
                 // either DB_NOTFOUND or an error, abort
                 // deletion regardless; errors are handled
                 // one level up via rc
@@ -458,15 +378,14 @@ insert_tombstone (
 /// to-be-discarded messages.
 static int
 update_record_tries (
-    state_t *state,
-    dbop_t *op)
+    state_t *state)
 {
-    record_t *header = op->val.data;
+    record_t *header = sam_db_val (state->db);
 
     header->c.record.tries -= 1;
     if (!header->c.record.tries) {
-        sam_log_infof ("discarding message '%d'", *(int *) op->key.data);
-        del (state, op);
+        sam_log_infof ("discarding message '%d'", sam_db_key (state->db));
+        sam_db_del (state->db);
         return -1;
     }
 
@@ -478,10 +397,9 @@ update_record_tries (
 /// Checks if the record is inside the bounds of messages to be resent.
 static int
 resend_condition (
-    state_t *state,
-    dbop_t *op)
+    state_t *state)
 {
-    record_t *header = op->val.data;
+    record_t *header = sam_db_val (state->db);
     if (header->type == RECORD) {
         uint64_t eps = zclock_mono () - header->c.record.ts;
         return (state->threshold < eps)? 0: -1;
@@ -496,14 +414,17 @@ resend_condition (
 /// it via output channel.
 static int
 resend_message (
-    state_t *state,
-    dbop_t *op)
+    state_t *state)
 {
-    record_t *header = op->val.data;
+    record_t *header;
+    size_t record_size;
+    sam_db_t *db = state->db;
+
+    sam_db_get_val (db, &record_size, &header);
     size_t header_size = sizeof (record_t);
 
     // decode message
-    size_t msg_size = op->val.size - header_size;
+    size_t msg_size = record_size - header_size;
     byte *encoded_msg = ((byte *) op->val.data) + header_size;
     sam_msg_t *msg = sam_msg_decode (encoded_msg, msg_size);
     if (msg == NULL) {
@@ -514,7 +435,7 @@ resend_message (
     // wrap backend acknowledgments
     uint64_t be_acks = header->c.record.be_acks;
     zframe_t *id_frame = zframe_new (&be_acks, sizeof (be_acks));
-    int msg_id = *(int *) op->key.data;
+    int msg_id = sam_db_get_key (db);
 
     sam_log_tracef ("resending msg '%d'", msg_id);
     zsock_send (state->out, "ifp", msg_id, id_frame, msg);
@@ -585,7 +506,6 @@ acks_remaining (
 static int
 create_record_store (
     state_t *state,
-    dbop_t *op,
     sam_msg_t *msg)
 {
     size_t size, header_size;
@@ -615,7 +535,7 @@ create_record_store (
     sam_msg_encode (msg, &content);
 
     state->last_stored += 1;
-    return put (state, op, size, &record, DB_KEYFIRST);
+    return sam_db_put (db, size, &record);
 }
 
 
@@ -627,7 +547,6 @@ create_record_store (
 static int
 update_record_store (
     state_t *state,
-    dbop_t *op,
     sam_msg_t *msg)
 {
     int rc = 0;
@@ -644,7 +563,7 @@ update_record_store (
 
     // remove if there are no outstanding acks
     if (!header->c.record.acks_remaining) {
-        rc = del (state, op);
+        rc = del (state);
     }
 
     // add encoded message to the record
@@ -674,7 +593,6 @@ update_record_store (
 static int
 create_record_ack (
     state_t *state,
-    dbop_t *op,
     uint64_t backend_id)
 {
     size_t size = sizeof (record_t);
@@ -692,7 +610,7 @@ create_record_ack (
     header->c.record.be_acks = backend_id;
 
     sam_log_tracef ("created record (ack) '%d'", *(int *) op->key.data);
-    return put (state, op, size, &record, DB_KEYFIRST);
+    return sam_db_put (state->db, size, &record);
 }
 
 
@@ -706,22 +624,22 @@ create_record_ack (
 static int
 update_record_ack (
     state_t *state,
-    dbop_t *op,
     uint64_t backend_id)
 {
+    sam_db_t *db;
     int rc = 0;
 
     // skip all tombstones up to the record
-    record_t *header = (record_t *) op->val.data;
+    record_t *header = sam_db_val (db);
     while (header->type == RECORD_TOMBSTONE) {
 
         int new_id = header->c.tombstone.next;
         sam_log_tracef ("following tombstone chain to '%d'", new_id);
-        if (get (state, op, &new_id)) {
+        if (sam_db_get (db, &new_id)) {
             return -1;
         }
 
-        header = op->val.data;
+        header = sam_db_val (db);
     }
 
     // if ack arrives multiple times, do nothing
@@ -737,7 +655,7 @@ update_record_ack (
 
     // enough acks arrived, delete record
     if (!header->c.record.acks_remaining) {
-        rc = del (state, op);
+        rc = sam_db_del (db);
     }
 
 
@@ -745,11 +663,11 @@ update_record_ack (
     else {
         sam_log_tracef (
             "updating '%d', acks remaining: %d",
-            *(int *) op->key.data,
+            sam_db_key (db),
             header->c.record.acks_remaining);
 
         header->type = RECORD;
-        rc = update (state, op, DB_CURRENT);
+        rc = sam_db_update (db, SAM_DB_CURRENT);
     }
 
     return rc;
@@ -776,16 +694,17 @@ handle_ack (
     uint64_t backend_id,
     int ack_id)
 {
-    dbop_t op;
-    if (start_dbop (state, &op)) {
+    sam_db_t *db = state->db;
+
+    if (sam_db_start (db)) {
         return -1;
     }
 
-    int rc = get (state, &op, &ack_id);
+    int rc = sam_db_get (db, &ack_id);
 
     // record already there, update data
-    if (rc == 0) {
-        rc = update_record_ack (state, &op, backend_id);
+    if (rc == SAM_DB_OK) {
+        rc = update_record_ack (state, backend_id);
     }
 
     // record not yet there, create db entry
@@ -794,7 +713,7 @@ handle_ack (
             sam_log_tracef ("ignoring late ack '%d'", ack_id);
             rc = 0;
         } else {
-            rc = create_record_ack (state, &op, backend_id);
+            rc = create_record_ack (state, backend_id);
         }
     }
 
@@ -802,7 +721,7 @@ handle_ack (
         rc = -1;
     }
 
-    end_dbop (state, &op, (rc)? true: false);
+    sam_db_end (db, (rc)? true: false);
     return rc;
 }
 
@@ -835,17 +754,17 @@ handle_storage_req (
         return -1;
     }
 
-    int rc = get (state, &op, &msg_id);
+    sam_db_ret_t ret = sam_db_get (db, &msg_id);
 
     // record already there (ack arrived early), update data
-    if (rc == 0) {
-        rc = update_record_store (state, &op, msg);
+    if (ret == SAM_DB_OK) {
+        rc = update_record_store (state, msg);
     }
 
     // record not yet there, create db entry
-    else if (rc == DB_NOTFOUND) {
+    else if (ret == SAM_DB_NOTFOUND) {
         // key was already set by get ()
-        rc = create_record_store (state, &op, msg);
+        rc = create_record_store (state, msg);
     }
 
     // an error occured
@@ -853,7 +772,7 @@ handle_storage_req (
         rc = -1;
     }
 
-    end_dbop (state, &op, (rc)? true: false);
+    sam_db_end (db, (rc)? true: false);
     sam_msg_destroy (&msg);
     return rc;
 }
@@ -906,20 +825,20 @@ handle_resend (
 {
     sam_log_trace ("resend cycle triggered");
     state_t *state = args;
-    dbop_t op;
+    sam_db_t *db = state->db;
 
-    start_dbop (state, &op);
+    sam_db_begin (db);
 
     int first_requeued_key = 0; // can never be zero
-    int rc = get_sibling (state, &op, DB_NEXT);
+    int rc = sam_db_sibling (db, SAM_DB_NEXT);
 
     while (
-        !rc &&                                         // there's another item
-        !resend_condition (state, &op) &&              // check threshold
-        first_requeued_key != *(int *) op.key.data) {  // don't send requeued
+        !rc &&                                     // there's another item
+        !resend_condition (state, &op) &&          // check threshold
+        first_requeued_key != sam_db_key (db)) {   // don't send requeued
 
-        int cur_id = *(int *) op.key.data;
-        record_t *header = op.val.data;
+        int cur_id = sam_db_key (db);
+        record_t *header = sam_db_val (db);
 
         // if early acks are reached, no record can follow
         if (header->type == RECORD_ACK) {
@@ -929,15 +848,15 @@ handle_resend (
 
         // skip tombstones
         if (header->type == RECORD_TOMBSTONE) {
-            rc = get_sibling (state, &op, DB_NEXT);
+            rc = sam_db_sibling (db, SAM_DB_NEXT);
             continue;
         }
 
 
         //  decrement tries
         assert (header->type == RECORD);
-        if (update_record_tries (state, &op)) {
-            rc = get_sibling (state, &op, DB_NEXT);
+        if (update_record_tries (state)) {
+            rc = sam_db_sibling (db, SAM_DB_NEXT);
             continue;
         }
 
@@ -945,15 +864,16 @@ handle_resend (
         //  update record
         //  cursor gets positioned to the new records location
         int new_id = create_msg_id (state);
-        op.key.data = &new_id;
         if (!first_requeued_key) {
             first_requeued_key = new_id;
         }
 
+        sam_db_set_key (db, &new_id);
+
         int prev_id = header->c.record.prev;
         header->c.record.ts = zclock_mono ();
         header->c.record.prev = cur_id;
-        if (update (state, &op, DB_KEYFIRST)) {
+        if (sam_db_update (db, SAM_DB_KEY)) {
             rc = -1;
             break;
         }

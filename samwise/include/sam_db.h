@@ -26,7 +26,7 @@ typedef struct sam_db_t sam_db_t;
 
 
 typedef enum {
-    SAM_DB_OK,
+    SAM_DB_OK = 0,     // unnecessary, but explicit
     SAM_DB_NOTFOUND,
     SAM_DB_ERROR
 } sam_db_ret_t;
@@ -34,8 +34,10 @@ typedef enum {
 
 typedef enum {
     SAM_DB_PREV,
-    SAM_DB_NEXT
-} sam_db_trav_t;
+    SAM_DB_NEXT,
+    SAM_DB_CURRENT,
+    SAM_DB_KEY
+} sam_db_flag_t;
 
 
 sam_db_t *
@@ -52,28 +54,52 @@ sam_db_begin (
 
 void
 sam_db_end (
-    sam_db_t *self
+    sam_db_t *self,
     bool abort);
 
 int
-sam_db_key (
+sam_db_get_key (
     sam_db_t *self);
 
-void *
-sam_db_val (
-    sam_db_t *self);
+void
+sam_db_set_key (
+    sam_db_t *self,
+    int *key);
+
+void
+sam_db_get_val (
+    sam_db_t *self,
+    size_t *size,
+    void **record);
 
 
 sam_db_ret_t
 sam_db_get (
     sam_db_t *self,
-    int key);
+    int *key);
+
 
 sam_db_ret_t
 sam_db_sibling (
     sam_db_t *self,
-    sam_db_trav_t trav);
+    sam_db_flag_t trav);
 
+
+sam_db_ret_t
+sam_db_put (
+    sam_db_t *self,
+    size_t size,
+    byte **record);
+
+sam_db_ret_t
+sam_db_update (
+    sam_db_t *self,
+    sam_db_flag_t flag);
+
+
+sam_db_ret_t
+sam_db_del (
+    sam_db_t *self);
 
 
 

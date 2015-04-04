@@ -38,7 +38,9 @@ typedef struct sam_db_t {
 } sam_db_t;
 
 
+
 #define DBOP_SIZE sizeof (sam_db_t.op);
+#define DBT_SIZE sizeof (DBT);
 
 
 
@@ -134,19 +136,38 @@ sam_db_begin (
 
 
 int
-sam_db_key (
+sam_db_get_key (
     sam_db_t *self)
 {
     assert (self->op.key);
     return *(int *) self->op.key.data;
 }
 
+void
+sam_db_set_key (
+    sam_db_t *self,
+    int *key)
+{
+    self->op.key.data = &new_id;
+    self->op.key.size = sizeof (*key);
+}
+
+
 void *
-sam_db_val (
-    sam_db_t *self)
+sam_db_get_val (
+    sam_db_t *self,
+    size_t *size,
+    void **record)
 {
     assert (self->op.val);
-    return self->op.val.data;
+
+    if (size != NULL) {
+        *size = self->op.val.size;
+    }
+
+    if (record != NULL) {
+        *record = self->op.val.data;
+    }
 }
 
 
@@ -170,13 +191,15 @@ sam_db_get (
     sam_db_t *self,
     int *key)
 {
+    assert (self);
+    assert (self->op);
+
     DBT
         *key = &self->op.key,
         *val = &self->op.val;
 
     reset (key, val);
-    key.size = sizeof (*key);
-    key.data = key;
+    sam_db_set_key (self, key);
 
     DBC *cursor = self->op.cursor;
     int rc = op->cursor->get (cursor, key, val, DB_SET);
@@ -198,7 +221,7 @@ sam_db_get (
 sam_db_ret_t
 sam_db_sibling (
     sam_db_t *self,
-    sam_db_trav_t trav)
+    sam_db_flag_t trav)
 {
     assert (db);
     assert (trav == SAM_DB_PREV || trav == SAM_DB_CURRENT);
@@ -222,4 +245,95 @@ sam_db_sibling (
     }
 
     return (rc == DB_NOTFOUND)? SAM_DB_NOTFOUND: SAM_DB_OK;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Insert a database record.
+sam_db_ret_t
+sam_db_put (
+    sam_db_t *self,
+    size_t size,
+    byte **record)
+{
+    assert (self);
+    assert (*record);
+
+    sam_log_tracef (
+        "putting '%d' (size %d) into the database",
+        sam_db_key (self), size);
+
+    memset (&self->op.val, 0, DBT_SIZE);
+    DBT *val = &self->op.val;
+
+    val->size = size;
+    val->data = *record;
+
+    int rc = op->cursor->put (op->cursor, &self->op.key, val, DB_KEYFIRST);
+
+    free (*record);
+    *record = NULL;
+
+    if (rc) {
+        self->env->err (self->env, rc, "could not put record");
+        return SAM_DB_ERROR;
+    }
+
+    return SAM_DB_OK;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Update a database record. If the flag is SAM_DB_CURRENT, the key is
+/// ignored and the cursors position is updated; if the flag is
+/// SAM_DB_KEY, the key is used to determine where to put the record.
+sam_ret_t
+sam_db_update (
+    sam_db_t *self,
+    sam_db_flag_t kind)
+{
+    assert (self);
+    assert (self->op);
+    assert (kind == SAM_DB_CURRENT || kind == SAM_DB_KEY);
+
+    uint32_t flag;
+    if (kind == SAM_DB_CURRENT) {
+        flag = DB_CURRENT;
+    } else if (kind == SAM_DB_KEY) {
+        flag = DB_KEYFIRST;
+    }
+
+    DBT
+        *key = &self->op.key,
+        *val = &self->op.val;
+
+    DBC *cursor= self->op.cursor;
+
+    int rc = cursor->put (cursor, key, val, flag);
+    if (rc) {
+        self->env->err (self->env, rc, "could not update record");
+        return SAM_DB_ERROR;
+    }
+
+    return SAM_DB_OK;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Delete the record the cursor currently points to.
+sam_db_ret_t
+sam_db_del (
+    sam_db_t *self)
+{
+    assert (self);
+    assert (self->op);
+
+    DBC *cursor = self->op.cursor;
+    int rc = cursor->del (cursor, 0);
+    if (rc) {
+        self->env->err (state->db.e, rc, "could not delete record");
+        return SAM_DB_ERROR;
+    }
+
+    return SAM_DB_OK;
 }
