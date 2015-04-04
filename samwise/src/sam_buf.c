@@ -227,7 +227,7 @@ update_record_tries (
         sam_log_infof (
             "discarding message '%d'", sam_db_get_key (state->db));
 
-        sam_db_del (state->db);
+        del (state);
         return -1;
     }
 
@@ -403,7 +403,7 @@ update_record_store (
 
     record_t *header;
     sam_db_get_val (db, NULL, (void **) &header);
-    assert (header->type == RECORD);
+    assert (header->type == RECORD_ACK);
 
     sam_log_tracef (
         "ack already there, %d arrived already",
@@ -445,7 +445,6 @@ create_record_ack (
     uint64_t backend_id)
 {
     record_t record;
-
     record.type = RECORD_ACK;
     record.c.record.acks_remaining = -1;
     record.c.record.be_acks = backend_id;
@@ -553,7 +552,7 @@ handle_ack (
     }
 
     // record not yet there, create db entry
-    else if (rc == DB_NOTFOUND) {
+    else if (rc == SAM_DB_NOTFOUND) {
         if (ack_id < state->last_stored) {
             sam_log_tracef ("ignoring late ack '%d'", ack_id);
             rc = 0;
@@ -805,6 +804,9 @@ sam_db_restore (
     state->last_stored = 0;
 
     sam_db_t *db = state->db;
+    if (sam_db_begin (db)) {
+        return -1;
+    }
 
     int rc = sam_db_sibling (db, SAM_DB_PREV);
     if (rc && rc == SAM_DB_NOTFOUND) {
@@ -890,7 +892,7 @@ sam_buf_new (
     }
 
     // create db
-    state->db = sam_db_new (db_file_name, db_home_name);
+    state->db = sam_db_new (db_home_name, db_file_name);
 
     // set sockets, change ownership
     state->in = *in;
