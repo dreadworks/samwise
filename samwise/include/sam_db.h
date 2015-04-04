@@ -50,7 +50,7 @@ void
 sam_db_destroy (
     sam_db_t **self);
 
-int
+sam_db_ret_t
 sam_db_begin (
     sam_db_t *self);
 
@@ -103,6 +103,9 @@ sam_db_ret_t
 sam_db_del (
     sam_db_t *self);
 
+
+void *
+sam_db_test ();
 
 
 #endif

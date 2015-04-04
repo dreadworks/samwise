@@ -34,6 +34,7 @@ test_fn_t suites [] = {
     sam_gen_test,
     sam_msg_test,
     sam_cfg_test,
+    sam_db_test,
     sam_buf_test,
     sam_be_rmq_test,
     sam_test

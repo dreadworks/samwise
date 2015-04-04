@@ -56,9 +56,9 @@ stat_db_size (
 
 /*
 static void
-PRINT_DB_INFO (state_t *state)
+PRINT_DB_INFO (sam_db_t *self)
 {
-    stat_db_size (state);
+    stat_db_size (self);
 
     DBT key, data;
     memset (&key, 0, DBT_SIZE);
@@ -67,7 +67,7 @@ PRINT_DB_INFO (state_t *state)
     printf ("records: \n");
 
     DBC *cursor;
-    state->db.p->cursor (state->db.p, NULL, &cursor, 0);
+    self->dbp->cursor (self->dbp, NULL, &cursor, 0);
     while (!cursor->get (cursor, &key, &data, DB_NEXT)) {
         printf ("%d - ", *(int *) key.data);
     }
@@ -232,6 +232,7 @@ sam_db_end (
         }
 
         else {
+            sam_log_trace ("commiting transaction");
             int rc = self->op.txn->commit (self->op.txn, 0);
             if (rc) {
                 self->env->err (self->env, rc, "transaction failed");
@@ -245,7 +246,7 @@ sam_db_end (
 
 //  --------------------------------------------------------------------------
 /// Create a database cursor and transaction handle.
-int
+sam_db_ret_t
 sam_db_begin (
     sam_db_t *self)
 {
@@ -258,7 +259,7 @@ sam_db_begin (
 
     if (rc) {
         self->env->err (self->env, rc, "transaction begin failed");
-        return -1;
+        return SAM_DB_ERROR;
     }
 
     // create database cursor
@@ -266,10 +267,10 @@ sam_db_begin (
     if (self->op.cursor == NULL) {
         sam_log_error ("could not initialize cursor");
         sam_db_end (self, true);
-        return -1;
+        return SAM_DB_ERROR;
     }
 
-    return 0;
+    return SAM_DB_OK;
 }
 
 
@@ -277,6 +278,7 @@ int
 sam_db_get_key (
     sam_db_t *self)
 {
+    assert (self->op.key.data);
     return *(int *) self->op.key.data;
 }
 
@@ -286,8 +288,8 @@ sam_db_set_key (
     int *id)
 {
     DBT *key = &self->op.key;
-    key->data = &id;
-    key->size = sizeof (*key);
+    key->data = id;
+    key->size = sizeof (int);
 }
 
 
@@ -320,14 +322,15 @@ reset (
 
 //  --------------------------------------------------------------------------
 /// This function searches the db for the provided id and either fills
-/// the dbop structure (return code 0), or returns DB_NOTFOUND or
-/// another DB error code.
+/// the dbop structure (return code 0), returns SAM_DB_NOTFOUND or
+/// SAM_DB_ERROR.
 sam_db_ret_t
 sam_db_get (
     sam_db_t *self,
     int *id)
 {
     assert (self);
+    sam_log_tracef ("get, setting cursor to '%d'", *id);
 
     DBT
         *key = &self->op.key,
@@ -360,7 +363,7 @@ sam_db_sibling (
     sam_db_flag_t trav)
 {
     assert (self);
-    assert (trav == SAM_DB_PREV || trav == SAM_DB_CURRENT);
+    assert (trav == SAM_DB_PREV || trav == SAM_DB_NEXT);
 
     uint32_t flag = 0;
     if (trav == SAM_DB_PREV) {
@@ -384,6 +387,10 @@ sam_db_sibling (
         return SAM_DB_ERROR;
     }
 
+    if (rc != DB_NOTFOUND) {
+        sam_log_tracef ("get record '%d' as sibling", sam_db_get_key (self));
+    }
+
     return (rc == DB_NOTFOUND)? SAM_DB_NOTFOUND: SAM_DB_OK;
 }
 
@@ -398,6 +405,7 @@ sam_db_put (
 {
     assert (self);
     assert (record);
+    assert (self->op.key.data);
 
     sam_log_tracef (
         "putting '%d' (size %d) into the database",
@@ -438,8 +446,13 @@ sam_db_update (
     uint32_t flag;
     if (kind == SAM_DB_CURRENT) {
         flag = DB_CURRENT;
+        sam_log_tracef (
+            "update '%d', replacing current", sam_db_get_key (self));
+
     } else if (kind == SAM_DB_KEY) {
         flag = DB_KEYFIRST;
+        sam_log_tracef (
+            "update '%d', inserting at new position", sam_db_get_key (self));
     }
 
     DBT
@@ -465,6 +478,7 @@ sam_db_del (
     sam_db_t *self)
 {
     assert (self);
+    sam_log_tracef ("deleting '%d' from db", sam_db_get_key (self));
 
     DBC *cursor = self->op.cursor;
     int rc = cursor->del (cursor, 0);
