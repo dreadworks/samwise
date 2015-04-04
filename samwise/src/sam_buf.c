@@ -126,43 +126,6 @@ typedef struct record_t {
 } record_t;
 
 
-
-
-static void
-stat_db_size (state_t *state)
-{
-    DB_BTREE_STAT *statp;
-    state->db.p->stat (state->db.p, NULL, &statp, 0);
-    sam_log_infof ("db contains %d record(s)", statp->bt_nkeys);
-    free (statp);
-}
-
-
-
-/*
-static void
-PRINT_DB_INFO (state_t *state)
-{
-    stat_db_size (state);
-
-    DBT key, data;
-    memset (&key, 0, DBT_SIZE);
-    memset (&data, 0, DBT_SIZE);
-
-    printf ("records: \n");
-
-    DBC *cursor;
-    state->db.p->cursor (state->db.p, NULL, &cursor, 0);
-    while (!cursor->get (cursor, &key, &data, DB_NEXT)) {
-        printf ("%d - ", *(int *) key.data);
-    }
-
-    cursor->close (cursor);
-    printf ("\n");
-}
-*/
-
-
 //  --------------------------------------------------------------------------
 /// Create a unique, sortable message id. Order determines message
 /// age. Older keys must have smaller keys.
@@ -175,134 +138,12 @@ create_msg_id (
 
 
 //  --------------------------------------------------------------------------
-/// Sets the database records key.
-static void
-set_key (
-    dbop_t *op,
-    int *key)
-{
-    memset (&op->key, 0, DBT_SIZE);
-    op->key.size = sizeof (*key);
-    op->key.data = key;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Generic error handler invoked by DB.
-static void
-db_error_handler (
-    const DB_ENV *db_env UU,
-    const char *err_prefix UU,
-    const char *msg)
-{
-    sam_log_errorf ("db error: %s", msg);
-}
-
-
-//  --------------------------------------------------------------------------
-/// Close (partially) initialized database and environment.
-static void
-close_db (
-    state_t *state)
-{
-    int rc = 0;
-
-    if (state->db.p) {
-        stat_db_size (state);
-        rc = state->db.p->close (state->db.p, 0);
-        if (rc) {
-            sam_log_errorf (
-                "could not safely close db: %s",
-                db_strerror (rc));
-        }
-    }
-
-    if (state->db.e) {
-        rc = state->db.e->close (state->db.e, 0);
-        if (rc) {
-            sam_log_errorf (
-                "could not safely close db environment: %s",
-                db_strerror (rc));
-        }
-    }
-}
-
-
-//  --------------------------------------------------------------------------
-/// Create a database environment and a database handle.
-static int
-create_db (
-    state_t *state,
-    const char *db_home_name,
-    const char *db_file_name)
-{
-
-    // initialize the environment
-    uint32_t env_flags =
-        DB_CREATE      |    // create environment if it's not there
-        DB_INIT_TXN    |    // initialize transactions
-        DB_INIT_LOCK   |    // locking (is this needed for st?)
-        DB_INIT_LOG    |    // for recovery
-        DB_INIT_MPOOL;      // in-memory cache
-
-    int rc = db_env_create (&state->db.e, 0);
-    if (rc) {
-        sam_log_errorf (
-            "could not create db environment: %s",
-            db_strerror (rc));
-        return rc;
-    }
-
-    rc = state->db.e->open (state->db.e, db_home_name, env_flags, 0);
-    if (rc) {
-        sam_log_errorf (
-            "could not open db environment: %s",
-            db_strerror (rc));
-        close_db (state);
-        return rc;
-    }
-
-
-    // open the database
-    uint32_t db_flags = DB_CREATE | DB_AUTO_COMMIT;
-
-    rc = db_create (&state->db.p, state->db.e, 0);
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "database creation failed");
-        close_db (state);
-        return rc;
-    }
-
-   rc = state->db.p->open (
-        state->db.p,
-        NULL,             // transaction pointer
-        db_file_name,     // on disk file
-        NULL,             // logical db name
-        DB_BTREE,         // access method
-        db_flags,         // open flags
-        0);               // file mode
-
-    if (rc) {
-        state->db.e->err (state->db.e, rc, "database open failed");
-        state->db.p->close (state->db.p, 0);
-        return rc;
-    }
-
-
-    stat_db_size (state);
-    state->db.p->set_errcall (state->db.p, db_error_handler);
-    return rc;
-}
-
-
-//  --------------------------------------------------------------------------
 /// Delete a database record and all its tombstones.
 static int
 del (
     state_t *state)
 {
     assert (state);
-    assert (op);
 
     int rc, curr_key, prev_key;
     rc = curr_key = prev_key = 0;
@@ -313,7 +154,9 @@ del (
         sam_db_del (db);
 
         // determine previous tombstone - if any
-        record_t *header = sam_db_val (db);
+        record_t *header;
+        sam_db_get_val (db, NULL, (void **) &header);
+
         if (header->type == RECORD) {
             prev_key = header->c.record.prev;
         }
@@ -345,12 +188,13 @@ del (
 static int
 insert_tombstone (
     state_t *state,
-    dbop_t *op,
     int prev,
     int *position)
 {
+    sam_db_t *db = state->db;
+
     size_t size = sizeof (record_t);
-    int next = *(int *) op->key.data;
+    int next = sam_db_get_key (db);
 
     record_t tombstone;
     memset (&tombstone, 0, size);
@@ -362,14 +206,10 @@ insert_tombstone (
     tombstone.c.tombstone.next = next;
 
     // write new key
-    set_key (op, position);
+    sam_db_set_key (db, position);
 
     // write new data
-    memset (&op->val, 0, DBT_SIZE);
-    op->val.size = size;
-    op->val.data = &tombstone;
-
-    return update (state, op, DB_KEYFIRST);
+    return sam_db_put (db, size, (void *) &tombstone);
 }
 
 
@@ -378,13 +218,15 @@ insert_tombstone (
 /// to-be-discarded messages.
 static int
 update_record_tries (
-    state_t *state)
+    state_t *state,
+    record_t *header)
 {
-    record_t *header = sam_db_val (state->db);
-
     header->c.record.tries -= 1;
+
     if (!header->c.record.tries) {
-        sam_log_infof ("discarding message '%d'", sam_db_key (state->db));
+        sam_log_infof (
+            "discarding message '%d'", sam_db_get_key (state->db));
+
         sam_db_del (state->db);
         return -1;
     }
@@ -397,9 +239,9 @@ update_record_tries (
 /// Checks if the record is inside the bounds of messages to be resent.
 static int
 resend_condition (
-    state_t *state)
+    state_t *state,
+    record_t *header)
 {
-    record_t *header = sam_db_val (state->db);
     if (header->type == RECORD) {
         uint64_t eps = zclock_mono () - header->c.record.ts;
         return (state->threshold < eps)? 0: -1;
@@ -420,12 +262,12 @@ resend_message (
     size_t record_size;
     sam_db_t *db = state->db;
 
-    sam_db_get_val (db, &record_size, &header);
+    sam_db_get_val (db, &record_size, (void **) &header);
     size_t header_size = sizeof (record_t);
 
     // decode message
     size_t msg_size = record_size - header_size;
-    byte *encoded_msg = ((byte *) op->val.data) + header_size;
+    byte *encoded_msg = (byte *) header + header_size;
     sam_msg_t *msg = sam_msg_decode (encoded_msg, msg_size);
     if (msg == NULL) {
         sam_log_error ("could not decode stored message");
@@ -517,8 +359,9 @@ create_record_store (
         return -1;
     }
 
+    sam_db_t *db = state->db;
     sam_log_tracef (
-        "creating record for msg '%d'", *(int *) op->key.data);
+        "creating record for msg '%d'", sam_db_get_key (db));
 
     // set header data
     record_t *header = (record_t *) record;
@@ -535,7 +378,10 @@ create_record_store (
     sam_msg_encode (msg, &content);
 
     state->last_stored += 1;
-    return sam_db_put (db, size, &record);
+    sam_db_ret_t ret = sam_db_put (db, size, record);
+
+    free (record);
+    return ret;
 }
 
 
@@ -553,7 +399,10 @@ update_record_store (
     size_t total_size, header_size;
     record_size (&total_size, &header_size, msg);
 
-    record_t *header = (record_t *) op->val.data;
+    sam_db_t *db = state->db;
+
+    record_t *header;
+    sam_db_get_val (db, NULL, (void **) &header);
     assert (header->type == RECORD);
 
     sam_log_tracef (
@@ -575,12 +424,12 @@ update_record_store (
 
         // copy header
         byte
-            *header_cpy = memmove (record, op->val.data, header_size),
+            *header_cpy = memmove (record, header, header_size),
             *content = record + header_size;
 
         assert (header_cpy);
         sam_msg_encode (msg, &content);
-        rc = put (state, op, total_size, &record, DB_CURRENT);
+        rc = sam_db_put (db, total_size, record);
     }
 
     return rc;
@@ -595,22 +444,16 @@ create_record_ack (
     state_t *state,
     uint64_t backend_id)
 {
-    size_t size = sizeof (record_t);
+    record_t record;
 
-    // only the header is needed
-    byte *record = malloc (size);
-    if (!record) {
-        sam_log_error ("could not create record");
-        return -1;
-    }
+    record.type = RECORD_ACK;
+    record.c.record.acks_remaining = -1;
+    record.c.record.be_acks = backend_id;
 
-    record_t *header = (record_t *) record;
-    header->type = RECORD_ACK;
-    header->c.record.acks_remaining = -1;
-    header->c.record.be_acks = backend_id;
+    sam_log_tracef (
+        "created record (ack) '%d'", sam_db_get_key (state->db));
 
-    sam_log_tracef ("created record (ack) '%d'", *(int *) op->key.data);
-    return sam_db_put (state->db, size, &record);
+    return sam_db_put (state->db, sizeof (record_t), (void *) &record);
 }
 
 
@@ -626,11 +469,13 @@ update_record_ack (
     state_t *state,
     uint64_t backend_id)
 {
-    sam_db_t *db;
+    sam_db_t *db = state->db;
     int rc = 0;
 
     // skip all tombstones up to the record
-    record_t *header = sam_db_val (db);
+    record_t *header;
+
+    sam_db_get_val (db, NULL, (void **) &header);
     while (header->type == RECORD_TOMBSTONE) {
 
         int new_id = header->c.tombstone.next;
@@ -639,7 +484,7 @@ update_record_ack (
             return -1;
         }
 
-        header = sam_db_val (db);
+        sam_db_get_val (db, NULL, (void **) &header);
     }
 
     // if ack arrives multiple times, do nothing
@@ -663,7 +508,7 @@ update_record_ack (
     else {
         sam_log_tracef (
             "updating '%d', acks remaining: %d",
-            sam_db_key (db),
+            sam_db_get_key (db),
             header->c.record.acks_remaining);
 
         header->type = RECORD;
@@ -696,7 +541,7 @@ handle_ack (
 {
     sam_db_t *db = state->db;
 
-    if (sam_db_start (db)) {
+    if (sam_db_begin (db)) {
         return -1;
     }
 
@@ -755,6 +600,7 @@ handle_storage_req (
     }
 
     sam_db_ret_t ret = sam_db_get (db, &msg_id);
+    int rc = -1;
 
     // record already there (ack arrived early), update data
     if (ret == SAM_DB_OK) {
@@ -765,11 +611,6 @@ handle_storage_req (
     else if (ret == SAM_DB_NOTFOUND) {
         // key was already set by get ()
         rc = create_record_store (state, msg);
-    }
-
-    // an error occured
-    else {
-        rc = -1;
     }
 
     sam_db_end (db, (rc)? true: false);
@@ -832,13 +673,16 @@ handle_resend (
     int first_requeued_key = 0; // can never be zero
     int rc = sam_db_sibling (db, SAM_DB_NEXT);
 
-    while (
-        !rc &&                                     // there's another item
-        !resend_condition (state, &op) &&          // check threshold
-        first_requeued_key != sam_db_key (db)) {   // don't send requeued
+    record_t *header;
+    sam_db_get_val (db, NULL, (void **) &header);
 
-        int cur_id = sam_db_key (db);
-        record_t *header = sam_db_val (db);
+    while (
+        !rc &&                                        // there's another item
+        !resend_condition (state, header) &&          // check threshold
+        first_requeued_key != sam_db_get_key (db)) {  // don't send requeued
+
+        int cur_id = sam_db_get_key (db);
+        sam_db_get_val (db, NULL, (void **) &header);
 
         // if early acks are reached, no record can follow
         if (header->type == RECORD_ACK) {
@@ -855,7 +699,7 @@ handle_resend (
 
         //  decrement tries
         assert (header->type == RECORD);
-        if (update_record_tries (state)) {
+        if (update_record_tries (state, header)) {
             rc = sam_db_sibling (db, SAM_DB_NEXT);
             continue;
         }
@@ -884,7 +728,7 @@ handle_resend (
 
         //  resend message
         //  use current dbop state to read the message
-        if (resend_message (state, &op)) {
+        if (resend_message (state)) {
             rc = -1;
             break;
         }
@@ -892,19 +736,19 @@ handle_resend (
 
         //  create tombstone
         //  resets cursor position
-        if (insert_tombstone (state, &op, prev_id, &cur_id)) {
+        if (insert_tombstone (state, prev_id, &cur_id)) {
             rc = -1;
             break;
         }
 
-        rc = get_sibling (state, &op, DB_NEXT);
+        rc = sam_db_sibling (db, SAM_DB_NEXT);
     }
 
-    if (rc == DB_NOTFOUND) {
+    if (rc == SAM_DB_NOTFOUND) {
         rc = 0;
     }
 
-    end_dbop (state, &op, (rc)? true: false);
+    sam_db_end (db, (rc)? true: false);
     return rc;
 }
 
@@ -969,8 +813,9 @@ sam_db_restore (
 
     // there are records in the db, update seq and last_stored
     else if (!rc) {
-        state->seq = sam_db_key (db);
-        record_t *header = sam_db_val (db);
+        state->seq = sam_db_get_key (db);
+        record_t *header;
+        sam_db_get_val (db, NULL, (void **) &header);
 
         if (header->type == RECORD) {
             state->last_stored = state->seq;
@@ -987,9 +832,9 @@ sam_db_restore (
                 }
 
                 else if (!rc) {
-                    record_t *header = sam_db_val (db);
+                    sam_db_get_val (db, NULL, (void **) &header);
                     if (header->type == RECORD) {
-                        state->last_stored = sam_db_val (db);
+                        state->last_stored = sam_db_get_key (db);
                         break;
                     }
                 }
@@ -1034,7 +879,9 @@ sam_buf_new (
         *db_file_name,
         *db_home_name;
 
-    if (sam_cfg_buf_retry_count (cfg, &state->tries) ||
+    if (sam_cfg_buf_file (cfg, &db_file_name) ||
+        sam_cfg_buf_home (cfg, &db_home_name) ||
+        sam_cfg_buf_retry_count (cfg, &state->tries) ||
         sam_cfg_buf_retry_interval (cfg, &state->interval) ||
         sam_cfg_buf_retry_threshold (cfg, &state->threshold)) {
 
@@ -1042,6 +889,8 @@ sam_buf_new (
         goto abort;
     }
 
+    // create db
+    state->db = sam_db_new (db_file_name, db_home_name);
 
     // set sockets, change ownership
     state->in = *in;
@@ -1057,10 +906,7 @@ sam_buf_new (
     assert (self->store_sock);
 
     // restore state
-    if (sam_db_restore (
-            sam_db_t *db,
-            &state->seq,
-            &state->last_stored) {
+    if (sam_db_restore (state)) {
         goto abort;
     }
 
@@ -1089,7 +935,6 @@ sam_buf_destroy (
 {
     assert (*self);
     sam_log_info ("destroying buffer instance");
-    sam_db_destroy (&(*self)->db);
 
     zsock_destroy (&(*self)->store_sock);
     zactor_destroy (&(*self)->actor);
