@@ -25,11 +25,14 @@ src_libsam_la_SOURCES =          \
   include/sam_cfg.h              \
   src/sam_cfg.c                  \
 \
+  include/sam_db.h               \
+  src/sam_db_bdb.c               \
+\
   include/sam_buf.h              \
   src/sam_buf.c                  \
 \
-  include/sam_be_rmq.h          \
-  src/sam_be_rmq.c              \
+  include/sam_be_rmq.h           \
+  src/sam_be_rmq.c               \
 \
   include/sam.h                  \
   include/sam_prelude.h          \

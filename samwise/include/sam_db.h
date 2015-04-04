@@ -41,7 +41,9 @@ typedef enum {
 
 
 sam_db_t *
-sam_db_new (zconf_t *conf);
+sam_db_new (
+    const char *db_home_name,
+    const char *db_file_name);
 
 
 void
@@ -89,7 +91,7 @@ sam_db_ret_t
 sam_db_put (
     sam_db_t *self,
     size_t size,
-    byte **record);
+    byte *record);
 
 sam_db_ret_t
 sam_db_update (
