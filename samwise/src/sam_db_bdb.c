@@ -24,6 +24,8 @@
 
 /// all database related stuff
 struct sam_db_t {
+    bool txn;          ///< transactions enabled?
+
     DB_ENV *env;       ///< database environment
     DB *dbp;           ///< database pointer
 
@@ -122,12 +124,13 @@ sam_db_new (
 {
     char
         *hname = zconfig_resolve (conf, "home", NULL),
-        *fname = zconfig_resolve (conf, "file", NULL);
+        *fname = zconfig_resolve (conf, "file", NULL),
+        *txn_str = zconfig_resolve (conf, "transactions", NULL);
 
-    if (hname == NULL || fname == NULL) {
+    if (hname == NULL || fname == NULL || txn_str == NULL) {
+        sam_log_error ("could not load configuration");
         return NULL;
     }
-
 
     sam_db_t *self = malloc (sizeof (sam_db_t));
     assert (self);
@@ -161,7 +164,18 @@ sam_db_new (
 
 
     // open the database
-    uint32_t db_flags = DB_CREATE | DB_AUTO_COMMIT;
+    self->txn = (!strcmp (txn_str, "yes")? true: false);
+    if (self->txn) {
+        sam_log_info ("enabled transactions");
+    }
+    else {
+        sam_log_info ("disabled transactions");
+    }
+
+    uint32_t db_flags = DB_CREATE;
+    if (self->txn) {
+        db_flags |= DB_AUTO_COMMIT;
+    }
 
     rc = db_create (&self->dbp, self->env, 0);
     if (rc) {
@@ -269,14 +283,20 @@ sam_db_begin (
     assert (self->op.txn == NULL);
     assert (self->op.cursor == NULL);
 
-
     // create transaction handle
-    int rc = self->env->txn_begin (self->env, NULL, &self->op.txn, 0);
-
-    if (rc) {
-        self->env->err (self->env, rc, "transaction begin failed");
-        return SAM_DB_ERROR;
+    if (!self->txn) {
+        self->op.txn = NULL;
     }
+
+    else {
+        int rc = self->env->txn_begin (self->env, NULL, &self->op.txn, 0);
+
+        if (rc) {
+            self->env->err (self->env, rc, "transaction begin failed");
+            return SAM_DB_ERROR;
+        }
+    }
+
 
     // create database cursor
     self->dbp->cursor (self->dbp, self->op.txn, &self->op.cursor, 0);
