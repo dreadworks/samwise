@@ -13,7 +13,7 @@
    @brief BerkeleyDB storage
    @file sam_buf.c
 
-   TODO description
+   Uses the BerkeleyDB b+tree storage engine to persist messages.
 
 
 */
@@ -43,6 +43,9 @@ struct sam_db_t {
 #define DBT_SIZE sizeof (DBT)
 
 
+
+//  --------------------------------------------------------------------------
+/// Returns the current size of the database. This is an expensive operation.
 static void
 stat_db_size (
     sam_db_t *self)
@@ -90,6 +93,8 @@ db_error_handler (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Resets the current state.
 static void
 clear_op (
     sam_db_t *self)
@@ -108,6 +113,9 @@ clear_op (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Creates an environment, initializes the logging and locking and
+/// (re-)opens the database.
 sam_db_t *
 sam_db_new (
     zconfig_t *conf)
@@ -282,6 +290,8 @@ sam_db_begin (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Returns the key of the current op-state.
 int
 sam_db_get_key (
     sam_db_t *self)
@@ -290,6 +300,9 @@ sam_db_get_key (
     return *(int *) self->op.key.data;
 }
 
+
+//  --------------------------------------------------------------------------
+/// Sets the key of the current op-state.
 void
 sam_db_set_key (
     sam_db_t *self,
@@ -301,6 +314,8 @@ sam_db_set_key (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Return the value of the current op-states record.
 void
 sam_db_get_val (
     sam_db_t *self,
@@ -317,6 +332,8 @@ sam_db_get_val (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Resets the key and value db thangs.
 static void
 reset (
     DBT *key,
@@ -330,7 +347,7 @@ reset (
 
 //  --------------------------------------------------------------------------
 /// This function searches the db for the provided id and either fills
-/// the dbop structure (return code 0), returns SAM_DB_NOTFOUND or
+/// the op structure (return code 0), returns SAM_DB_NOTFOUND or
 /// SAM_DB_ERROR.
 sam_db_ret_t
 sam_db_get (
@@ -365,6 +382,9 @@ sam_db_get (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Traverse the database and either return the previous or next
+/// sibling of the cursors current position.
 sam_db_ret_t
 sam_db_sibling (
     sam_db_t *self,
