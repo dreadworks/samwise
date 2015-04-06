@@ -276,42 +276,24 @@ sam_cfg_destroy (
 
 
 //  --------------------------------------------------------------------------
-/// Retrieve the file name of the buffer.
+/// Returns a subset of the configuration based on the provided path.
 int
-sam_cfg_buf_file (
+sam_cfg_get (
     sam_cfg_t *self,
-    char **fname)
+    const char *path,
+    zconfig_t **conf)
 {
     assert (self);
+    assert (path);
+    assert (conf);
 
-    *fname = zconfig_resolve (self->zcfg, "buffer/file", NULL);
-    if (*fname == NULL) {
-        sam_log_error ("could not load buffer file name");
+    *conf = zconfig_locate (self->zcfg, path);
+    if (*conf == NULL) {
         return -1;
     }
 
     return 0;
 }
-
-
-//  --------------------------------------------------------------------------
-/// Retrieve the home directory location of the buffer.
-int
-sam_cfg_buf_home (
-    sam_cfg_t *self,
-    char **dname)
-{
-    assert (self);
-
-    *dname = zconfig_resolve (self->zcfg, "buffer/home", NULL);
-    if (*dname == NULL) {
-        sam_log_error ("could not load buffer home directory");
-        return -1;
-    }
-
-    return 0;
-}
-
 
 
 //  --------------------------------------------------------------------------

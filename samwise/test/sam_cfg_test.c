@@ -40,72 +40,6 @@ load (const char *fname)
 
 
 //  --------------------------------------------------------------------------
-/// Test cfg_buf_file ().
-START_TEST(test_cfg_buf_file)
-{
-    sam_selftest_introduce ("test_cfg_buf_file");
-    sam_cfg_t *cfg = load ("buf_file");
-
-    char *fname;
-    int rc = sam_cfg_buf_file (cfg, &fname);
-    ck_assert_int_eq (rc, 0);
-    ck_assert_str_eq (fname, "test.db");
-
-    sam_cfg_destroy (&cfg);
-}
-END_TEST
-
-
-//  --------------------------------------------------------------------------
-/// Test cfg_buf_file () if config is not present.
-START_TEST(test_cfg_buf_file_empty)
-{
-    sam_selftest_introduce ("test_cfg_buf_file_empty");
-    sam_cfg_t *cfg = load ("empty");
-
-    char *fname;
-    int rc = sam_cfg_buf_file (cfg, &fname);
-    ck_assert_int_eq (rc, -1);
-
-    sam_cfg_destroy (&cfg);
-}
-END_TEST
-
-
-//  --------------------------------------------------------------------------
-/// Test cfg_buf_home ().
-START_TEST(test_cfg_buf_home)
-{
-    sam_selftest_introduce ("test_cfg_buf_home");
-    sam_cfg_t *cfg = load ("buf_home");
-
-    char *dname;
-    int rc = sam_cfg_buf_home (cfg, &dname);
-    ck_assert_int_eq (rc, 0);
-    ck_assert_str_eq (dname, "testdir");
-
-    sam_cfg_destroy (&cfg);
-}
-END_TEST
-
-
-//  --------------------------------------------------------------------------
-/// Test cfg_buf_home () if config is not present.
-START_TEST(test_cfg_buf_home_empty)
-{
-    sam_selftest_introduce ("test_cfg_buf_home_empty");
-    sam_cfg_t *cfg = load ("empty");
-
-    char *dname;
-    int rc = sam_cfg_buf_home (cfg, &dname);
-    ck_assert_int_eq (rc, -1);
-
-    sam_cfg_destroy (&cfg);
-}
-END_TEST
-
-
-//  --------------------------------------------------------------------------
 /// Test cfg_buf_size ().
 START_TEST(test_cfg_buf_size)
 {
@@ -668,17 +602,7 @@ sam_cfg_test ()
 {
     Suite *s = suite_create ("sam_cfg");
 
-    TCase *tc = tcase_create("buffer file");
-    tcase_add_test (tc, test_cfg_buf_file);
-    tcase_add_test (tc, test_cfg_buf_file_empty);
-    suite_add_tcase (s, tc);
-
-    tc = tcase_create("buffer home");
-    tcase_add_test (tc, test_cfg_buf_home);
-    tcase_add_test (tc, test_cfg_buf_home_empty);
-    suite_add_tcase (s, tc);
-
-    tc = tcase_create("buffer size");
+    TCase *tc = tcase_create("buffer size");
     tcase_add_test (tc, test_cfg_buf_size);
     tcase_add_test (tc, test_cfg_buf_size_b);
     tcase_add_test (tc, test_cfg_buf_size_k);

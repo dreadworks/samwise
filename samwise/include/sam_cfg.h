@@ -47,24 +47,25 @@ sam_cfg_destroy (
 
 
 //
-//  BUFFER CONFIGURATION
+//  GENERAL
 //
 
 //  --------------------------------------------------------------------------
-/// @brief Load the buffers file location
+/// @brief Retrieve a zconfig subset of the loaded configuration
+/// @param self A cfg instance
+/// @param path Determines which subset to load
+/// @param conf Pointer to be set
+/// @return -1 in case of error, 0 on success
 int
-sam_cfg_buf_file (
+sam_cfg_get (
     sam_cfg_t *self,
-    char **fname);
+    const char *path,
+    zconfig_t **conf);
 
 
-//  --------------------------------------------------------------------------
-/// @brief Load the buffers file location
-int
-sam_cfg_buf_home (
-    sam_cfg_t *self,
-    char **dname);
-
+//
+//  BUFFER CONFIGURATION
+//
 
 //  --------------------------------------------------------------------------
 /// @brief Returns the buffer size in bytes

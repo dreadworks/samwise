@@ -21,7 +21,13 @@ sam_db_t *db;
 static void
 setup ()
 {
-    db = sam_db_new ("db/test", "test");
+    sam_cfg_t *cfg = sam_cfg_new ("cfg/test/db.cfg");
+
+    zconfig_t *conf;
+    int rc = sam_cfg_get (cfg, "db/bdb", &conf);
+    ck_assert_int_eq (rc, 0);
+
+    db = sam_db_new (conf);
 }
 
 

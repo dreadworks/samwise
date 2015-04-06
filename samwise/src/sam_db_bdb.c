@@ -110,9 +110,17 @@ clear_op (
 
 sam_db_t *
 sam_db_new (
-    const char *db_home_name,
-    const char *db_file_name)
+    zconfig_t *conf)
 {
+    char
+        *hname = zconfig_resolve (conf, "home", NULL),
+        *fname = zconfig_resolve (conf, "file", NULL);
+
+    if (hname == NULL || fname == NULL) {
+        return NULL;
+    }
+
+
     sam_db_t *self = malloc (sizeof (sam_db_t));
     assert (self);
     clear_op (self);
@@ -134,7 +142,7 @@ sam_db_new (
         return NULL;
     }
 
-    rc = self->env->open (self->env, db_home_name, env_flags, 0);
+    rc = self->env->open (self->env, hname, env_flags, 0);
     if (rc) {
         sam_log_errorf (
             "could not open db environment: %s",
@@ -157,7 +165,7 @@ sam_db_new (
    rc = self->dbp->open (
         self->dbp,
         NULL,             // transaction pointer
-        db_file_name,     // on disk file
+        fname,            // on disk file
         NULL,             // logical db name
         DB_BTREE,         // access method
         db_flags,         // open flags

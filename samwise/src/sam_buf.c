@@ -876,14 +876,7 @@ sam_buf_new (
     assert (state);
 
 
-    // read config
-    char
-        *db_file_name,
-        *db_home_name;
-
-    if (sam_cfg_buf_file (cfg, &db_file_name) ||
-        sam_cfg_buf_home (cfg, &db_home_name) ||
-        sam_cfg_buf_retry_count (cfg, &state->tries) ||
+    if (sam_cfg_buf_retry_count (cfg, &state->tries) ||
         sam_cfg_buf_retry_interval (cfg, &state->interval) ||
         sam_cfg_buf_retry_threshold (cfg, &state->threshold)) {
 
@@ -892,7 +885,20 @@ sam_buf_new (
     }
 
     // create db
-    state->db = sam_db_new (db_home_name, db_file_name);
+    zconfig_t *db_conf;
+    const char *db_conf_path = "db/bdb";
+
+    if (sam_cfg_get (cfg, db_conf_path, &db_conf)) {
+        sam_log_error ("could not load db config");
+        goto abort;
+    }
+
+    state->db = sam_db_new (db_conf);
+    if (state->db == NULL) {
+        sam_log_error ("could not load database");
+        goto abort;
+    }
+
 
     // set sockets, change ownership
     state->in = *in;

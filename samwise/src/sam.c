@@ -537,20 +537,10 @@ init_buf (
         sam_buf_destroy (&self->buf);
     }
 
-    char *fname;
-    int rc = sam_cfg_buf_file (cfg, &fname);
-    if (rc) {
-        return rc;
-    }
+    zsock_t *backend_pull = zsock_new_pull (self->backend_pull_endpoint);
+    zsock_t *frontend_push = zsock_new_push (self->frontend_pub_endpoint);
 
-    zsock_t *backend_pull = zsock_new_pull (
-        self->backend_pull_endpoint);
-
-    zsock_t *frontend_push = zsock_new_push (
-        self->frontend_pub_endpoint);
-
-    self->buf = sam_buf_new (
-        cfg, &backend_pull, &frontend_push);
+    self->buf = sam_buf_new (cfg, &backend_pull, &frontend_push);
 
     if (self->buf == NULL) {
         zsock_destroy (&backend_pull);
@@ -558,7 +548,7 @@ init_buf (
         return -1;
     }
 
-    return rc;
+    return 0;
 }
 
 
