@@ -14,6 +14,7 @@
 
 
 sam_db_t *db;
+sam_cfg_t *cfg;
 
 
 //  --------------------------------------------------------------------------
@@ -21,7 +22,7 @@ sam_db_t *db;
 static void
 setup ()
 {
-    sam_cfg_t *cfg = sam_cfg_new ("cfg/test/db.cfg");
+    cfg = sam_cfg_new ("cfg/test/db.cfg");
 
     zconfig_t *conf;
     int rc = sam_cfg_get (cfg, "db/bdb", &conf);
@@ -38,6 +39,7 @@ destroy ()
 {
 
     sam_db_destroy (&db);
+    sam_cfg_destroy (&cfg);
     ck_assert (db == NULL);
 }
 
