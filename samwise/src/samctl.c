@@ -96,6 +96,8 @@ send_cmd (
     args_t *args,
     const char *cmd_name)
 {
+    out (VERBOSE, args, "sending command to samd");
+
     int rc = zsock_send (
         ctl->sam_sock, "is", SAM_PROTOCOL_VERSION, cmd_name);
 
@@ -132,9 +134,8 @@ send_cmd (
 }
 
 
-
 //  --------------------------------------------------------------------------
-/// Ping samwise.
+/// Ping samd.
 static void
 cmd_ping (
     ctl_t *ctl,
@@ -148,6 +149,23 @@ cmd_ping (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Order samd to kill itself.
+static void
+cmd_stop (
+    ctl_t *ctl,
+    args_t *args)
+{
+    sam_msg_t *msg = send_cmd (ctl, args, "stop");
+    if (msg) {
+        out (NORMAL, args, "samd kills itself");
+        sam_msg_destroy (&msg);
+    }
+}
+
+
+//  --------------------------------------------------------------------------
+/// Retrieve status data from samd.
 static void
 cmd_status (
     ctl_t *ctl UU,
@@ -210,9 +228,10 @@ static char doc [] =
     "Send a command with the option -c or --cmd=CMD.\n"
     "Currently the following commands are supported:\n"
     "  ping      Ping samwise\n"
-    "  status    Get extensive status information about samd's state"
+    "  status    Get extensive status information about samd's state\n"
+    "  stop      Order samd to kill itself\n"
 
-    "\n\nAdditionally the following options can be provided:\n";
+    "\nAdditionally the following options can be provided:\n";
 
 static char args_doc [] =
     "CONFIG";
@@ -248,6 +267,10 @@ set_cmd (
 
     if (!strcmp (fn_name, "status")) {
         args->fn = cmd_status;
+    }
+
+    if (!strcmp (fn_name, "stop")) {
+        args->fn = cmd_stop;
     }
 }
 
@@ -297,7 +320,7 @@ parse_opt (
         }
         break;
 
-    // key args (config)
+    // key gargs (config)
     case ARGP_KEY_ARG:
         if (state->arg_num >= 1) {
             out (ERROR, args, "too many arguments");

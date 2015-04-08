@@ -251,7 +251,7 @@ sam_cfg_new (
 
     self->zcfg = zconfig_load (cfg_file);
     if (!self->zcfg) {
-        sam_log_error ("could not load configuration");
+        sam_log_errorf ("could not load configuration '%s'", cfg_file);
         free (self);
         return NULL;
     }
