@@ -42,6 +42,7 @@
 
 // global configuration
 #define SAM_PROTOCOL_VERSION 100
+#define SAM_RET_RESTART 0x10
 
 
 // don't define these to show all log levels

@@ -48,7 +48,7 @@ samd_destroy (samd_t **self);
 
 //  --------------------------------------------------------------------------
 /// @brief Start a (blocking) event loop listening to client requests
-void
+int
 samd_start (samd_t *self);
 
 

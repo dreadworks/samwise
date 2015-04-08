@@ -74,7 +74,7 @@ handle_req (
         ret = sam_eval (self->sam, msg);
     }
 
-    if (!ret->rc) {
+    if (!ret->rc || ret->rc == SAM_RET_RESTART) {
         sam_log_trace ("success, sending reply to client");
         zsock_send (client_rep, "i", 0);
     }
@@ -84,8 +84,9 @@ handle_req (
         zsock_send (client_rep, "is", ret->rc, ret->msg);
     }
 
+    int rc = ret->rc;
     free (ret);
-    return 0;
+    return (rc == SAM_RET_RESTART)? -1: 0;
 }
 
 
@@ -120,7 +121,6 @@ samd_new (
 
     rc = sam_init (self->sam, self->cfg);
     if (rc) {
-        samd_destroy (&self);
         return NULL;
     }
 
@@ -148,15 +148,16 @@ samd_destroy (
 
 //  --------------------------------------------------------------------------
 /// Start a blocking loop for client requests.
-void
+int
 samd_start (
     samd_t *self)
 {
     zloop_t *loop = zloop_new ();
     zloop_reader (loop, self->client_rep, handle_req, self);
-    zloop_start (loop);
+    int rc = zloop_start (loop);
     zloop_destroy (&loop);
     sam_log_info ("leaving main loop");
+    return rc;
 }
 
 
@@ -171,19 +172,28 @@ main (
     argc -= 1;
     argv += 1;
 
-    if (!argc) {
+    if (!argc || argc > 1) {
         printf ("samd - samwise messaging daemon\n");
         printf ("usage: samd path/to/config.cfg\n\n");
         return 2;
     }
 
-    samd_t *samd = samd_new (*argv);
-    if (!samd) {
-        return 2;
-    }
+    samd_t *samd = NULL;
 
-    samd_start (samd);
+    do {
+        if (samd != NULL) {
+            sam_log_info ("destroying former samd instance, restarting");
+            samd_destroy (&samd);
+        }
+
+        samd = samd_new (*argv);
+        if (!samd) {
+            return 2;
+        }
+
+    } while (samd_start (samd) == -1);
     samd_destroy (&samd);
+
     sam_log_info ("exiting");
 }
 #endif

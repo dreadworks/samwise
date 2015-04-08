@@ -826,9 +826,18 @@ sam_eval (
     else if (!strcmp (action, "ping")) {
         sam_msg_destroy (&msg);
         goto suspend;
+
+    // stop
     } else if (!strcmp (action, "stop")) {
         raise (SIGINT);
         goto suspend;
+
+    // restart
+    } else if (!strcmp (action, "restart")) {
+        sam_ret_t *ret = new_ret ();
+        ret->rc = SAM_RET_RESTART;
+        sam_msg_destroy (&msg);
+        return ret;
     }
 
     return error (msg, "unknown action");

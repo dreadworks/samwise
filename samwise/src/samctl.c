@@ -165,6 +165,21 @@ cmd_stop (
 
 
 //  --------------------------------------------------------------------------
+/// Order samd to restart itself.
+static void
+cmd_restart (
+    ctl_t *ctl,
+    args_t *args)
+{
+    sam_msg_t *msg = send_cmd (ctl, args, "restart");
+    if (msg) {
+        out (NORMAL, args, "samd restarts");
+        sam_msg_destroy (&msg);
+    }
+}
+
+
+//  --------------------------------------------------------------------------
 /// Retrieve status data from samd.
 static void
 cmd_status (
@@ -230,6 +245,7 @@ static char doc [] =
     "  ping      Ping samwise\n"
     "  status    Get extensive status information about samd's state\n"
     "  stop      Order samd to kill itself\n"
+    "  restart   Restart samd\n"
 
     "\nAdditionally the following options can be provided:\n";
 
@@ -271,6 +287,10 @@ set_cmd (
 
     if (!strcmp (fn_name, "stop")) {
         args->fn = cmd_stop;
+    }
+
+    if (!strcmp (fn_name, "restart")) {
+        args->fn = cmd_restart;
     }
 }
 
