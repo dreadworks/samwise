@@ -18,7 +18,7 @@ Gem::Specification.new do |s|
     "lib/samwise/message.rb",
     "lib/samwise/rabbitmq.rb"
   ]
-  s.homepage      = "source.xing.com/felix-hamann/samwise"
+  s.homepage      = "https://source.xing.com/felix-hamann/samwise"
   s.license       = "MIT"
 
 end
