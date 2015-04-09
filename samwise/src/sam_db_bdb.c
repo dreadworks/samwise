@@ -491,7 +491,7 @@ sam_db_update (
     assert (self);
     assert (kind == SAM_DB_CURRENT || kind == SAM_DB_KEY);
 
-    uint32_t flag;
+    uint32_t flag = 0;
     if (kind == SAM_DB_CURRENT) {
         flag = DB_CURRENT;
         sam_log_tracef (
