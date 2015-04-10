@@ -870,6 +870,67 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
+/// Expect * frames bundled as a list
+START_TEST(test_msg_expect_list)
+{
+    sam_selftest_introduce ("test_msg_expect_list");
+
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "two");
+    zmsg_pushstr (zmsg, "one");
+    zmsg_pushstr (zmsg, "2");
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 3);
+
+    int rc = sam_msg_expect (msg, 1, SAM_MSG_LIST);
+    ck_assert_int_eq (rc, 0);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Expect failure when there are not enough items
+START_TEST(test_msg_expect_list_less)
+{
+    sam_selftest_introduce ("test_msg_expect_list_less");
+
+    zmsg_t *zmsg = zmsg_new ();
+    zmsg_pushstr (zmsg, "one");
+    zmsg_pushstr (zmsg, "2");
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 2);
+
+    int rc = sam_msg_expect (msg, 1, SAM_MSG_LIST);
+    ck_assert_int_eq (rc, -1);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Expect failure for empty messages.
+START_TEST(test_msg_expect_list_noframe)
+{
+    sam_selftest_introduce ("test_msg_expect_list_noframe");
+
+    zmsg_t *zmsg = zmsg_new ();
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+    int rc = sam_msg_expect (msg, 1, SAM_MSG_LIST);
+    ck_assert_int_eq (rc, -1);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
 /// Expect failure for empty frames.
 START_TEST(test_msg_expect_nonzero_empty)
 {
@@ -1066,6 +1127,9 @@ sam_msg_test ()
     tcase_add_test (tc, test_msg_expect_zero);
     tcase_add_test (tc, test_msg_expect_nonzero_empty);
     tcase_add_test (tc, test_msg_expect_nonzero_noframe);
+    tcase_add_test (tc, test_msg_expect_list);
+    tcase_add_test (tc, test_msg_expect_list_less);
+    tcase_add_test (tc, test_msg_expect_list_noframe);
     tcase_add_test (tc, test_msg_expect);
     tcase_add_test (tc, test_msg_expect_nonzero);
     suite_add_tcase (s, tc);

@@ -26,7 +26,8 @@
 // rules for expect ()'s variadic arguments
 typedef enum {
     SAM_MSG_ZERO,     ///< frame must exist, but can be of zero length
-    SAM_MSG_NONZERO   ///< frame must exist and contain data
+    SAM_MSG_NONZERO,  ///< frame must exist and contain data
+    SAM_MSG_LIST      ///< n+1 frames, where n is encoded in the first frame
 } sam_msg_rule_t;
 
 

@@ -458,6 +458,9 @@ sam_msg_expect (
     int size,
     ...)
 {
+    assert (self);
+    assert (size);
+
     if (sam_msg_size (self) < size) {
         return -1;
     }
@@ -466,10 +469,24 @@ sam_msg_expect (
     va_start (arg_p, size);
 
     zframe_t *frame = zlist_first (self->frames);
-    while (size > 0 && frame != NULL) {
+    while (size > 0) {
         sam_msg_rule_t rule = va_arg (arg_p, sam_msg_rule_t);
         if (rule == SAM_MSG_NONZERO && zframe_size (frame) == 0) {
             return -1;
+        }
+
+        if (rule == SAM_MSG_LIST) {
+            char *str = zframe_strdup (frame);
+            int amount = atoi (str);
+            free (str);
+
+            while (amount) {
+                frame = zlist_next (self->frames);
+                if (frame == NULL) {
+                    return -1;
+                }
+                amount -= 1;
+            }
         }
 
         frame = zlist_next (self->frames);
