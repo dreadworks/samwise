@@ -22,6 +22,30 @@
 
 
 //  --------------------------------------------------------------------------
+/// Used by zlist_purge () and zlist_destroy () for char * list items
+static void
+refs_s_destructor (
+    void **item)
+{
+    char **ref =  (char **) item;
+    free (*ref);
+    *ref = NULL;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Used by zlist_purge () and zlist_destroy () for zframe_t * list items
+static void
+refs_f_destructor (
+    void **item)
+{
+    zframe_t **frame = (zframe_t **) item;
+    zframe_destroy (frame);
+    *frame = NULL;
+}
+
+
+//  --------------------------------------------------------------------------
 /// Converter function that accepts a type character and a variadic
 /// argument to be set.
 static void *
@@ -86,28 +110,47 @@ resolve (
 }
 
 
-
 //  --------------------------------------------------------------------------
-/// Used by zlist_purge () and zlist_destroy () for char * list items
-static void
-refs_s_destructor (
-    void **item)
+/// Get n char * elements.
+static int
+resolve_l (
+    sam_msg_t *self,
+    zframe_t *frame,
+    zlist_t *frames,
+    zlist_t **list,
+    bool remove)
 {
-    char **ref =  (char **) item;
-    free (*ref);
-    *ref = NULL;
-}
+    int amount = atoi ((char *) zframe_data (frame));
 
+    if (remove) {
+        zframe_destroy (&frame);
+    }
 
-//  --------------------------------------------------------------------------
-/// Used by zlist_purge () and zlist_destroy () for zframe_t * list items
-static void
-refs_f_destructor (
-    void **item)
-{
-    zframe_t **frame = (zframe_t **) item;
-    zframe_destroy (frame);
-    *frame = NULL;
+    *list = zlist_new ();
+
+    while (amount > 0) {
+
+        frame = (remove)? zlist_pop (frames): zlist_next (frames);
+        if (frame == NULL) {
+            return -1;
+        }
+
+        char *str = zframe_strdup (frame);
+
+        if (remove) {
+            zlist_append (self->refs.s, str);
+            zframe_destroy (&frame);
+        }
+
+        zlist_append (*list, str);
+        amount -= 1;
+    }
+
+    if (!remove) {
+        zlist_set_destructor (*list, refs_s_destructor);
+    }
+
+    return 0;
 }
 
 
@@ -282,6 +325,7 @@ sam_msg_free (
 ///   's': for char *
 ///   'f': for zframe_t *
 ///   'p': for void *
+///   'l': for zlist_t * containing char *
 ///
 /// Pop'd or contained 's' and 'f' are automatically garbage collected
 /// with sam_msg_destroy () or manually by invoking sam_msg_free ()
@@ -300,28 +344,41 @@ sam_msg_pop (
     va_start (arg_p, pic);
 
     while (*pic) {
-
         zframe_t *frame = zlist_pop (self->frames);
         if (frame == NULL) {
             return -1;
         }
 
-        void *ptr = resolve (frame, *pic, arg_p);
-        zframe_destroy (&frame);
+        // handle 'h'
+        if (*pic == 'l') {
+            zlist_t **list = va_arg (arg_p, zlist_t **);
+            if (!list) {
+                return -1;
+            }
 
-        if (ptr == NULL) {
-            return -1;
+            if (resolve_l (self, frame, self->frames, list, true)) {
+                return -1;
+            }
         }
 
-        if (*pic == 'f') {
-            zlist_append (self->refs.f, *(zframe_t **) ptr);
-        }
-        else if (*pic == 's') {
-            zlist_append (self->refs.s, *(char **) ptr);
+        // handle others
+        else {
+            void *ptr = resolve (frame, *pic, arg_p);
+            zframe_destroy (&frame);
+
+            if (ptr == NULL) {
+                return -1;
+            }
+
+            if (*pic == 'f') {
+                zlist_append (self->refs.f, *(zframe_t **) ptr);
+            }
+            else if (*pic == 's') {
+                zlist_append (self->refs.s, *(char **) ptr);
+            }
         }
 
         pic += 1;
-        zframe_destroy (&frame);
     }
 
     va_end (arg_p);
@@ -330,7 +387,10 @@ sam_msg_pop (
 
 
 //  --------------------------------------------------------------------------
-/// Get data from the message without removing it.
+/// Get data from the message without removing it. Caller is
+/// responsible for freeing all allocated memory ('s', 'f', 'l'). For
+/// 'l', a correct destructor function is set for items, so a call to
+/// zlist_destroy is sufficient to free all memory.
 int
 sam_msg_get (
     sam_msg_t *self,
@@ -351,10 +411,25 @@ sam_msg_get (
 
     zframe_t *frame = zlist_first (frames);
     while (*pic && frame != NULL) {
+
         if (*pic != '?') {
-            void *ptr = resolve (frame, *pic, arg_p);
-            if (ptr == NULL) {
-                return -1;
+
+            if (*pic == 'l') {
+                zlist_t **list = va_arg (arg_p, zlist_t **);
+                if (!list) {
+                    return -1;
+                }
+
+                if (resolve_l (self, frame, frames, list, false)) {
+                    return -1;
+                }
+            }
+
+            else {
+                void *ptr = resolve (frame, *pic, arg_p);
+                if (ptr == NULL) {
+                    return -1;
+                }
             }
         }
 

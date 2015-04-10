@@ -172,6 +172,51 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
+/// Try to _pop () a zlist_t *
+START_TEST(test_msg_pop_l)
+{
+    sam_selftest_introduce ("test_msg_pop_h");
+
+    zmsg_t *zmsg = zmsg_new ();
+
+    if (zmsg_pushstr (zmsg, "value2") ||
+        zmsg_pushstr (zmsg, "value1") ||
+        zmsg_pushstr (zmsg, "2")) {
+
+        ck_abort_msg ("could not build zmsg");
+    }
+
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 3);
+
+    zlist_t *list;
+    int rc = sam_msg_pop (msg, "l", &list);
+
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+
+    ck_assert_int_eq (zlist_size (list), 2);
+    ck_assert_str_eq (zlist_first (list), "value1");
+    ck_assert_str_eq (zlist_next (list), "value2");
+    ck_assert (zlist_next (list) == NULL);
+
+    zlist_destroy (&list);
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Try to _pop () an empty configuration hash
+START_TEST(test_msg_pop_l_empty)
+{
+    sam_selftest_introduce ("test_msg_pop_l_empty");
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
 /// Try to _pop () multiple different values.
 START_TEST(test_msg_pop)
 {
@@ -505,6 +550,82 @@ START_TEST(test_msg_get_p)
     sam_msg_destroy (&msg);
 }
 END_TEST
+
+
+
+//  --------------------------------------------------------------------------
+/// Try to _get () a zlist_t
+START_TEST(test_msg_get_l)
+{
+    sam_selftest_introduce ("test_msg_get_l");
+
+    zmsg_t *zmsg = zmsg_new ();
+
+    if (zmsg_pushstr (zmsg, "value2") ||
+        zmsg_pushstr (zmsg, "value1") ||
+        zmsg_pushstr (zmsg, "2")) {
+
+        ck_abort_msg ("could not build zmsg");
+    }
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 3);
+
+    zlist_t *list;
+    int rc = sam_msg_get (msg, "l", &list);
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 3);
+
+    ck_assert_int_eq (zlist_size (list), 2);
+    ck_assert_str_eq (zlist_first (list), "value1");
+    ck_assert_str_eq (zlist_next (list), "value2");
+    ck_assert (zlist_next (list) == NULL);
+
+    // check idempotency of _get ()
+    zlist_destroy (&list);
+    rc = sam_msg_get (msg, "l", &list);
+
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 3);
+
+    ck_assert_int_eq (zlist_size (list), 2);
+    ck_assert_str_eq (zlist_first (list), "value1");
+    ck_assert_str_eq (zlist_next (list), "value2");
+    ck_assert (zlist_next (list) == NULL);
+
+    zlist_destroy (&list);
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+
+//  --------------------------------------------------------------------------
+/// Try to _get () a zlist_t * without any values
+START_TEST(test_msg_get_l_empty)
+{
+    sam_selftest_introduce ("test_msg_get_l_empty");
+
+    zmsg_t *zmsg = zmsg_new ();
+
+    if (zmsg_pushstr (zmsg, "0")) {
+        ck_abort_msg ("could not build zmsg");
+    }
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    zlist_t *list;
+    int rc = sam_msg_get (msg, "l", &list);
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+    ck_assert_int_eq (zlist_size (list), 0);
+
+    zlist_destroy (&list);
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
 
 
 //  --------------------------------------------------------------------------
@@ -906,6 +1027,8 @@ sam_msg_test ()
     tcase_add_test (tc, test_msg_pop_s);
     tcase_add_test (tc, test_msg_pop_f);
     tcase_add_test (tc, test_msg_pop_p);
+    tcase_add_test (tc, test_msg_pop_l);
+    tcase_add_test (tc, test_msg_pop_l_empty);
     tcase_add_test (tc, test_msg_pop);
     tcase_add_test (tc, test_msg_pop_insufficient_data);
     tcase_add_test (tc, test_msg_pop_successively);
@@ -925,6 +1048,8 @@ sam_msg_test ()
     tcase_add_test (tc, test_msg_get_s);
     tcase_add_test (tc, test_msg_get_f);
     tcase_add_test (tc, test_msg_get_p);
+    tcase_add_test (tc, test_msg_get_l);
+    tcase_add_test (tc, test_msg_get_l_empty);
     tcase_add_test (tc, test_msg_get_skipped);
     tcase_add_test (tc, test_msg_get_skipped_nonempty);
     tcase_add_test (tc, test_msg_get);
