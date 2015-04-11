@@ -57,7 +57,9 @@ test_create_msg (uint arg_c, char **arg_v)
 
     for (; frame_c < arg_c; frame_c++) {
         char *str = arg_v[frame_c];
-        zframe_t *frame = zframe_new (str, strlen (str));
+
+        size_t size = (str == NULL)? 0: strlen (str);
+        zframe_t *frame = zframe_new (str, size);
         zmsg_append (zmsg, &frame);
     }
 
@@ -87,9 +89,23 @@ START_TEST(test_sam_rmq_publish_roundrobin)
     char *pub_msg [] = {
         "publish",        // action
         "round robin",    // distribution type
+
+        // amqp args
         "amq.direct",     // exchange
         "",               // routing key
-        "hi!"             // payload
+        NULL,             // mandatory
+        NULL,             // immediate
+
+        // amqp props (see rfc)
+        "12",
+        NULL, NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, NULL, NULL,
+
+        // amqp headers
+        "0",
+
+        // payload
+        "round robin publishing request"
     };
 
     sam_msg_t *msg = test_create_msg (sizeof (pub_msg) / char_s, pub_msg);
@@ -114,9 +130,23 @@ START_TEST(test_sam_rmq_publish_redundant)
         "publish",        // action
         "redundant",      // distribution type
         "2",              // distribution count
+
+        // amqp args
         "amq.direct",     // exchange
         "",               // routing key
-        "hi!"             // payload
+        NULL,             // mandatory
+        NULL,             // immediate
+
+        // amqp props (see rfc)
+        "12",
+        NULL, NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, NULL, NULL,
+
+        // amqp headers
+        "0",
+
+        // payload
+        "redundant publishing request"
     };
 
     sam_msg_t *msg = test_create_msg (sizeof (pub_msg) / char_s, pub_msg);
@@ -344,19 +374,19 @@ sam_test ()
 {
     Suite *s = suite_create ("sam");
 
-    TCase *tc = tcase_create ("rmq_publish");
+    TCase *tc = tcase_create ("publish");
     tcase_add_unchecked_fixture (tc, setup_rmq, destroy);
     tcase_add_test (tc, test_sam_rmq_publish_roundrobin);
     tcase_add_test (tc, test_sam_rmq_publish_redundant);
     suite_add_tcase (s, tc);
 
-    tc = tcase_create ("rmq_rpc");
+    tc = tcase_create ("rpc");
     tcase_add_unchecked_fixture (tc, setup_rmq, destroy);
     tcase_add_test (tc, test_sam_rmq_xdecl);
     tcase_add_test (tc, test_sam_rmq_xdel);
     suite_add_tcase (s, tc);
 
-    tc = tcase_create("rmq_proterror");
+    tc = tcase_create("proterror");
     tcase_add_unchecked_fixture (tc, setup_rmq, destroy);
     tcase_add_test(tc, test_sam_rmq_prot_error_empty);
     tcase_add_test(tc, test_sam_rmq_prot_error_unknown);
