@@ -761,8 +761,6 @@ check_pub_rmq (
         rc = -1;
     }
 
-    sam_log_infof ("check_pub: %d", rc);
-
     free (distribution);
     return rc;
 }
