@@ -724,25 +724,44 @@ check_pub_rmq (
 
     if (!strcmp (distribution, "redundant")) {
         rc = sam_msg_expect (
-            msg, 5,
+            msg, 9,
             SAM_MSG_NONZERO,    // distribution
             SAM_MSG_NONZERO,    // min. acknowledged
+
+            // amqp args
             SAM_MSG_NONZERO,    // exchange
             SAM_MSG_ZERO,       // routing key
+            SAM_MSG_ZERO,       // mandatory
+            SAM_MSG_ZERO,       // immediate
+
+            // variable args
+            SAM_MSG_LIST,       // amqp properties
+            SAM_MSG_LIST,       // amqp headers
+
             SAM_MSG_NONZERO);   // payload
     }
     else if (!strcmp (distribution, "round robin")) {
         rc = sam_msg_expect (
-            msg, 4,
+            msg, 8,
             SAM_MSG_NONZERO,    // distribution
             SAM_MSG_NONZERO,    // exchange
+
+            // amqp args
             SAM_MSG_ZERO,       // routing key
+            SAM_MSG_ZERO,       // mandatory
+            SAM_MSG_ZERO,       // immediate
+
+            // variable args
+            SAM_MSG_LIST,       // amqp properties
+            SAM_MSG_LIST,       // amqp headers
+
             SAM_MSG_NONZERO);   // payload
     }
     else {
         rc = -1;
     }
 
+    sam_log_infof ("check_pub: %d", rc);
 
     free (distribution);
     return rc;
