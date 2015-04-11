@@ -58,6 +58,30 @@ typedef struct sam_be_rmq_opts_t {
 } sam_be_rmq_opts_t;
 
 
+typedef struct sam_be_rmq_pub_t {
+    char *exchange;
+    char *routing_key;
+    int mandatory;
+    int immediate;
+    struct {
+        char *content_type;
+        char *content_encoding;
+        char *delivery_mode;
+        char *priority;
+        char *correlation_id;
+        char *reply_to;
+        char *expiration;
+        char *message_id;
+        char *type;
+        char *user_id;
+        char *app_id;
+        char *cluster_id;
+    } props;
+    zlist_t *headers;
+    zframe_t *payload;
+} sam_be_rmq_pub_t;
+
+
 //  --------------------------------------------------------------------------
 /// @brief Returns the underlying socket of the broker connection
 /// @return The TCP socket's file descriptor
@@ -96,14 +120,11 @@ sam_be_rmq_connect (
 //  --------------------------------------------------------------------------
 /// @brief Publish a message to the broker
 /// @param self A be_rmq instance
-/// @param msg  The message as structured data
+/// @param TODO
 int
 sam_be_rmq_publish (
     sam_be_rmq_t *self,
-    const char *exchange,
-    const char *routing_key,
-    byte *payload,
-    int payload_len);
+    sam_be_rmq_pub_t *opts);
 
 
 //  --------------------------------------------------------------------------

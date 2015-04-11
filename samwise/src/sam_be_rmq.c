@@ -96,6 +96,45 @@ new_store_item (
 
 
 //  --------------------------------------------------------------------------
+/// Create an amqp_bytes_t from a char * (that can be NULL)
+static amqp_bytes_t
+c_bytes (const char *str)
+{
+    amqp_bytes_t ab = {
+        .len = 0,
+        .bytes = NULL
+    };
+
+    if (str == NULL) {
+        return ab;
+    }
+
+    return amqp_cstring_bytes (str);
+}
+
+
+//  --------------------------------------------------------------------------
+/// Creates a uint8_t from a string (that can be NULL)
+static uint8_t
+c_uint8 (const char *str)
+{
+    if (str == NULL || strlen (str) == 0) {
+        return 0;
+    }
+
+    int word = atoi (str);
+    if (word < 0 || 0xFF < word) {
+        sam_log_errorf ("provided value %d does not fit in one word", word);
+        return 0;
+    }
+
+    return word;
+}
+
+
+
+
+//  --------------------------------------------------------------------------
 /// Signals the connection loss and prepares the instance for destruction.
 static int
 connection_loss (sam_be_rmq_t *self)
@@ -222,21 +261,45 @@ handle_publish_req (
         sam_log_errorf ("'%s' receive failed", self->name);
     }
 
-    char *exchange, *routing_key;
-    zframe_t *payload;
+
+    // retrieve data and prepare options
+    sam_be_rmq_pub_t opts;
+    zlist_t
+        *props,
+        *header;
 
     rc = sam_msg_get (
-        msg, "ssf", &exchange, &routing_key, &payload);
+        msg, "ssiillf",
+
+        &opts.exchange,
+        &opts.routing_key,
+        &opts.mandatory,
+        &opts.immediate,
+
+        &props,
+        &header,
+
+        &opts.payload);
     assert (!rc);
 
-    unsigned int seq = self->amqp.seq;
-    rc = sam_be_rmq_publish (
-        self,
-        exchange,
-        routing_key,
-        zframe_data (payload),
-        zframe_size (payload));
 
+    // set props
+    uint prop_c = 12;
+    assert (zlist_size (props) == prop_c);
+
+    char *prop = zlist_first (props);
+    char **prop_ptr = (char **) &opts.props;
+    while (prop_c) {
+        *prop_ptr = prop;
+        prop_ptr += 1;
+        prop = zlist_next (props);
+        prop_c -= 1;
+    }
+
+
+    // publish
+    unsigned int seq = self->amqp.seq;
+    rc = sam_be_rmq_publish (self, &opts);
     if (rc) {
         return -1;
     }
@@ -244,13 +307,16 @@ handle_publish_req (
     sam_log_tracef (
         "'%s' saves message %d (seq: %d) to the store",
         self->name, key, seq);
-
     zlist_append (self->store, new_store_item (key, seq));
 
+
+    // clean up
     sam_msg_destroy (&msg);
-    free (exchange);
-    free (routing_key);
-    zframe_destroy (&payload);
+    free (opts.exchange);
+    free (opts.routing_key);
+    zlist_destroy (&props);
+    zlist_destroy (&header);
+    zframe_destroy (&opts.payload);
 
     return 0;
 }
@@ -597,31 +663,74 @@ sam_be_rmq_connect (
 int
 sam_be_rmq_publish (
     sam_be_rmq_t *self,
-    const char *exchange,
-    const char *routing_key,
-    byte *payload,
-    int payload_len)
+    sam_be_rmq_pub_t *opts)
 {
-    amqp_bytes_t msg_bytes = {
-        .len = payload_len,
-        .bytes = payload
-    };
-
     sam_log_tracef (
         "'%s' publishing message %d of size %d",
         self->name,
         self->amqp.seq,
-        payload_len);
+        zframe_size (opts->payload));
+
+  /*
+    // initialize headers
+    char val [255];
+    snprintf (val, 255, "%e", ((double) time (NULL)) + 3000);
+    sam_log_tracef ("setting expiration: %s", val);
+
+    char *key = "expiration";
+
+    amqp_table_entry_t headers = {
+        .key = { .len = strlen (key), .bytes = key },
+        .value = {
+            .kind = AMQP_FIELD_KIND_BYTES,
+            .value.bytes = { .len = strlen (key), .bytes = val }
+        }
+    };
+
+
+    // initialize props
+    amqp_table_t header_table = {
+        .num_entries = 1, .entries = &headers
+    };
+
+    amqp_basic_properties_t props;
+    memset (&props, 0, sizeof (amqp_basic_properties_t));
+    memcpy (&props.headers, &header_table, sizeof (amqp_table_t));
+*/
+
+    // translate props
+    amqp_basic_properties_t amqp_props = {
+        ._flags           = 0,
+        .content_type     = c_bytes (opts->props.content_type),
+        .content_encoding = c_bytes (opts->props.content_encoding),
+        .headers          = { .num_entries = 0, .entries = NULL },
+        .delivery_mode    = c_uint8 (opts->props.delivery_mode),
+        .priority         = c_uint8 (opts->props.priority),
+        .correlation_id   = c_bytes (opts->props.correlation_id),
+        .reply_to         = c_bytes (opts->props.reply_to),
+        .expiration       = c_bytes (opts->props.expiration),
+        .message_id       = c_bytes (opts->props.message_id),
+        .timestamp        = 0,
+        .type             = c_bytes (opts->props.type),
+        .user_id          = c_bytes (opts->props.user_id),
+        .app_id           = c_bytes (opts->props.app_id),
+        .cluster_id       = c_bytes (opts->props.cluster_id)
+    };
+
+    amqp_bytes_t payload = {
+        .len = zframe_size (opts->payload),
+        .bytes = zframe_data (opts->payload)
+    };
 
     int rc = amqp_basic_publish (
-        self->amqp.connection,                // connection state
-        self->amqp.message_channel,           // virtual connection
-        amqp_cstring_bytes(exchange),         // exchange name
-        amqp_cstring_bytes(routing_key),      // routing key
-        0,                                    // mandatory
-        0,                                    // immediate
-        NULL,                                 // properties
-        msg_bytes);                           // body
+        self->amqp.connection,
+        self->amqp.message_channel,
+        c_bytes (opts->exchange),
+        c_bytes (opts->routing_key),
+        opts->mandatory,
+        opts->immediate,
+        &amqp_props,
+        payload);
 
     if (rc == AMQP_STATUS_HEARTBEAT_TIMEOUT) {
         sam_log_errorf (
