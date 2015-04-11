@@ -889,7 +889,7 @@ sam_buf_new (
     const char *db_conf_path = "db/bdb";
 
     if (sam_cfg_get (cfg, db_conf_path, &db_conf)) {
-        sam_log_error ("could not load db config");
+        sam_log_errorf ("could not load db config (%s)", db_conf_path);
         goto abort;
     }
 
