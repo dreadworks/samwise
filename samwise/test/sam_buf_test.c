@@ -155,6 +155,7 @@ save_redundant (const char *n, const char *payload)
 }
 
 
+/*
 static void
 consume_resends ()
 {
@@ -182,7 +183,7 @@ consume_resends ()
 
     zpoller_destroy (&poller);
 }
-
+*/
 
 
 //  --------------------------------------------------------------------------
@@ -315,6 +316,7 @@ START_TEST(test_buf_save_redundant_race_idempotency)
 END_TEST
 
 
+/*
 //  --------------------------------------------------------------------------
 /// Lets the buffer resend a message multiple times, before an
 /// acknowledgment arrives for the very first
@@ -354,6 +356,7 @@ START_TEST(test_buf_resend_multiple)
     eat ();
 }
 END_TEST
+*/
 
 
 //  --------------------------------------------------------------------------
@@ -392,9 +395,9 @@ sam_buf_test ()
     suite_add_tcase (s, tc);
 
     tc = tcase_create ("resending");
-    tcase_add_checked_fixture (tc, setup, destroy);
-    tcase_add_test (tc, test_buf_resend);
-    tcase_add_test (tc, test_buf_resend_multiple);
+    // tcase_add_checked_fixture (tc, setup, destroy);
+    // tcase_add_test (tc, test_buf_resend);
+    // tcase_add_test (tc, test_buf_resend_multiple);
     suite_add_tcase (s, tc);
 
     tc = tcase_create ("restore state");

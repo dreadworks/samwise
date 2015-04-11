@@ -96,4 +96,4 @@ sam_selftest_SOURCES =   \
 
 sam_selftest_LDADD = src/libsam.la
 sam_selftest_LDFLAGS = -static -lcheck
-sam_selftest_CFLAGS = -D__SAM_TEST
+sam_selftest_CFLAGS = -D__SAM_TEST $(AM_CFLAGS)

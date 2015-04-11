@@ -641,13 +641,11 @@ START_TEST(test_msg_get_skipped)
     sam_msg_t *msg = sam_msg_new (&zmsg);
     ck_assert_int_eq (sam_msg_size (msg), 1);
 
-    void *ref;
     rc = sam_msg_get (msg, "?");
     ck_assert_int_eq (rc, 0);
     ck_assert_int_eq (sam_msg_size (msg), 1);
 
     // check idempotency of _get ()
-    ref = NULL;
     rc = sam_msg_get (msg, "?");
     ck_assert_int_eq (rc, 0);
     ck_assert_int_eq (sam_msg_size (msg), 1);
@@ -668,7 +666,6 @@ START_TEST(test_msg_get_skipped_nonempty)
     sam_msg_t *msg = sam_msg_new (&zmsg);
     ck_assert_int_eq (sam_msg_size (msg), 0);
 
-    void *ref;
     int rc = sam_msg_get (msg, "?");
     ck_assert_int_eq (rc, -1);
     ck_assert_int_eq (sam_msg_size (msg), 0);
@@ -784,6 +781,7 @@ START_TEST(test_msg_code)
 
     char *one, *two;
     int rc = sam_msg_pop (msg, "ss", &one, &two);
+    ck_assert_int_eq (rc, 0);
     ck_assert_str_eq (one, "one");
     ck_assert_str_eq (two, "two");
     ck_assert_int_eq (sam_msg_size (msg), 0);
@@ -807,6 +805,7 @@ START_TEST(test_msg_code_pop)
 
     char *one;
     int rc = sam_msg_pop (msg, "s", &one);
+    ck_assert_int_eq (rc, 0);
     ck_assert_int_eq (sam_msg_size (msg), 1);
 
     size_t size = sam_msg_encoded_size (msg);
