@@ -208,10 +208,66 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Try to _pop () an empty configuration hash
+/// Try to _pop () an empty list
 START_TEST(test_msg_pop_l_empty)
 {
     sam_selftest_introduce ("test_msg_pop_l_empty");
+
+    zmsg_t *zmsg = zmsg_new ();
+
+    if (zmsg_pushstr (zmsg, "0")) {
+        ck_abort_msg ("could not build zmsg");
+    }
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 1);
+
+    zlist_t *list;
+    int rc = sam_msg_pop (msg, "l", &list);
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+    ck_assert_int_eq (zlist_size (list), 0);
+
+    zlist_destroy (&list);
+    sam_msg_destroy (&msg);
+}
+END_TEST
+
+
+//  --------------------------------------------------------------------------
+/// Try to _pop () two succeesding lists
+START_TEST(test_msg_pop_l_double)
+{
+    sam_selftest_introduce ("test_msg_pop_l_double");
+
+    sam_selftest_introduce ("test_msg_get_l_double");
+    zmsg_t *zmsg = zmsg_new ();
+
+    if (zmsg_pushstr (zmsg, "two") ||
+        zmsg_pushstr (zmsg, "1")   ||
+        zmsg_pushstr (zmsg, "one") ||
+        zmsg_pushstr (zmsg, "1")) {
+        ck_abort_msg ("could not build zmsg");
+    }
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 4);
+
+    zlist_t *list1, *list2;
+    int rc = sam_msg_pop (msg, "ll", &list1, &list2);
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 0);
+
+    ck_assert_int_eq (zlist_size (list1), 1);
+    ck_assert_int_eq (zlist_size (list2), 1);
+
+    ck_assert_str_eq (zlist_first (list1), "one");
+    ck_assert_str_eq (zlist_first (list2), "two");
+
+    zlist_destroy (&list1);
+    zlist_destroy (&list2);
+
+    sam_msg_destroy (&msg);
 }
 END_TEST
 
@@ -626,6 +682,41 @@ START_TEST(test_msg_get_l_empty)
 }
 END_TEST
 
+
+//  --------------------------------------------------------------------------
+/// Try to _get () two consecutive lists
+START_TEST(test_msg_get_l_double)
+{
+    sam_selftest_introduce ("test_msg_get_l_double");
+    zmsg_t *zmsg = zmsg_new ();
+
+    if (zmsg_pushstr (zmsg, "two") ||
+        zmsg_pushstr (zmsg, "1")   ||
+        zmsg_pushstr (zmsg, "one") ||
+        zmsg_pushstr (zmsg, "1")) {
+        ck_abort_msg ("could not build zmsg");
+    }
+
+    sam_msg_t *msg = sam_msg_new (&zmsg);
+    ck_assert_int_eq (sam_msg_size (msg), 4);
+
+    zlist_t *list1, *list2;
+    int rc = sam_msg_get (msg, "ll", &list1, &list2);
+    ck_assert_int_eq (rc, 0);
+    ck_assert_int_eq (sam_msg_size (msg), 4);
+
+    ck_assert_int_eq (zlist_size (list1), 1);
+    ck_assert_int_eq (zlist_size (list2), 1);
+
+    ck_assert_str_eq (zlist_first (list1), "one");
+    ck_assert_str_eq (zlist_first (list2), "two");
+
+    zlist_destroy (&list1);
+    zlist_destroy (&list2);
+
+    sam_msg_destroy (&msg);
+}
+END_TEST
 
 
 //  --------------------------------------------------------------------------
@@ -1089,6 +1180,7 @@ sam_msg_test ()
     tcase_add_test (tc, test_msg_pop_p);
     tcase_add_test (tc, test_msg_pop_l);
     tcase_add_test (tc, test_msg_pop_l_empty);
+    tcase_add_test (tc, test_msg_pop_l_double);
     tcase_add_test (tc, test_msg_pop);
     tcase_add_test (tc, test_msg_pop_insufficient_data);
     tcase_add_test (tc, test_msg_pop_successively);
@@ -1110,6 +1202,7 @@ sam_msg_test ()
     tcase_add_test (tc, test_msg_get_p);
     tcase_add_test (tc, test_msg_get_l);
     tcase_add_test (tc, test_msg_get_l_empty);
+    tcase_add_test (tc, test_msg_get_l_double);
     tcase_add_test (tc, test_msg_get_skipped);
     tcase_add_test (tc, test_msg_get_skipped_nonempty);
     tcase_add_test (tc, test_msg_get);
