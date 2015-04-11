@@ -120,7 +120,9 @@ resolve_l (
     zlist_t **list,
     bool remove)
 {
-    int amount = atoi ((char *) zframe_data (frame));
+    char *strdata = zframe_strdup (frame);
+    int amount = atoi (strdata);
+    free (strdata);
 
     if (remove) {
         zframe_destroy (&frame);
@@ -411,7 +413,6 @@ sam_msg_get (
 
     zframe_t *frame = zlist_first (frames);
     while (*pic && frame != NULL) {
-
         if (*pic != '?') {
 
             if (*pic == 'l') {
