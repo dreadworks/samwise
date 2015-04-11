@@ -84,4 +84,8 @@ typedef struct sam_backend_t {
 #include "sam_buf.h"
 #include "sam.h"
 
+#ifdef __SAM_TEST
+#include "sam_selftest.h"
+#endif
+
 #endif
