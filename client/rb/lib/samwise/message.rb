@@ -18,7 +18,7 @@ module Samwise
     #
     def add *frames
       frames.each do |m|
-        @frames.insert 0, ZMQ::Frame(m)
+        @frames.insert 0, m
       end
     end
 
@@ -30,10 +30,11 @@ module Samwise
         raise Samwise::RequestMalformed, "At least one frame required"
       end
 
-      @frames << ZMQ::Frame(Samwise::VERSION.inspect)
+      @frames << Samwise::VERSION.inspect
       zmsg = ZMQ::Message.new
 
-      @frames.each do |f|
+      # puts "message: #{@frames.reverse.to_s}"
+      @frames.map { |m| ZMQ::Frame(m.to_s) }.each do |f|
         zmsg.push f
       end
 

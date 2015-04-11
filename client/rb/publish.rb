@@ -18,12 +18,16 @@ def publish (opts)
   opts.n.times do |i|
     puts "publishing message #{i}" if opts.verbose
 
+    amqp_args = { :exchange => "amq.direct" }
+    amqp_opts = { }
+    msg = "#{opts.t} publishing request"
+
     if opts.t == "redundant"
-      Samwise::RabbitMQ.publish_redundant opts.d, "amq.direct", "", "redundant"
+      Samwise::RabbitMQ.publish_redundant opts.d, amqp_args, amqp_opts, msg
     end
 
     if opts.t == "round robin"
-      Samwise::RabbitMQ.publish_roundrobin "amq.direct", "", "round robin"
+      Samwise::RabbitMQ.publish_roundrobin amqp_args, amqp_opts, msg
     end
 
   end
