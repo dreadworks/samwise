@@ -101,6 +101,37 @@ end
 
 
 #
+#  install berkeleydb
+#  oracle.com
+#
+function __deps_libdb \
+  -a dir
+
+  echo "building berkeleydb"
+  mkdir .tmp
+  pushd .tmp
+
+  wget http://download.oracle.com/berkeley-db/db-6.1.19.tar.gz
+  and tar xzf db-6.1.19.tar.gz
+
+  # TODO OSX
+  and cd db-6.1.19/build_unix
+  and ../dist/configure --prefix $dir
+  and make
+  and make install
+  or begin
+    popd
+    echo "installing berkeley db failed"
+    return -1
+  end
+
+  popd
+  rm -rf .tmp
+  echo
+end
+
+
+#
 #  install check, a unit testing framework
 #  http://check.sourceforge.net
 #
@@ -149,6 +180,7 @@ function __deps \
   __deps_libzmq "$dir"
   and __deps_libczmq "$dir"
   and __deps_librabbitmq "$dir"
+  and __deps_libdb "$dir"
   and __deps_check "$dir"
   or echo "something went wrong, exiting."
 
