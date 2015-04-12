@@ -671,39 +671,46 @@ sam_be_rmq_publish (
         self->amqp.seq,
         zframe_size (opts->payload));
 
-  /*
-    // initialize headers
-    char val [255];
-    snprintf (val, 255, "%e", ((double) time (NULL)) + 3000);
-    sam_log_tracef ("setting expiration: %s", val);
 
-    char *key = "expiration";
+    // translate headers
+    size_t
+        num_headers = zlist_size (opts->headers),
+        headers_size = sizeof (amqp_table_entry_t) * num_headers;
 
-    amqp_table_entry_t headers = {
-        .key = { .len = strlen (key), .bytes = key },
-        .value = {
-            .kind = AMQP_FIELD_KIND_BYTES,
-            .value.bytes = { .len = strlen (key), .bytes = val }
+    amqp_table_entry_t
+        *headers = malloc (headers_size),
+        *headers_ptr = headers;
+
+    char *key, *val;
+    if (num_headers) {
+        key = zlist_first (opts->headers);
+        val = zlist_next (opts->headers);
+
+        while (key != NULL && val != NULL) {
+            sam_log_infof ("setting header: '%s' = '%s'", key, val);
+
+            *headers_ptr = {
+                .key = { .len = strlen (key), .bytes = key },
+                .value = {
+                    .kind = AMQP_FIELD_KIND_BYTES,
+                    .value.bytes = { .len = strlen (key), .bytes = val }
+                }
+            };
+
+            headers_ptr += 1;
+
+            key = zlist_next (opts->headers);
+            val = zlist_next (opts->headers);
         }
-    };
+    }
 
-
-    // initialize props
-    amqp_table_t header_table = {
-        .num_entries = 1, .entries = &headers
-    };
-
-    amqp_basic_properties_t props;
-    memset (&props, 0, sizeof (amqp_basic_properties_t));
-    memcpy (&props.headers, &header_table, sizeof (amqp_table_t));
-*/
 
     // translate props
     amqp_basic_properties_t amqp_props = {
         ._flags           = 0,
         .content_type     = c_bytes (opts->props.content_type),
         .content_encoding = c_bytes (opts->props.content_encoding),
-        .headers          = { .num_entries = 0, .entries = NULL },
+        .headers          = { .num_entries = num_headers, .entries = headers },
         .delivery_mode    = c_uint8 (opts->props.delivery_mode),
         .priority         = c_uint8 (opts->props.priority),
         .correlation_id   = c_bytes (opts->props.correlation_id),
@@ -716,6 +723,7 @@ sam_be_rmq_publish (
         .app_id           = c_bytes (opts->props.app_id),
         .cluster_id       = c_bytes (opts->props.cluster_id)
     };
+
 
     amqp_bytes_t payload = {
         .len = zframe_size (opts->payload),
@@ -731,6 +739,8 @@ sam_be_rmq_publish (
         opts->immediate,
         &amqp_props,
         payload);
+
+    free (headers);
 
     if (rc == AMQP_STATUS_HEARTBEAT_TIMEOUT) {
         sam_log_errorf (
