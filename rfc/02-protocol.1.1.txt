@@ -1,0 +1,137 @@
+SAMWISE RFC 02 - PROTOCOL VERSION 1.1
+
+name: 02-protocol.1.1
+
+
+ABSTRACT
+
+  This is an extension of the samwise protocol 1.0 described in rfc 1
+  (protocol.1.0). It introduces aggregate types describing contigous
+  collection of frames and extends RabbitMQ publishing requests to be
+  able to hand over extended options.
+
+  All types correspond to the c types used by libzmq and czmq.
+
+  This document is subject to the terms of the MIT License. If a copy
+  of the MIT License was not distributed with this file, You can
+  obtain one at http://opensource.org/licenses/MIT
+
+  The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+  "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
+  document are to be interpreted as described in RFC 2119.
+
+
+GOALS
+
+  - Define a format to send contiguous frame collections
+
+  - Extend format for RabbitMQ publishing requests to hand over
+    extended options
+
+
+CONTIGUOUS FRAME COLLECTIONS
+
+  Sometimes it is necessary to send a set of related data like a
+  variable list of arguments or key/value pairs. One possibility would
+  be to introduce some encoding format like JSON or Protocol Buffers
+  and send a frame with encoded data. Although this is quite powerful,
+  it is not necessarily needed to introduce a new dependency to both
+  clients and samwise.
+
+  The proposed solution uses a simpler approach. It shall be possible
+  to pass a set of frames where the count is not known beforehand. To
+  ease protocol checks, this set of frames must be seen as a logical
+  unit. Every frame sequence starts with an integer defining how many
+  frames follow.
+
+        property                type        value
+  n   | frame count           | integer   | x >= 0
+  n+1 | first frame           | char *    | -
+  ...
+  n+x | x'th frame            | char *    | -
+
+  This solution is easy to implement and fullfills the formerly
+  described requirements. For protocol checks, the value of x can be
+  used to skip the remaining frames before continuing analyzing
+  succeeding frames. Key/value pairs can be mapped as alternating
+  frames where the n+1st, n+3rd, n+5'th... frames are the keys and the
+  other frames are their values.
+
+
+ADDITIONAL OPTIONS FOR RABBITMQ PUBLISHING REQUESTS
+
+  The RabbitMQ publishing requests described in version 1.0 of the
+  samwise protocol must be extended to allow passing over additional
+  options and AMQP frame headers.
+
+  A round robined RabbitMQ publishing requests first frames look like
+  this:
+
+        property                type        value
+    0 | protocol version      | integer   | 110
+    1 | action                | char *    | "publish"
+    2 | distribution          | char *    | "round robin"
+    ...
+
+  Redundant publishing requests start like this:
+
+
+        property                type        value
+    0 | protocol version      | integer   | 100
+    1 | action                | char *    | "publish"
+    2 | distribution          | char *    | "redundant"
+    3 | min. acknowledged     | integer   | x > 0
+    ...
+
+
+  The following frames describe fixed publishing options:
+
+             property              type       value
+    ...
+    n +  1 | exchange            | char *   | -
+    n +  2 | routing key         | char *   | -
+    n +  3 | mandatory           | int      | -
+    n +  4 | immediate           | int      | -
+    ...
+
+  Afterwards a contiguous block of options follows:
+
+             property              type       value
+    ...
+    n +  5 | option count        | int      | 12
+    n +  6 | content_type        | char *   | -
+    n +  7 | content_encoding    | char *   | -
+    n +  8 | delivery_mode       | char *   | -
+    n +  9 | priority            | char *   | -
+    n + 10 | correlation_id      | char *   | -
+    n + 11 | reply_to            | char *   | -
+    n + 12 | expiration          | char *   | -
+    n + 13 | message_id          | char *   | -
+    n + 14 | type                | char *   | -
+    n + 15 | user_id             | char *   | -
+    n + 16 | app_id              | char *   | -
+    n + 17 | cluster_id          | char *   | -
+    ...
+
+  After the options comes a variable number of AMQP headers that can
+  contain arbitrary values. They consist of alternating key/value
+  pairs:
+
+             property              type       value
+    ...
+    n + 18 | header count        | int      | -
+    n + 19 | key                 | char *   | -
+    n + 20 | value               | char *   | -
+    ...
+    m - 2  | key                 | char *   | -
+    m - 1  | value               | char *   | -
+    ...
+
+ And finally, the payload gets provided:
+
+             property              type       value
+    ...
+    m      | payload             | byte *   | -
+
+
+
