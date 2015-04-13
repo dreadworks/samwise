@@ -176,10 +176,10 @@ new ()
     zlist_set_destructor (self->refs.f, refs_f_destructor);
 
     // mutexes
-    int rc = pthread_mutex_init (&self->owner_lock, NULL);
+    int rc = pthread_mutex_init (&self->own_lock, NULL);
     assert (!rc);
 
-    rc = pthread_mutex_init (&self->contain_lock, NULL);
+    rc = pthread_mutex_init (&self->get_lock, NULL);
     assert (!rc);
 
     // reference counting
@@ -221,10 +221,10 @@ sam_msg_destroy (
 
     // please make sure no one tries to _own after the first
     // _destroys, @see sam_msg_own
-    pthread_mutex_lock (&(*self)->owner_lock);
+    pthread_mutex_lock (&(*self)->own_lock);
     (*self)->owner_refs -= 1;
     int refs = (*self)->owner_refs;
-    pthread_mutex_unlock (&(*self)->owner_lock);
+    pthread_mutex_unlock (&(*self)->own_lock);
 
     if (refs) {
         return;
@@ -236,8 +236,8 @@ sam_msg_destroy (
     zlist_destroy (&(*self)->refs.s);
     zlist_destroy (&(*self)->refs.f);
 
-    pthread_mutex_destroy (&(*self)->owner_lock);
-    pthread_mutex_destroy (&(*self)->contain_lock);
+    pthread_mutex_destroy (&(*self)->own_lock);
+    pthread_mutex_destroy (&(*self)->get_lock);
 
     free (*self);
     *self = NULL;
@@ -286,9 +286,9 @@ void
 sam_msg_own (
     sam_msg_t *self)
 {
-    pthread_mutex_lock (&self->owner_lock);
+    pthread_mutex_lock (&self->own_lock);
     self->owner_refs += 1;
-    pthread_mutex_unlock (&self->owner_lock);
+    pthread_mutex_unlock (&self->own_lock);
 }
 
 
@@ -403,9 +403,9 @@ sam_msg_get (
     assert (pic);
 
     // copy list for thread safety
-    pthread_mutex_lock (&self->contain_lock);
+    pthread_mutex_lock (&self->get_lock);
     zlist_t *frames = zlist_dup (self->frames);
-    pthread_mutex_unlock (&self->contain_lock);
+    pthread_mutex_unlock (&self->get_lock);
     zlist_set_destructor (frames, NULL);
 
     va_list arg_p;
