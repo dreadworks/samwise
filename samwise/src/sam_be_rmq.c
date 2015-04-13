@@ -266,7 +266,7 @@ handle_publish_req (
     sam_be_rmq_pub_t opts;
     zlist_t
         *props,
-        *header;
+        *headers;
 
     rc = sam_msg_get (
         msg, "ssiillf",
@@ -277,7 +277,7 @@ handle_publish_req (
         &opts.immediate,
 
         &props,
-        &header,
+        &headers,
 
         &opts.payload);
     assert (!rc);
@@ -296,6 +296,7 @@ handle_publish_req (
         prop_c -= 1;
     }
 
+    opts.headers = headers;
 
     // publish
     unsigned int seq = self->amqp.seq;
@@ -315,7 +316,7 @@ handle_publish_req (
     free (opts.exchange);
     free (opts.routing_key);
     zlist_destroy (&props);
-    zlist_destroy (&header);
+    zlist_destroy (&headers);
     zframe_destroy (&opts.payload);
 
     return 0;
@@ -689,13 +690,12 @@ sam_be_rmq_publish (
         while (key != NULL && val != NULL) {
             sam_log_infof ("setting header: '%s' = '%s'", key, val);
 
-            *headers_ptr = {
-                .key = { .len = strlen (key), .bytes = key },
-                .value = {
-                    .kind = AMQP_FIELD_KIND_BYTES,
-                    .value.bytes = { .len = strlen (key), .bytes = val }
-                }
-            };
+            headers_ptr->key.len = strlen (key);
+            headers_ptr->key.bytes = key;
+
+            headers_ptr->value.kind = AMQP_FIELD_KIND_BYTES;
+            headers_ptr->value.value.bytes.len = strlen (val);
+            headers_ptr->value.value.bytes.bytes = val;
 
             headers_ptr += 1;
 

@@ -136,9 +136,12 @@ START_TEST(test_be_rmq_sync_publish)
 
     opts.exchange = "amq.direct";
     opts.payload = payload;
+    opts.headers = zlist_new ();
 
     int rc = sam_be_rmq_publish (rabbit, &opts);
     ck_assert_int_eq (rc, 0);
+
+    zlist_destroy (&opts.headers);
 
     zmq_pollitem_t items = {
         .socket = NULL,
