@@ -241,9 +241,13 @@ handle_amqp (
 /// Handle publishing request. The frame format contained in the
 /// sam_msg must look like this:
 ///
-///    0 | s | <destination exchange>
-///    1 | s | <routing key>
-///    2 | f | zframe_t * containing the payload
+///    0 | s | destination exchange
+///    1 | s | routing key
+///    2 | i | mandatory
+///    3 | i | immediate
+///    4 | l | list of options
+///    5 | l | list of headers
+///    6 | f | zframe_t * containing the payload
 ///
 static int
 handle_publish_req (
@@ -259,6 +263,7 @@ handle_publish_req (
     int rc = zsock_recv (pll, "ip", &key, &msg);
     if (rc) {
         sam_log_errorf ("'%s' receive failed", self->name);
+        return 0;
     }
 
 

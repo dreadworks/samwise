@@ -120,7 +120,7 @@ typedef struct record_t {
         struct {
             int prev;    ///< previous tombstone or NULL
             int next;    ///< next record/tombstone
-        } tombstone;
+        } tombstone;     ///< if type == TOMBSTONE
 
     } c;
 } record_t;
@@ -601,7 +601,9 @@ handle_storage_req (
     sam_db_ret_t ret = sam_db_get (db, &msg_id);
     int rc = -1;
 
-    // record already there (ack arrived early), update data
+    // record already there (ack arrived early), update data (this is
+    // not possible with the current implementation, but I leave it if
+    // for the future if the whole system acts more asynchronously)
     if (ret == SAM_DB_OK) {
         rc = update_record_store (state, msg);
     }
@@ -955,7 +957,7 @@ sam_buf_destroy (
 //  --------------------------------------------------------------------------
 /// Save a message, get a message id as the receipt.
 int
-sam_buf_save (
+save (
     sam_buf_t *self,
     sam_msg_t *msg)
 {
