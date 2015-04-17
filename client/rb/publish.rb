@@ -19,7 +19,7 @@ def publish (opts)
     puts "publishing message #{i}" if opts.verbose
 
     amqp_args = { :exchange => "amq.direct" }
-    amqp_opts = { }
+    amqp_opts = { :headers => { :header_key => "header_val" }}
     msg = "#{opts.t} publishing request"
 
     if opts.t == "redundant"
