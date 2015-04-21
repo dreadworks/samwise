@@ -36,7 +36,7 @@ struct args_t {
     bool quiet;        ///< suppress output
     cmd_fn *fn;        ///< command function
     sam_cfg_t *cfg;    ///< samwise configuration
-
+    char *endpoint;
 };
 
 
@@ -215,6 +215,8 @@ args_new ()
     args->quiet = false;
     args->verbose = false;
     args->fn = NULL;
+    args->cfg = NULL;
+    args->endpoint = NULL;
 
     return args;
 }
@@ -239,16 +241,16 @@ args_destroy (
 
 // --- do not edit, set by tools/release.fish
 const char
-    *argp_program_version = "TODO release.fish",
-    *argp_program_bug_address = "TODO release.fish";
+    *argp_program_version = "0.0.1",
+    *argp_program_bug_address = "http://github.com/dreadworks/samwise/issues";
 // ---
 
 
 static char doc [] =
-    "\n======================================================================\n"
-    " * * * * Samwise Control Interface -- samctl * * * *\n"
-    "======================================================================\n\n"
-    "Send a command with the option -c or --cmd=CMD.\n"
+    " ___ __ _ _ ____ __ _(_)___ ___   __ ___ _ _| |_ _ _ ___| |\n"
+    "(_-</ _` | '  \\ V  V / (_-</ -_) / _/ _ \\ ' \\  _| '_/ _ \\ |\n"
+    "/__/\\__,_|_|_|_\\_/\\_/|_/__/\\___| \\__\\___/_||_\\__|_| \\___/_|\n\n"
+
     "Currently the following commands are supported:\n"
     "  ping      Ping samwise\n"
     "  status    Get extensive status information about samd's state\n"
@@ -257,8 +259,7 @@ static char doc [] =
 
     "\nAdditionally the following options can be provided:\n";
 
-static char args_doc [] =
-    "CONFIG";
+static char args_doc [] = "COMMAND";
 
 
 /// possible options to pass to samctl
@@ -270,8 +271,12 @@ static struct argp_option options [] = {
     { .name = "quiet", .key = 'q', .arg = 0,
       .doc = "Suppress output" },
 
-    { .name = "command", .key = 'c', .arg = "CMD",
-      .doc = "Specify the command to send to samwise"
+    { .name = "config", .key = 'c', .arg = "CFG",
+      .doc = "Specify a configuration file (or use -e)"
+    },
+
+    { .name = "endpoint", .key = 'e', .arg = "ENDPOINT",
+      .doc = "Specify the endpoint (or use -c)"
     },
 
     { 0 }
@@ -338,17 +343,24 @@ parse_opt (
         args->quiet = true;
         break;
 
-    // cmd
+    // cfg
     case 'c':
-        set_cmd (args, arg);
-        if (args->fn == NULL) {
-            out (ERROR, args, "unknown command");
-            argp_usage (state);
+        out (VERBOSE, args, "loading configuration");
+        args->cfg = sam_cfg_new (arg);
+        if (args->cfg == NULL) {
+            out (ERROR, args, "could not load config file");
             return -1;
         }
         break;
 
-    // key gargs (config)
+
+    // endpoint
+    case 'e':
+        out (VERBOSE, args, "using custom endpoint");
+        args->endpoint = arg;
+        break;
+
+    // key gargs (command)
     case ARGP_KEY_ARG:
         if (state->arg_num >= 1) {
             out (ERROR, args, "too many arguments");
@@ -356,12 +368,13 @@ parse_opt (
             return -1;
         }
 
-        out (VERBOSE, args, "loading configuration");
-        args->cfg = sam_cfg_new (arg);
-        if (args->cfg == NULL) {
-            out (ERROR, args, "could not load config file");
+        set_cmd (args, arg);
+        if (args->fn == NULL) {
+            out (ERROR, args, "unknown command");
+            argp_usage (state);
             return -1;
         }
+
         break;
 
     case ARGP_KEY_END:
@@ -407,8 +420,18 @@ ctl_new (
     assert (ctl);
 
     char *endpoint;
-    if (sam_cfg_endpoint (args->cfg, &endpoint)) {
-        out (ERROR, args, "could not load endpoint");
+
+    if (args->endpoint) {
+        endpoint = args->endpoint;
+    }
+    else if (args->cfg) {
+        if (sam_cfg_endpoint (args->cfg, &endpoint)) {
+            out (ERROR, args, "could not load endpoint");
+            goto abort;
+        }
+    }
+    else {
+        out (ERROR, args, "no endpoint provided, try -e or -c");
         goto abort;
     }
 
@@ -461,8 +484,10 @@ main (
 
     else {
         ctl_t *ctl = ctl_new (args);
-        args->fn (ctl, args);
-        ctl_destroy (&ctl);
+        if (ctl) {
+            args->fn (ctl, args);
+            ctl_destroy (&ctl);
+        }
     }
 
     out (VERBOSE, args, "exiting");
