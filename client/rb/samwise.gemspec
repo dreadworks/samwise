@@ -11,14 +11,14 @@ Gem::Specification.new do |s|
   s.summary       = "Samwise client"
   s.description   = "A client implementation to communicate with samd"
   s.authors       = ["Felix Hamann"]
-  s.email         = "felix.hamann@xing.com"
+  s.email         = "nvri@dreadworks.de"
   s.files         = [
     "lib/samwise.rb",
     'lib/samwise/connection.rb',
     "lib/samwise/message.rb",
     "lib/samwise/rabbitmq.rb"
   ]
-  s.homepage      = "https://source.xing.com/felix-hamann/samwise"
+  s.homepage      = "https://github.com/dreadworks/samwise"
   s.license       = "MIT"
 
 end

@@ -25,7 +25,7 @@ function __release_change_configure \
   -a vers
 
   set -l pkg_name "samwise"
-  set -l addr "http://source.xing.com/felix-hamann/samwise/issues"
+  set -l addr "http://github.com/dreadworks/samwise/issues"
 
   sed \
     -e "s/\[FULL-PACKAGE-NAME\]/$pkg_name/" \
