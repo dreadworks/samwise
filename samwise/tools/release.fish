@@ -22,25 +22,23 @@ end
 
 
 function __release_change_configure \
-  -a vers
+  -a vers pkg_name addr
 
-  set -l pkg_name "samwise"
-  set -l addr "http://github.com/dreadworks/samwise/issues"
+  cp configure.ac .backup/
+  sed -e "s|AC_INIT.*|AC_INIT($pkg_name, $vers, $addr)|" \
+  < .backup/configure.ac > configure.ac
 
+end
+
+
+function __release_change_samctl \
+  -a vers pkg_name addr
+
+  cp src/samctl.c .backup/samctl.c
   sed \
-    -e "s/\[FULL-PACKAGE-NAME\]/$pkg_name/" \
-    -e "s/\[VERSION\]/$vers/"               \
-    -e "s|\[BUG-REPORT-ADDRESS\]|$addr|"    \
-    -e "s|\[BUG-REPORT-ADDRESS\]|$addr|"    \
-    -e "s/AC_PROG_CC/AM_PROG_CC_C_O/"       \
-    -e "/AC_PROG_RANLIB/d"                  \
-    -e '10i\
-AM_INIT_AUTOMAKE' \
-    -e '10i\
-LT_INIT' \
-    -e '10i\
-AC_CONFIG_MACRO_DIR([m4])' \
-  < configure.scan > configure.ac
+    -e "s/ *\*argp_program_version.*/    *argp_program_version = \"$vers\",/"         \
+    -e "s| *\*argp_program_bug_address.*|    *argp_program_bug_address = \"$addr\";|" \
+  < .backup/samctl.c > src/samctl.c
 
 end
 
@@ -67,6 +65,8 @@ function __release \
   end
 
   set -l vers "$major.$minor.$patch"
+  set -l pkg_name "samwise"
+  set -l addr "http://github.com/dreadworks/samwise/issues"
 
   echo "relasing version $vers"
   echo "continue? [y]"
@@ -87,11 +87,10 @@ function __release \
   __release_change_doxyfile $vers
 
   echo "changing configure.ac"
-  autoscan
-  __release_change_configure $vers
+  __release_change_configure $vers $pkg_name $addr
 
-  echo "creating configure"
-  autoreconf -iv
+  echo "changing src/samctl.c"
+  __release_change_samctl $vers $pkg_name $addr
 
 end
 
