@@ -666,6 +666,8 @@ handle_resend (
     void *args)
 {
     sam_log_trace ("resend cycle triggered");
+    int64_t TIMESTAMP = zclock_mono ();
+
     state_t *state = args;
     sam_db_t *db = state->db;
 
@@ -750,6 +752,7 @@ handle_resend (
     }
 
     sam_db_end (db, (rc)? true: false);
+    sam_log_errorf ("resending took %d", zclock_mono () - TIMESTAMP);
     return rc;
 }
 
@@ -957,7 +960,7 @@ sam_buf_destroy (
 //  --------------------------------------------------------------------------
 /// Save a message, get a message id as the receipt.
 int
-save (
+sam_buf_save (
     sam_buf_t *self,
     sam_msg_t *msg)
 {

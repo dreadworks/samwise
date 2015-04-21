@@ -43,8 +43,9 @@ typedef enum {
 
 /// return type for client responses
 typedef struct sam_ret_t {
-    int rc;    ///< return code
-    char *msg; ///< set for sam_ret_t.rc != 0
+    int rc;          ///< return code
+    char *msg;       ///< additional info, either static or allocated
+    bool allocated;  ///< indicates if ret.msg must be free'd
 } sam_ret_t;
 
 
@@ -61,6 +62,7 @@ typedef struct sam_t {
     char *backend_pull_endpoint;  ///< pull endpoint name for backends to bind
 
     sam_buf_t *buf;               ///< message store
+    sam_cfg_t *cfg;               ///< configuration
     zactor_t *actor;              ///< thread maintaining broker connections
 } sam_t;
 
@@ -110,7 +112,7 @@ sam_be_remove (
 int
 sam_init (
     sam_t *self,
-    sam_cfg_t *cfg);
+    sam_cfg_t **cfg);
 
 
 //  --------------------------------------------------------------------------

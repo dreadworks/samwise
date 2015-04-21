@@ -183,10 +183,18 @@ cmd_restart (
 /// Retrieve status data from samd.
 static void
 cmd_status (
-    ctl_t *ctl UU,
-    args_t *args UU)
+    ctl_t *ctl,
+    args_t *args)
 {
-    printf ("TODO\n");
+    sam_msg_t *msg = send_cmd (ctl, args, "status");
+    if (msg) {
+        char *status;
+        int rc = sam_msg_pop (msg, "s", &status);
+        assert (rc == 0);
+
+        out (NORMAL, args, status);
+        sam_msg_destroy (&msg);
+    }
 }
 
 

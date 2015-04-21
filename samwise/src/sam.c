@@ -75,7 +75,11 @@ new_ret ()
 {
     sam_ret_t *ret = malloc (sizeof (sam_ret_t));
     assert (ret);
+
     ret->rc = 0;
+    ret->msg = "";
+    ret->allocated = false;
+
     return ret;
 }
 
@@ -172,7 +176,7 @@ handle_frontend_pub (
 
     int backend_c = zlist_size (state->backends);
     if (!backend_c) {
-        sam_log_error ("discarding message, no backends available");
+        sam_log_info ("discarding message, no backends available");
         sam_msg_destroy (&msg);
         return 0;
     }
@@ -206,7 +210,7 @@ handle_frontend_pub (
         }
 
         if (n && !backend_c) {
-            sam_log_error (
+            sam_log_info (
                 "discarding redundant msg, not enough backends available");
         }
     }
@@ -278,6 +282,7 @@ handle_ctl_req (
     sam_log_tracef ("got ctl command: '%s'", cmd);
     sam_msg_t *msg = sam_msg_new (&zmsg);
 
+
     // add a new backend
     if (!strcmp (cmd, "be.add")) {
         sam_backend_t *be;
@@ -289,6 +294,7 @@ handle_ctl_req (
         }
     }
 
+
     // remove a backend
     else if (!strcmp (cmd, "be.rm")) {
         char *name;
@@ -297,6 +303,25 @@ handle_ctl_req (
             rc = remove_backend (state, loop, name);
         }
     }
+
+
+    // get names of active backends
+    else if (!strcmp (cmd, "be.active")) {
+        zmsg_t *msg = zmsg_new ();
+
+        int backend_c = zlist_size (state->backends);
+        zmsg_pushstrf (msg, "%d", backend_c);
+
+        sam_log_infof ("be.status iterating over %d backends", backend_c);
+        sam_backend_t *be = zlist_first (state->backends);
+        while (be) {
+            zmsg_addstr (msg, be->name);
+            be = zlist_next (state->backends);
+        }
+
+        zmsg_send (&msg, rep);
+    }
+
 
     else {
         assert (false);
@@ -381,6 +406,7 @@ sam_new (
 
     self->be_id_power = 0;
     self->buf = NULL;
+    self->cfg = NULL;
 
 
     // publishing requests
@@ -451,6 +477,8 @@ sam_destroy (
     zsock_destroy (&(*self)->ctl_req);
 
     zactor_destroy (&(*self)->actor);
+
+    sam_cfg_destroy (&(*self)->cfg);
 
     free (*self);
     *self = NULL;
@@ -530,8 +558,7 @@ sam_be_remove (
 /// Create a new sam_buf instance based on sam_cfg.
 static int
 init_buf (
-    sam_t *self,
-    sam_cfg_t *cfg)
+    sam_t *self)
 {
     if (self->buf) {
         sam_buf_destroy (&self->buf);
@@ -540,7 +567,7 @@ init_buf (
     zsock_t *backend_pull = zsock_new_pull (self->backend_pull_endpoint);
     zsock_t *frontend_push = zsock_new_push (self->frontend_pub_endpoint);
 
-    self->buf = sam_buf_new (cfg, &backend_pull, &frontend_push);
+    self->buf = sam_buf_new (self->cfg, &backend_pull, &frontend_push);
 
     if (self->buf == NULL) {
         zsock_destroy (&backend_pull);
@@ -556,15 +583,14 @@ init_buf (
 /// Creates backend instances based on sam_cfg.
 static int
 init_backends (
-    sam_t *self,
-    sam_cfg_t *cfg)
+    sam_t *self)
 {
     int count;
     char **names, **names_ptr;
     void *opts, *opts_ptr;
 
     int rc = sam_cfg_be_backends (
-        cfg, self->be_type, &count, &names, &opts);
+        self->cfg, self->be_type, &count, &names, &opts);
 
     names_ptr = names;
     opts_ptr = opts;
@@ -615,17 +641,24 @@ init_backends (
 int
 sam_init (
     sam_t *self,
-    sam_cfg_t *cfg)
+    sam_cfg_t **cfg)
 {
     assert (self);
-    assert (cfg);
+    assert (*cfg);
 
-    int rc = init_buf (self, cfg);
+    if (self->cfg) {
+        sam_cfg_destroy (&self->cfg);
+    }
+
+    self->cfg = *cfg;
+    *cfg = NULL;
+
+    int rc = init_buf (self);
     if (rc) {
         return rc;
     }
 
-    rc = init_backends (self, cfg);
+    rc = init_backends (self);
     if (rc) {
         return rc;
     }
@@ -781,6 +814,121 @@ check_pub (
 }
 
 
+
+//  --------------------------------------------------------------------------
+/// Returns a string representation of a messaging backend.
+static char *
+backend_info_rmq (
+    sam_t *self,
+    char *be_name)
+{
+    int be_c;
+    char **be_names;
+    void *be_opts;
+
+    int rc = sam_cfg_be_backends(
+        self->cfg, self->be_type, &be_c, &be_names, &be_opts);
+    assert (rc == 0);
+    char **be_names_ptr = be_names;
+    void *be_opts_ptr = be_opts;
+
+
+    int pos = 0;
+    while (pos < be_c && strcmp (*be_names, be_name)) {
+        be_names += 1;
+        pos += 1;
+    }
+
+    assert (pos < be_c);
+
+    sam_be_rmq_opts_t *opts = (sam_be_rmq_opts_t *) be_opts + pos;
+    char *info = malloc (256);
+
+    snprintf (
+        info,
+        256,
+        "%s:%d | user: %s | heartbeat interval: %d\n",
+        opts->host,
+        opts->port,
+        opts->user,
+        opts->heartbeat);
+
+    free (be_names_ptr);
+    free (be_opts_ptr);
+
+    return info;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Returns a string representation of a messaging backend based on
+/// the backend type and name identifier provided.
+static char *
+backend_info (sam_t *self, char *be_name)
+{
+    if (self->be_type == SAM_BE_RMQ) {
+        return backend_info_rmq (self, be_name);
+    }
+
+    assert (false);
+    return NULL;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Returns a string containing all currently connected backends.
+static sam_ret_t *
+aggregate_backend_info (sam_t *self, sam_msg_t *msg)
+{
+    sam_log_trace ("send () ctl internally (be.active)");
+    zsock_send (self->ctl_req, "s", "be.active");
+
+
+    int be_c;
+    zmsg_t *be_names = zmsg_new ();
+
+    sam_log_trace ("recv () ctl internally (be.active)");
+    zsock_recv (self->ctl_req, "im", &be_c, &be_names);
+    sam_ret_t *ret = new_ret ();
+
+
+    // this could be nicer by reallocating memory as needed
+    // but on the other hand, it consumes max ~16kB for a call
+    // not used that often...
+    size_t buf_size = 256;
+    ret->msg = malloc (buf_size * be_c);
+    ret->allocated = true;
+
+    assert (ret->msg);
+    sprintf (ret->msg, "Currently %d backends are connected\n\n", be_c);
+
+    if (be_c) {
+        while (be_c) {
+            char
+                *ret_msg_ptr = ret->msg + strlen (ret->msg),
+                *be_name = zmsg_popstr (be_names),
+                *be_info = backend_info (self, be_name);
+
+            snprintf (
+                ret_msg_ptr,
+                buf_size,
+                "'%s' - - - - - - - -\n%s\n",
+                be_name,
+                be_info);
+
+            free (be_info);
+            free (be_name);
+            be_c -= 1;
+        }
+    }
+
+    zmsg_destroy (&be_names);
+    sam_msg_destroy (&msg);
+
+    return ret;
+}
+
+
 //  --------------------------------------------------------------------------
 /// Send the sam actor thread a message.
 sam_ret_t *
@@ -796,6 +944,7 @@ sam_eval (
     if (rc) {
         return error (msg, "action required");
     }
+
 
     // publish, synchronous store, asynchronous distribution
     sam_log_tracef ("checking '%s' request", action);
@@ -824,6 +973,7 @@ sam_eval (
         return new_ret ();
     }
 
+
     // rpc, synchronous
     else if (!strcmp (action, "rpc")) {
         rc = check_rpc (self->be_type, msg);
@@ -839,18 +989,28 @@ sam_eval (
         return ret;
     }
 
+
     // ping
     else if (!strcmp (action, "ping")) {
-        sam_msg_destroy (&msg);
         goto suspend;
+    }
+
+
+    // status
+    else if (!strcmp (action, "status")) {
+        return aggregate_backend_info (self, msg);
+    }
+
 
     // stop
-    } else if (!strcmp (action, "stop")) {
+    else if (!strcmp (action, "stop")) {
         raise (SIGINT);
         goto suspend;
+    }
+
 
     // restart
-    } else if (!strcmp (action, "restart")) {
+    else if (!strcmp (action, "restart")) {
         sam_ret_t *ret = new_ret ();
         ret->rc = SAM_RET_RESTART;
         sam_msg_destroy (&msg);

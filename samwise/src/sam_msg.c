@@ -201,7 +201,7 @@ sam_msg_new (
     // optimally, this could just access zmsg->frames...
     zframe_t *frame = zmsg_pop (*zmsg);
     while (frame) {
-        zlist_append(self->frames, frame);
+        zlist_append (self->frames, frame);
         frame = zmsg_pop (*zmsg);
     }
     zmsg_destroy (zmsg);

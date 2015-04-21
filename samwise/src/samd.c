@@ -74,14 +74,11 @@ handle_req (
         ret = sam_eval (self->sam, msg);
     }
 
-    if (!ret->rc || ret->rc == SAM_RET_RESTART) {
-        sam_log_trace ("success, sending reply to client");
-        zsock_send (client_rep, "i", 0);
-    }
+    sam_log_trace ("sending reply to client");
+    zsock_send (client_rep, "is", ret->rc, ret->msg);
 
-    else {
-        sam_log_tracef ("error, sending reply to client (%s)", ret->msg);
-        zsock_send (client_rep, "is", ret->rc, ret->msg);
+    if (ret->allocated) {
+        free (ret->msg);
     }
 
     int rc = ret->rc;
@@ -94,23 +91,23 @@ handle_req (
 /// Creates a new samd instance and binds the public endpoints socket.
 samd_t *
 samd_new (
-    const char *cfg_file UU)
+    const char *cfg_file)
 {
     samd_t *self = malloc (sizeof (samd_t));
     assert (self);
 
-    self->cfg = sam_cfg_new (cfg_file);
-    if (!self->cfg) {
+    sam_cfg_t *cfg = sam_cfg_new (cfg_file);
+    if (!cfg) {
         return NULL;
     }
 
     sam_be_t be_type;
-    int rc = sam_cfg_be_type (self->cfg, &be_type);
+    int rc = sam_cfg_be_type (cfg, &be_type);
     self->sam = sam_new (be_type);
     assert (self->sam);
 
     char *endpoint;
-    rc = sam_cfg_endpoint (self->cfg, &endpoint);
+    rc = sam_cfg_endpoint (cfg, &endpoint);
     if (rc) {
         return NULL;
     }
@@ -119,7 +116,7 @@ samd_new (
     assert (self->client_rep);
     sam_log_tracef ("bound public endpoint '%s'", endpoint);
 
-    rc = sam_init (self->sam, self->cfg);
+    rc = sam_init (self->sam, &cfg);
     if (rc) {
         return NULL;
     }
@@ -137,7 +134,6 @@ samd_destroy (
 {
     sam_log_info ("destroying samd");
 
-    sam_cfg_destroy (&(*self)->cfg);
     zsock_destroy (&(*self)->client_rep);
     sam_destroy (&(*self)->sam);
 
