@@ -71,7 +71,6 @@ function __tags
   #
   __tags_find "$dir"
   __tags_find .
-  etags --append "/usr/include/db.h"
 
 end
 
