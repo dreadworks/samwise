@@ -68,7 +68,7 @@ ADDITIONAL OPTIONS FOR RABBITMQ PUBLISHING REQUESTS
   this:
 
         property                type        value
-    0 | protocol version      | integer   | 110
+    0 | protocol version      | integer   | x >= 110
     1 | action                | char *    | "publish"
     2 | distribution          | char *    | "round robin"
     ...
@@ -77,7 +77,7 @@ ADDITIONAL OPTIONS FOR RABBITMQ PUBLISHING REQUESTS
 
 
         property                type        value
-    0 | protocol version      | integer   | 100
+    0 | protocol version      | integer   | x >= 110
     1 | action                | char *    | "publish"
     2 | distribution          | char *    | "redundant"
     3 | min. acknowledged     | integer   | x > 0

@@ -79,7 +79,7 @@ GENERAL REQUEST MESSAGE LAYOUT
   A message MUST consist of at least the following two frames:
 
       property                type        value
-  0 | protocol version      | integer   | x > 0
+  0 | protocol version      | integer   | x >= 100
   1 | action                | char *    | "publish" or
     |                       |           | "rpc" or
     |                       |           | "ping"
