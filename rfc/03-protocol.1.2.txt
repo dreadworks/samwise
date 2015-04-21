@@ -1,0 +1,73 @@
+SAMWISE RFC 02 - PROTOCOL VERSION 1.1
+
+name: 03-protocol.1.2
+
+
+ABSTRACT
+
+  This is an extension of the samwise protocol 1.0 and 1.1 described
+  in rfc 1 and rfc 2. It defines how control commands are
+  modeled. They are mainly used by samctl but users may implement their
+  own control programs.
+
+
+  All types correspond to the c types used by libzmq and czmq.
+
+  This document is subject to the terms of the MIT License. If a copy
+  of the MIT License was not distributed with this file, You can
+  obtain one at http://opensource.org/licenses/MIT
+
+  The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+  "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
+  document are to be interpreted as described in RFC 2119.
+
+
+GOALS
+
+  - Define a format for sending control commands
+
+  - Define the possible control commands
+
+
+
+REPLY MESSAGES FROM SAMWISE
+
+  The behavior described in rfc 1 is changed such that clients can
+  always expect to receive two frames where the second frame may be
+  an empty string.
+
+
+
+FORMAT FOR CONTROL COMMANDS
+
+  The format for control commands is relatively simple:
+
+      property                type        value
+  0 | protocol version      | integer   | x >= 120
+  1 | action                | char *    | "publish" or
+  2 | argument count        | integer   | x >= 0
+  3 | argument 1            | char *    | -
+  ...
+  x | argument x            | char *    | -
+
+  For argument count == 0, only the first two frames must be provided.
+
+
+
+DEFINED CONTROL COMMANDS
+
+  Currently the following commands are supported:
+
+    - "ping" : If successful, clients receive a 0 return code
+
+    - "status" : If successful, clients receive a 0 return code and a
+      string containing additional information about the internal
+      state.
+
+    - "stop" : Orders samd to shutdown. When the client receives the
+      answer, samd might still be shutting down.
+
+    - "restart" : Orders samd to restart. This reloads the
+      configuration without re-binding the public endpoint.
+
+
