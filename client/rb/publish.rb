@@ -20,7 +20,7 @@ def publish (opts)
 
     amqp_args = { :exchange => "amq.direct" }
     amqp_opts = { :headers => { :header_key => "header_val" }}
-    msg = "#{opts.t} publishing request"
+    msg = "#{opts.t} publishing request no #{i}"
 
     if opts.t == "redundant"
       Samwise::RabbitMQ.publish_redundant opts.d, amqp_args, amqp_opts, msg
