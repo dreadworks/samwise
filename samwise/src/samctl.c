@@ -230,7 +230,7 @@ args_destroy (
 {
     assert (*args);
 
-    if (&(*args)->cfg) {
+    if ((*args)->cfg) {
         sam_cfg_destroy (&(*args)->cfg);
     }
 
