@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.69])
 AC_INIT(samwise, 0.0.1, http://github.com/dreadworks/samwise/issues)
-AC_CONFIG_SRCDIR([tmp.c])
+AC_CONFIG_SRCDIR([config.h.in])
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
