@@ -864,7 +864,8 @@ sam_be_rmq_exchange_delete (
 sam_backend_t *
 sam_be_rmq_start (
     sam_be_rmq_t **self,
-    char *ack_endpoint)
+    char *ack_endpoint,
+    sam_cfg_t *cfg)
 {
     char buf [64];
     sam_log_tracef (
@@ -877,6 +878,38 @@ sam_be_rmq_start (
     assert (backend);
     backend->name = (*self)->name;
     backend->id = (*self)->id;
+
+
+    // retry count / interval
+    if (cfg) {
+        int tries;
+        int rc = sam_cfg_be_tries (cfg, &tries);
+        if (rc) {
+            free (backend);
+            return NULL;
+        }
+
+        backend->tries = tries;
+
+        uint64_t interval;
+        rc = sam_cfg_be_interval (cfg, &interval);
+        if (rc) {
+            free (backend);
+            return NULL;
+        }
+
+        backend->interval = interval;
+        sam_log_infof (
+            "set backend retry count %d and interval %d",
+            backend->tries,
+            backend->interval);
+
+    }
+    else {
+        sam_log_info ("no configuration provided, using default values");
+        backend->tries = -1;
+        backend->interval = 10 * 100;
+    }
 
 
     // signals

@@ -166,7 +166,8 @@ sam_be_rmq_exchange_delete (
 sam_backend_t *
 sam_be_rmq_start (
     sam_be_rmq_t **self,
-    char *ack_endpoint);
+    char *ack_endpoint,
+    sam_cfg_t *cfg);
 
 
 //  --------------------------------------------------------------------------

@@ -136,6 +136,8 @@ handle_sig (
     sam_log_errorf ("got signal %d from '%s'!", code, be_name);
     assert (code == SAM_BE_SIG_CONNECTION_LOSS);
 
+    // TODO, set timer for reconnect or remove backend
+
     rc = remove_backend (state, loop, be_name);
     free (be_name);
 
@@ -509,7 +511,7 @@ create_be_rmq (
     }
 
     sam_backend_t *be = sam_be_rmq_start (
-        &rabbit, self->backend_pull_endpoint);
+        &rabbit, self->backend_pull_endpoint, self->cfg);
 
     return be;
 }
