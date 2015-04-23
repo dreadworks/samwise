@@ -127,6 +127,29 @@ sam_cfg_endpoint (
 
 
 //  --------------------------------------------------------------------------
+/// @brief Return the configured number of backend reconnect tries
+/// @param self A cfg instance
+/// @param tries Pointer to point to the data
+/// @return 0 for success, -1 for errors
+int
+sam_cfg_be_tries (
+    sam_cfg_t *self,
+    int *tries);
+
+
+//  --------------------------------------------------------------------------
+/// @brief Return the interval of retrying to reconnect
+/// @param self A cfg instance
+/// @param interval Pointer to point to the data
+/// @return 0 for success, -1 for errors
+int
+sam_cfg_be_interval (
+    sam_cfg_t *self,
+    uint64_t *interval);
+
+
+
+//  --------------------------------------------------------------------------
 /// @brief Load the backend type
 /// @param self A cfg instance
 /// @param be_type Pointer to point to the data
