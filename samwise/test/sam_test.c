@@ -28,6 +28,7 @@ setup_rmq ()
     }
 
     cfg = sam_cfg_new ("cfg/test/sam_three_brokers.cfg");
+
     int rc = sam_init (sam, &cfg);
     ck_assert_int_eq (rc, 0);
 }
@@ -42,8 +43,6 @@ destroy ()
     if (sam) {
         ck_abort_msg ("sam instance still reachable");
     }
-
-    sam_cfg_destroy (&cfg);
 }
 
 
