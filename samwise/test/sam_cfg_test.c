@@ -590,9 +590,12 @@ START_TEST(test_cfg_be_backends_rmq)
     ck_assert_str_eq (opts->user, "guest");
     ck_assert_str_eq (opts->pass, "guest");
     ck_assert_int_eq (opts->heartbeat, 3);
+    ck_assert_int_eq (opts->tries, -1);
 
     names += 1;
     opts += 1;
+
+    uint64_t interval_ref = 10 * 60 * 1000; // 10 minutes in ms.
 
     // broker-2
     ck_assert_str_eq (*names, "broker-2");
@@ -601,6 +604,8 @@ START_TEST(test_cfg_be_backends_rmq)
     ck_assert_str_eq (opts->user, "guest");
     ck_assert_str_eq (opts->pass, "guest");
     ck_assert_int_eq (opts->heartbeat, 3);
+    ck_assert_int_eq (opts->tries, 2);
+    ck_assert (opts->interval == interval_ref);
 
     // reset pointers for cleanup
     names -= 1;

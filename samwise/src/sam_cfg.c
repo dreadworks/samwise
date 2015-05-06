@@ -507,19 +507,24 @@ read_backends_rmq (
         names[*be_c - 1] = zconfig_name (cfg_ptr);
 
         sam_be_rmq_opts_t *be_opts = opts + (*be_c - 1);
+        char *interval_str;
+
         int rc = resolve (
-            cfg_ptr, "sissi",
-            "host", &(be_opts->host),
-            "port", &(be_opts->port),
-            "user", &(be_opts->user),
-            "pass", &(be_opts->pass),
-            "heartbeat", &(be_opts->heartbeat));
+            cfg_ptr, "sissiis",
+            "host",      &(be_opts->host),
+            "port",      &(be_opts->port),
+            "user",      &(be_opts->user),
+            "pass",      &(be_opts->pass),
+            "heartbeat", &(be_opts->heartbeat),
+            "tries",     &(be_opts->tries),
+            "interval",  &interval_str);
 
         if (rc) {
             free (opts);
             return rc;
         }
 
+        be_opts->interval = conv_time_prefix (interval_str);
         cfg_ptr = zconfig_next (cfg_ptr);
     }
 
