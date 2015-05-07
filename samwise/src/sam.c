@@ -134,14 +134,13 @@ handle_sig (
     }
 
     sam_log_errorf ("got signal %d from '%s'!", code, be_name);
-    assert (code == SAM_BE_SIG_CONNECTION_LOSS);
 
-    // TODO, set timer for reconnect or remove backend
+    if (code == SAM_BE_SIG_KILL) {
+        rc = remove_backend (state, loop, be_name);
+    }
 
-    rc = remove_backend (state, loop, be_name);
     free (be_name);
-
-    return 0;
+    return rc;
 }
 
 
@@ -178,7 +177,7 @@ handle_frontend_pub (
 
     int backend_c = zlist_size (state->backends);
     if (!backend_c) {
-        sam_log_info ("discarding message, no backends available");
+        sam_log_trace ("discarding message, no backends available");
         sam_msg_destroy (&msg);
         return 0;
     }
@@ -504,14 +503,12 @@ create_be_rmq (
     self->be_id_power += 1;
     assert (rabbit);
 
-    int rc = sam_be_rmq_connect (rabbit, rabbit_opts);
-    if (rc) {
-        sam_be_rmq_destroy (&rabbit);
-        return NULL;
-    }
+    // this call may fail, the started backend
+    // handles re-connection tries
+    sam_be_rmq_connect (rabbit, rabbit_opts);
 
     sam_backend_t *be = sam_be_rmq_start (
-        &rabbit, self->backend_pull_endpoint, self->cfg);
+        &rabbit, self->backend_pull_endpoint);
 
     return be;
 }

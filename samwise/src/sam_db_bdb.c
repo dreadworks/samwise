@@ -427,7 +427,7 @@ sam_db_sibling (
     reset (key, val);
 
     DBC *cursor = self->op.cursor;
-    int rc = cursor->get(cursor, key, val, flag);
+    int rc = cursor->get (cursor, key, val, flag);
 
     if (rc && rc != DB_NOTFOUND) {
         self->env->err (

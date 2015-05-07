@@ -69,9 +69,6 @@ typedef struct sam_backend_t {
     zsock_t *sock_pub;   ///< push messages to be published
     zsock_t *sock_rpc;   ///< request an rpc call
 
-    int tries;           ///< abort after a number of retries
-    uint64_t interval;   ///< in which interval a reconnect is tried
-
     // privates, do not touch!
     zactor_t *_actor;   ///< thread handling the broker connection
     void *_self;        ///< reference used by stop() give back control

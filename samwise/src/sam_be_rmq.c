@@ -132,19 +132,8 @@ c_uint8 (const char *str)
 }
 
 
-
-
-//  --------------------------------------------------------------------------
-/// Signals the connection loss and prepares the instance for destruction.
-static int
-connection_loss (sam_be_rmq_t *self)
-{
-    self->connected = false;
-    zsock_send (
-        self->sock_sig, "is",
-        SAM_BE_SIG_CONNECTION_LOSS, self->name);
-    return -1;
-}
+// cyclic
+static int connection_loss (sam_be_rmq_t *self, zloop_t *loop);
 
 
 //  --------------------------------------------------------------------------
@@ -173,7 +162,7 @@ handle_ack (
     sam_log_tracef ("send () ack for '%d'", item->key);
 
     zframe_t *id = zframe_new (&self->id, sizeof (self->id));
-    zsock_send (self->sock_ack, "fi", id, item->key);
+    zsock_send (self->sock.ack, "fi", id, item->key);
     zframe_destroy (&id);
 
     sam_log_tracef (
@@ -193,7 +182,7 @@ handle_ack (
 /// the call into a blocking read).
 static int
 handle_amqp (
-    zloop_t *loop UU,
+    zloop_t *loop,
     zmq_pollitem_t *amqp UU,
     void *args)
 {
@@ -230,9 +219,94 @@ handle_amqp (
             "looks like '%s' is no longer available (%d)",
             self->name, rc);
 
-        return connection_loss (self);
+        return connection_loss (self, loop);
     }
 
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Try to re-connect to a broker. Sets a timer if the re-connect
+/// failed and there are remaining tries.
+static int
+handle_reconnect (
+    zloop_t *loop,
+    int timer_id UU,
+    void *args)
+{
+    sam_be_rmq_t *self = args;
+
+    // invoke callback immediately
+    if (self->connection.tries) {
+        if (self->connection.tries > 0) {
+            self->connection.tries -= 1;
+        }
+
+        sam_log_infof (
+            "trying to reconnect '%s' (%d tries remaining)",
+            self->name, self->connection.tries);
+
+        // attempt re-connect
+        int rc = sam_be_rmq_connect (self, &self->connection.opts);
+
+
+        // reconnect failed, set timer for next round
+        if (rc) {
+            uint64_t iv = self->connection.opts.interval;
+            sam_log_infof (
+                "reconnecting '%s' failed, next try in %u",
+                self->name, iv);
+
+            zloop_timer (loop, iv, 1, handle_reconnect, self);
+        }
+
+
+        // re-connect successful; re-register callback
+        else {
+            sam_log_infof ("successfully reconnected '%s'", self->name);
+            self->sock.amqp->fd = sam_be_rmq_sockfd (self);
+            zloop_poller (loop, self->sock.amqp, handle_amqp, self);
+        }
+    }
+
+    // no tries left, shut down backend
+    else {
+        zsock_send (
+            self->sock.sig, "is",
+            SAM_BE_SIG_KILL, self->name);
+        return -1;
+    }
+
+    return 0;
+}
+
+
+//  --------------------------------------------------------------------------
+/// Either tries to reconnect or prepares for self-destruction. If the
+/// re-connect fails and there are tries left, a timer is set to retry
+/// at some later time.
+static int
+connection_loss (
+    sam_be_rmq_t *self,
+    zloop_t *loop)
+{
+    assert (self);
+    assert (loop);
+    assert (self->connection.established);
+
+    self->connection.established = false;
+    zsock_send (
+        self->sock.sig, "is",
+        SAM_BE_SIG_CONNECTION_LOSS, self->name);
+
+
+    // unsubscribe amqp poller
+    zloop_poller_end (loop, self->sock.amqp);
+
+
+    // attempt re-connect
+    zloop_timer (loop, 0, 1, handle_reconnect, self);
     return 0;
 }
 
@@ -251,7 +325,7 @@ handle_amqp (
 ///
 static int
 handle_publish_req (
-    zloop_t *loop UU,
+    zloop_t *loop,
     zsock_t *pll,
     void *args)
 {
@@ -263,6 +337,16 @@ handle_publish_req (
     int rc = zsock_recv (pll, "ip", &key, &msg);
     if (rc) {
         sam_log_errorf ("'%s' receive failed", self->name);
+        return 0;
+    }
+
+
+    if (!self->connection.established) {
+        sam_log_tracef (
+            "backend '%s' not connected, discarding publishing request",
+            self->name);
+
+        sam_msg_destroy (&msg);
         return 0;
     }
 
@@ -306,7 +390,11 @@ handle_publish_req (
     // publish
     unsigned int seq = self->amqp.seq;
     rc = sam_be_rmq_publish (self, &opts);
-    if (rc) {
+    if (rc == SAM_BE_SIG_CONNECTION_LOSS) {
+        return connection_loss (self, loop);
+    }
+
+    else if (rc) {
         return -1;
     }
 
@@ -403,14 +491,20 @@ actor (
         .revents = 0
     };
 
+    self->sock.amqp = &amqp_pollitem;
     zloop_t *loop = zloop_new ();
-    self->amqp_pollitem = &amqp_pollitem;
 
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
-    zloop_reader (loop, self->sock_pub, handle_publish_req, self);
-    zloop_reader (loop, self->sock_rpc, handle_rpc_req, self);
+    zloop_reader (loop, self->sock.pub, handle_publish_req, self);
+    zloop_reader (loop, self->sock.rpc, handle_rpc_req, self);
+    zloop_poller (loop, self->sock.amqp, handle_amqp, self);
 
-    zloop_poller (loop, &amqp_pollitem, handle_amqp, self);
+    if (!self->connection.established) {
+        uint64_t iv = self->connection.opts.interval;
+        sam_log_tracef (
+            "starting actor without broker connection, retry in %u", iv);
+        zloop_timer (loop, iv, 1, handle_reconnect, self);
+    }
 
     zsock_signal (pipe, 0);
     zloop_start (loop);
@@ -423,7 +517,7 @@ actor (
 //  --------------------------------------------------------------------------
 /// This helper function analyses the return value of an AMQP rpc
 /// call. If the return code is anything other than
-/// AMQP_RESPONSE_NORMAL, an assertion fails.
+/// AMQP_RESPONSE_NORMAL, this function returns -1.
 static int
 try (
     char const *ctx,
@@ -526,19 +620,14 @@ sam_be_rmq_new (
     strcpy (self->name, name);
 
     self->id = id;
+    self->store = NULL;
 
     // init amqp
-    self->amqp.seq = 1;
+    memset (&self->amqp.connection, 0, sizeof (amqp_connection_state_t));
     self->amqp.message_channel = 1;
     self->amqp.method_channel = 2;
-    self->amqp.connection = amqp_new_connection ();
-    self->amqp.socket = amqp_tcp_socket_new (self->amqp.connection);
 
-    // init store
-    self->store = zlist_new ();
-    zlist_set_destructor (self->store, free_store_item);
-
-    self->connected = false;
+    self->connection.established = false;
     return self;
 }
 
@@ -557,7 +646,7 @@ sam_be_rmq_destroy (
 
     zlist_destroy (&(*self)->store);
 
-    if ((*self)->connected) {
+    if ((*self)->connection.established) {
         try ("closing message channel", amqp_channel_close (
                  (*self)->amqp.connection,
                  (*self)->amqp.message_channel,
@@ -586,17 +675,35 @@ sam_be_rmq_destroy (
 //  --------------------------------------------------------------------------
 /// Establish a connection to the RabbitMQ broker. This function opens
 /// the connection on the TCP socket. It then opens a channel for
-/// communication, which it sets into confirm mode.
+/// communication, which it sets into confirm mode. It will always
+/// copy the opts parameter into its internal state for later use.
 int
 sam_be_rmq_connect (
     sam_be_rmq_t *self,
     sam_be_rmq_opts_t *opts)
 {
+    assert (self);
+    assert (opts);
+
     sam_log_infof (
         "'%s' connecting to %s:%d",
         self->name,
         opts->host,
         opts->port);
+
+
+    // save options for reconnects
+    memcpy (&self->connection.opts, opts, sizeof (sam_be_rmq_opts_t));
+    self->connection.tries = opts->tries;
+
+
+    // for re-initialize rabbitmq-c
+    if (self->amqp.connection) {
+        amqp_destroy_connection (self->amqp.connection);
+    }
+
+    self->amqp.connection = amqp_new_connection ();
+    self->amqp.socket = amqp_tcp_socket_new (self->amqp.connection);
 
     int rc = amqp_socket_open (
         self->amqp.socket,
@@ -613,7 +720,10 @@ sam_be_rmq_connect (
         return -1;
     }
 
-    // login
+    //
+    //   login
+    //
+
     sam_log_tracef (
         "'%s' logging in as user '%s'",
         self->name,
@@ -628,6 +738,10 @@ sam_be_rmq_connect (
             AMQP_SASL_METHOD_PLAIN,  // sasl method
             opts->user,
             opts->pass));
+
+    //
+    //   open and configure channels
+    //
 
     // message channel
     amqp_channel_open (
@@ -659,7 +773,27 @@ sam_be_rmq_connect (
     try ("enable publisher confirms",
          amqp_get_rpc_reply(self->amqp.connection));
 
-    self->connected = true;
+
+    //
+    // set state properties
+    //
+
+    self->connection.established = true;
+    sam_log_tracef (
+        "successfully connected to %s:%d "
+        "(retry %d times every %ums)",
+        opts->host, opts->port, opts->tries, opts->interval);
+
+
+    self->amqp.seq = 1;
+
+    if (self->store) {
+        zlist_destroy (&self->store);
+    }
+
+    self->store = zlist_new ();
+    zlist_set_destructor (self->store, free_store_item);
+
     return 0;
 }
 
@@ -693,8 +827,6 @@ sam_be_rmq_publish (
         val = zlist_next (opts->headers);
 
         while (key != NULL && val != NULL) {
-            sam_log_infof ("setting header: '%s' = '%s'", key, val);
-
             headers_ptr->key.len = strlen (key);
             headers_ptr->key.bytes = key;
 
@@ -752,7 +884,7 @@ sam_be_rmq_publish (
             "'%s' connection lost while publishing!",
             self->name);
 
-        return connection_loss (self);
+        return SAM_BE_SIG_CONNECTION_LOSS;
     }
 
     assert (rc == 0);
@@ -864,8 +996,7 @@ sam_be_rmq_exchange_delete (
 sam_backend_t *
 sam_be_rmq_start (
     sam_be_rmq_t **self,
-    char *ack_endpoint,
-    sam_cfg_t *cfg)
+    char *ack_endpoint)
 {
     char buf [64];
     sam_log_tracef (
@@ -880,44 +1011,12 @@ sam_be_rmq_start (
     backend->id = (*self)->id;
 
 
-    // retry count / interval
-    if (cfg) {
-        int tries;
-        int rc = sam_cfg_be_tries (cfg, &tries);
-        if (rc) {
-            free (backend);
-            return NULL;
-        }
-
-        backend->tries = tries;
-
-        uint64_t interval;
-        rc = sam_cfg_be_interval (cfg, &interval);
-        if (rc) {
-            free (backend);
-            return NULL;
-        }
-
-        backend->interval = interval;
-        sam_log_infof (
-            "set backend retry count %d and interval %d",
-            backend->tries,
-            backend->interval);
-
-    }
-    else {
-        sam_log_info ("no configuration provided, using default values");
-        backend->tries = -1;
-        backend->interval = 10 * 100;
-    }
-
-
     // signals
     snprintf (buf, 64, "inproc://be_rmq-%s-signal", (*self)->name);
-    (*self)->sock_sig = zsock_new_push (buf);
+    (*self)->sock.sig = zsock_new_push (buf);
     backend->sock_sig = zsock_new_pull (buf);
 
-    assert ((*self)->sock_sig);
+    assert ((*self)->sock.sig);
     assert (backend->sock_sig);
     sam_log_tracef (
         "'%s' created pair sockets on '%s'",
@@ -926,10 +1025,10 @@ sam_be_rmq_start (
 
     // publish PUSH/PULL
     snprintf (buf, 64, "inproc://be_rmq-%s-publish", (*self)->name);
-    (*self)->sock_pub = zsock_new_pull (buf);
+    (*self)->sock.pub = zsock_new_pull (buf);
     backend->sock_pub = zsock_new_push (buf);
 
-    assert ((*self)->sock_pub);
+    assert ((*self)->sock.pub);
     assert (backend->sock_pub);
     sam_log_tracef (
         "'%s' created psh/pull pair on '%s'",
@@ -938,10 +1037,10 @@ sam_be_rmq_start (
 
     // rpc REQ/REP
     snprintf (buf, 64, "inproc://be_rmq-%s-rpc", (*self)->name);
-    (*self)->sock_rpc = zsock_new_rep (buf);
+    (*self)->sock.rpc = zsock_new_rep (buf);
     backend->sock_rpc = zsock_new_req (buf);
 
-    assert ((*self)->sock_rpc);
+    assert ((*self)->sock.rpc);
     assert (backend->sock_rpc);
     sam_log_tracef (
         "'%s' created req/rep pair for rpc '%s'",
@@ -949,8 +1048,8 @@ sam_be_rmq_start (
 
 
     // ack PUSH
-    (*self)->sock_ack = zsock_new_push (ack_endpoint);
-    assert ((*self)->sock_ack);
+    (*self)->sock.ack = zsock_new_push (ack_endpoint);
+    assert ((*self)->sock.ack);
     sam_log_tracef (
         "'%s' connected push socket to '%s'",
         (*self)->name, ack_endpoint);
@@ -980,18 +1079,18 @@ sam_be_rmq_stop (
 
     // signals
     zsock_destroy (&(*backend)->sock_sig);
-    zsock_destroy (&self->sock_sig);
+    zsock_destroy (&self->sock.sig);
 
     // publish PUSH/PULL
     zsock_destroy (&(*backend)->sock_pub);
-    zsock_destroy (&self->sock_pub);
+    zsock_destroy (&self->sock.pub);
 
     // rpc REQ/REP
     zsock_destroy (&(*backend)->sock_rpc);
-    zsock_destroy (&self->sock_rpc);
+    zsock_destroy (&self->sock.rpc);
 
     // ack PUSH
-    zsock_destroy (&self->sock_ack);
+    zsock_destroy (&self->sock.ack);
 
     free (*backend);
     *backend = NULL;

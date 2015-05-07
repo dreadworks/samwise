@@ -23,12 +23,25 @@
 #define __SAM_BE_RMQ_H__
 
 
+/// option set to pass for backend creation
+typedef struct sam_be_rmq_opts_t {
+    char *host;           ///< hostname, mostly some ip address
+    int  port;            ///< port the broker listens to
+    char *user;           ///< username
+    char *pass;           ///< password
+    int heartbeat;        ///< heartbeat interval in seconds
+
+    int tries;            ///< number of re-connect tries
+    uint64_t interval;    ///< interval of re-connect tries
+} sam_be_rmq_opts_t;
+
+
 /// the be_rmq state
 typedef struct sam_be_rmq_t {
     char *name;        ///< identifier assigned by the user
     uint64_t id;       ///< identifier used by sam_buf
-
     zlist_t *store;    ///< maps message keys to sequence numbers
+
 
     struct {                                ///< amqp connection
         amqp_connection_state_t connection; ///< internal connection state
@@ -38,26 +51,26 @@ typedef struct sam_be_rmq_t {
         unsigned int seq;                   ///< incremented number for acks
     } amqp;
 
-    zsock_t *sock_sig;             ///< send signals to the be maintainer
-    zsock_t *sock_pub;             ///< accepting publishing requests
-    zsock_t *sock_rpc;             ///< accepting rpc requests
-    zsock_t *sock_ack;             ///< pushing ack's as a generic backend
-    zmq_pollitem_t *amqp_pollitem; ///< amqp tcp socket wrapped as pollitem
 
-    bool connected;  ///< indicator needed for destroy ()
+    struct {
+        bool established;        ///< indicator needed for destroy ()
+        sam_be_rmq_opts_t opts;  ///< for re-connecting tries
+        int tries;
+    } connection;
+
+
+    struct {
+        zsock_t *sig;             ///< send signals to the be maintainer
+        zsock_t *pub;             ///< accepting publishing requests
+        zsock_t *rpc;             ///< accepting rpc requests
+        zsock_t *ack;             ///< pushing ack's as a generic backend
+        zmq_pollitem_t *amqp;    ///< socket maintaining broker connection
+    } sock;
+
 } sam_be_rmq_t;
 
 
-/// option set to pass for backend creation
-typedef struct sam_be_rmq_opts_t {
-    char *host;     ///< hostname, mostly some ip address
-    int  port;      ///< port the broker listens to
-    char *user;     ///< username
-    char *pass;     ///< password
-    int heartbeat;  ///< heartbeat interval in seconds
-} sam_be_rmq_opts_t;
-
-
+/// per-message publishing options
 typedef struct sam_be_rmq_pub_t {
     char *exchange;
     char *routing_key;
@@ -166,8 +179,7 @@ sam_be_rmq_exchange_delete (
 sam_backend_t *
 sam_be_rmq_start (
     sam_be_rmq_t **self,
-    char *ack_endpoint,
-    sam_cfg_t *cfg);
+    char *ack_endpoint);
 
 
 //  --------------------------------------------------------------------------

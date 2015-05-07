@@ -35,9 +35,11 @@
                      SAM_VERSION_PATCH)
 
 
-/// response types
+/// signals sent by messaging backends
 typedef enum {
-    SAM_BE_SIG_CONNECTION_LOSS ///< if a backend suffered a connection loss
+    SAM_BE_SIG_CONNECTION_LOSS = 0x10, ///< if a backend was split
+    SAM_BE_SIG_RECONNECTED,            ///< if the backend re-connected
+    SAM_BE_SIG_KILL                    ///< backend no longer re-connects
 } sam_be_sig_t;
 
 

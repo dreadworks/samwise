@@ -159,11 +159,9 @@ del (
 
         if (header->type == RECORD) {
             prev_key = header->c.record.prev;
-            printf ("|| RECORD - prev: %d\n", prev_key);
         }
         else if (header->type == RECORD_TOMBSTONE) {
             prev_key = header->c.tombstone.prev;
-            printf ("|| TOMBSTONE - prev: %d\n", prev_key);
         }
         else {
             assert (false);
@@ -481,7 +479,6 @@ update_record_ack (
 
     sam_db_get_val (db, NULL, (void **) &header);
     while (header->type == RECORD_TOMBSTONE) {
-
         int new_id = header->c.tombstone.next;
         sam_log_tracef ("following tombstone chain to '%d'", new_id);
         if (sam_db_get (db, &new_id)) {
@@ -489,6 +486,15 @@ update_record_ack (
         }
 
         sam_db_get_val (db, NULL, (void **) &header);
+        if (new_id == header->c.tombstone.next) {
+
+            // TODO, was not able to reproduce this error occured when
+            // the daemon crashed with a lot of data in the
+            // database. Upon restart, data was malformed
+            sam_log_error ("malformed data, exiting.");
+            exit (2);
+
+        }
     }
 
     // if ack arrives multiple times, do nothing
@@ -671,18 +677,20 @@ handle_resend (
     void *args)
 {
     sam_log_trace ("resend cycle triggered");
-    int64_t TIMESTAMP = zclock_mono ();
 
     state_t *state = args;
     sam_db_t *db = state->db;
 
     sam_db_begin (db);
+    sam_log_trace ("beginning transaction");
 
     int first_requeued_key = 0; // can never be zero
     int rc = sam_db_sibling (db, SAM_DB_NEXT);
-
     record_t *header;
-    sam_db_get_val (db, NULL, (void **) &header);
+
+    if (!rc) {
+        sam_db_get_val (db, NULL, (void **) &header);
+    }
 
     while (
         !rc &&                                        // there's another item
@@ -757,7 +765,6 @@ handle_resend (
     }
 
     sam_db_end (db, (rc)? true: false);
-    sam_log_errorf ("resending took %d", zclock_mono () - TIMESTAMP);
     return rc;
 }
 

@@ -67,7 +67,7 @@ setup_backend ()
         ck_abort_msg ("could not create PULL socket");
     }
 
-    backend = sam_be_rmq_start (&rabbit, pll_endpoint, NULL);
+    backend = sam_be_rmq_start (&rabbit, pll_endpoint);
     if (!backend) {
         ck_abort_msg ("could not create backend");
     }
