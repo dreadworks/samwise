@@ -60,11 +60,11 @@ typedef struct sam_be_rmq_t {
 
 
     struct {
-        zsock_t *sig;             ///< send signals to the be maintainer
-        zsock_t *pub;             ///< accepting publishing requests
-        zsock_t *rpc;             ///< accepting rpc requests
-        zsock_t *ack;             ///< pushing ack's as a generic backend
-        zmq_pollitem_t *amqp;    ///< socket maintaining broker connection
+        zsock_t *sig;           ///< send signals to the be maintainer
+        zsock_t *pub;           ///< accepting publishing requests
+        zsock_t *rpc;           ///< accepting rpc requests
+        zsock_t *ack;           ///< pushing ack's as a generic backend
+        zmq_pollitem_t *amqp;   ///< socket maintaining broker connection
     } sock;
 
 } sam_be_rmq_t;

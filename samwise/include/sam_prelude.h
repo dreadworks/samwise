@@ -58,9 +58,11 @@ typedef enum {
 } sam_be_t;
 
 
+typedef struct sam_backend_t sam_backend_t;
+
 /// return type for "start" functions
 /// of different message backends
-typedef struct sam_backend_t {
+struct sam_backend_t {
     // public interface
     char *name;          ///< name of the backend
     uint64_t id;         ///< id (power of 2) > 0
@@ -69,10 +71,13 @@ typedef struct sam_backend_t {
     zsock_t *sock_pub;   ///< push messages to be published
     zsock_t *sock_rpc;   ///< request an rpc call
 
+    // methods
+    char *(*str) (sam_backend_t *be);  ///< return string representation
+
     // privates, do not touch!
     zactor_t *_actor;   ///< thread handling the broker connection
-    void *_self;        ///< reference used by stop() give back control
-} sam_backend_t;
+    void *_self;        ///< internally used reference to the original state
+};
 
 
 #include "sam_log.h"

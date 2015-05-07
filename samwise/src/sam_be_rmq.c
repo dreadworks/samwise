@@ -68,6 +68,38 @@ typedef struct store_item {
 
 
 //  --------------------------------------------------------------------------
+/// Return a string representation of the current backend
+/// state. Memory must be free'd by the caller.
+static char *
+to_string (
+    sam_backend_t *be)
+{
+    size_t buf_size = 256;
+    char *str = malloc (buf_size * sizeof (char));
+
+    sam_be_rmq_t *self = be->_self;
+    sam_be_rmq_opts_t *opts = &self->connection.opts;
+
+    snprintf (str, buf_size,
+              "%s (id: 0x%" PRIx64 ") (%s:%d as '%s'):\n"
+              "  connected: %s (%d/%d tries every %" PRIu64 "ms)\n"
+              "  heartbeat: every %d seconds\n"
+              "  current sequence number: %d\n"
+              "  store size: %zu",
+
+              self->name, self->id, opts->host, opts->port, opts->user,
+              (self->connection.established)? "yep": "nope",
+              self->connection.tries, opts->tries, opts->interval,
+              opts->heartbeat,
+              self->amqp.seq,
+              zlist_size (self->store));
+
+    return str;
+}
+
+
+
+//  --------------------------------------------------------------------------
 /// Destructor function for the store.
 static void
 free_store_item (
@@ -1009,6 +1041,7 @@ sam_be_rmq_start (
     assert (backend);
     backend->name = (*self)->name;
     backend->id = (*self)->id;
+    backend->str = to_string;
 
 
     // signals

@@ -306,17 +306,20 @@ handle_ctl_req (
     }
 
 
-    // get names of active backends
+    // get string representations of active backends
     else if (!strcmp (cmd, "be.active")) {
         zmsg_t *msg = zmsg_new ();
 
         int backend_c = zlist_size (state->backends);
         zmsg_pushstrf (msg, "%d", backend_c);
 
-        sam_log_infof ("be.status iterating over %d backends", backend_c);
         sam_backend_t *be = zlist_first (state->backends);
         while (be) {
-            zmsg_addstr (msg, be->name);
+
+            char *be_str = be->str (be);
+            zmsg_addstr (msg, be_str);
+            free (be_str);
+
             be = zlist_next (state->backends);
         }
 
@@ -813,67 +816,6 @@ check_pub (
 }
 
 
-
-//  --------------------------------------------------------------------------
-/// Returns a string representation of a messaging backend.
-static char *
-backend_info_rmq (
-    sam_t *self,
-    char *be_name)
-{
-    int be_c;
-    char **be_names;
-    void *be_opts;
-
-    int rc = sam_cfg_be_backends(
-        self->cfg, self->be_type, &be_c, &be_names, &be_opts);
-    assert (rc == 0);
-    char **be_names_ptr = be_names;
-    void *be_opts_ptr = be_opts;
-
-
-    int pos = 0;
-    while (pos < be_c && strcmp (*be_names, be_name)) {
-        be_names += 1;
-        pos += 1;
-    }
-
-    assert (pos < be_c);
-
-    sam_be_rmq_opts_t *opts = (sam_be_rmq_opts_t *) be_opts + pos;
-    char *info = malloc (256);
-
-    snprintf (
-        info,
-        256,
-        "%s:%d | user: %s | heartbeat interval: %d\n",
-        opts->host,
-        opts->port,
-        opts->user,
-        opts->heartbeat);
-
-    free (be_names_ptr);
-    free (be_opts_ptr);
-
-    return info;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Returns a string representation of a messaging backend based on
-/// the backend type and name identifier provided.
-static char *
-backend_info (sam_t *self, char *be_name)
-{
-    if (self->be_type == SAM_BE_RMQ) {
-        return backend_info_rmq (self, be_name);
-    }
-
-    assert (false);
-    return NULL;
-}
-
-
 //  --------------------------------------------------------------------------
 /// Returns a string containing all currently connected backends.
 static sam_ret_t *
@@ -882,46 +824,53 @@ aggregate_backend_info (sam_t *self, sam_msg_t *msg)
     sam_log_trace ("send () ctl internally (be.active)");
     zsock_send (self->ctl_req, "s", "be.active");
 
-
-    int be_c;
-    zmsg_t *be_names = zmsg_new ();
+    int backend_c;
+    zmsg_t *backends = zmsg_new ();
 
     sam_log_trace ("recv () ctl internally (be.active)");
-    zsock_recv (self->ctl_req, "im", &be_c, &be_names);
-    sam_ret_t *ret = new_ret ();
+    zsock_recv (self->ctl_req, "im", &backend_c, &backends);
 
 
-    // this could be nicer by reallocating memory as needed
-    // but on the other hand, it consumes max ~16kB for a call
-    // not used that often...
+    // aggregate backend information
     size_t buf_size = 256;
-    ret->msg = malloc (buf_size * be_c);
-    ret->allocated = true;
+    char buf [buf_size * backend_c];
+    char *buf_ptr = buf;
 
-    assert (ret->msg);
-    sprintf (ret->msg, "Currently %d backends are connected\n\n", be_c);
+    while (zmsg_size (backends)) {
+        char *str = zmsg_popstr (backends);
+        size_t str_len = strlen (str);
 
-    if (be_c) {
-        while (be_c) {
-            char
-                *ret_msg_ptr = ret->msg + strlen (ret->msg),
-                *be_name = zmsg_popstr (be_names),
-                *be_info = backend_info (self, be_name);
+        snprintf (buf_ptr, buf_size, "- - - - - - - - -\n%s", str);
 
-            snprintf (
-                ret_msg_ptr,
-                buf_size,
-                "'%s' - - - - - - - -\n%s\n",
-                be_name,
-                be_info);
-
-            free (be_info);
-            free (be_name);
-            be_c -= 1;
-        }
+        buf_ptr += str_len;
+        free (str);
     }
 
-    zmsg_destroy (&be_names);
+
+    // compose final string
+    sam_ret_t *ret = new_ret ();
+    char head [buf_size];
+    snprintf (
+        head,
+        buf_size,
+        "Status:\n%d backend(s) connected:\n\n",
+        backend_c);
+
+    size_t
+        head_len = strlen (head),
+        buf_len = strlen (buf);
+
+    ret->msg = malloc ((head_len + buf_len + 1) * sizeof (char));
+    assert (ret->msg);
+
+    ret->allocated = true;
+
+    memcpy (ret->msg, head, head_len);
+    memcpy (ret->msg + head_len, buf, buf_len);
+    ret->msg [head_len + buf_len] = '\0';
+
+    // clean up
+    zmsg_destroy (&backends);
     sam_msg_destroy (&msg);
 
     return ret;
