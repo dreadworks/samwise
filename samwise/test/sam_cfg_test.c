@@ -490,48 +490,6 @@ END_TEST
 
 
 //  --------------------------------------------------------------------------
-/// Test cfg_be_interval () with seconds.
-START_TEST(test_cfg_be_interval_s)
-{
-    sam_selftest_introduce ("test_cfg_be_interval_s");
-
-    sam_cfg_t *cfg = load ("be_interval_s");
-
-    uint64_t interval;
-    int rc = sam_cfg_be_interval (cfg, &interval);
-    ck_assert_int_eq (rc, 0);
-    ck_assert (interval == 2 * 1000);
-
-    sam_cfg_destroy (&cfg);
-}
-END_TEST
-
-
-//  --------------------------------------------------------------------------
-/// Test idempotency of cfg_be_interval () with seconds
-START_TEST(test_cfg_be_interval_s_idempotency)
-{
-    sam_selftest_introduce ("test_cfg_be_interval_s_idempotency");
-
-    sam_cfg_t *cfg = load ("be_interval_s");
-
-    uint64_t interval;
-    int rc = sam_cfg_be_interval (cfg, &interval);
-    ck_assert_int_eq (rc, 0);
-    ck_assert (interval == 2 * 1000);
-
-    interval = 0;
-
-    rc = sam_cfg_be_interval (cfg, &interval);
-    ck_assert_int_eq (rc, 0);
-    ck_assert (interval == 2 * 1000);
-
-    sam_cfg_destroy (&cfg);
-}
-END_TEST
-
-
-//  --------------------------------------------------------------------------
 /// Test cfg_be_type ().
 START_TEST(test_cfg_be_type_rmq)
 {
@@ -689,9 +647,6 @@ sam_cfg_test ()
     suite_add_tcase (s, tc);
 
     tc = tcase_create("backends");
-    tcase_add_test (tc, test_cfg_be_interval_s);
-    tcase_add_test (tc, test_cfg_be_interval_s_idempotency);
-
     tcase_add_test (tc, test_cfg_be_type_rmq);
     tcase_add_test (tc, test_cfg_be_type_empty);
 

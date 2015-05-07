@@ -397,46 +397,6 @@ sam_cfg_endpoint (
 
 
 //  --------------------------------------------------------------------------
-/// Returns the number of tries until reconnecting is given
-/// up. Defaults to -1 which means trying indefinitely.
-int
-sam_cfg_be_tries (
-    sam_cfg_t *self,
-    int *tries)
-{
-    assert (self);
-    assert (tries);
-
-    char *val = zconfig_resolve (self->zcfg, "backend/tries", NULL);
-
-    if (val == NULL) {
-        return -1;
-    }
-
-    *tries = atoi (val);
-    return 0;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Returns the interval for reconnection attempts. Defaults to 10 seconds.
-int
-sam_cfg_be_interval (
-    sam_cfg_t *self,
-    uint64_t *interval)
-{
-    assert (self);
-    assert (interval);
-
-    if (retrieve_time_value (self, "backend/interval", interval) == -1) {
-        *interval = 10 * 1000;
-    }
-
-    return 0;
-}
-
-
-//  --------------------------------------------------------------------------
 /// Retrieve the backend type. Used to determine what kind of
 /// messaging backend to spawn and what configuration to expect.
 int
