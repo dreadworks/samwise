@@ -183,11 +183,18 @@ handle_ack (
     sam_log_tracef (
         "'%s' received ack no %d", self->name, props->delivery_tag);
 
-
     // look the msg key up and update the store
     store_item *item = zlist_first (self->store);
     while (item && item->seq != props->delivery_tag) {
-        item = zlist_next (self->store);
+        if (props->multiple) {
+            zlist_remove (self->store, item);
+            item = zlist_first (self->store);
+        }
+
+        else {
+            // this must not happen
+            assert (false);
+        }
     }
 
     assert (item);
