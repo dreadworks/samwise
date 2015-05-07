@@ -159,9 +159,14 @@ del (
 
         if (header->type == RECORD) {
             prev_key = header->c.record.prev;
+            printf ("|| RECORD - prev: %d\n", prev_key);
         }
         else if (header->type == RECORD_TOMBSTONE) {
             prev_key = header->c.tombstone.prev;
+            printf ("|| TOMBSTONE - prev: %d\n", prev_key);
+        }
+        else {
+            assert (false);
         }
 
         // prepare next round
@@ -499,7 +504,7 @@ update_record_ack (
 
     // enough acks arrived, delete record
     if (!header->c.record.acks_remaining) {
-        rc = sam_db_del (db);
+        del (state);
     }
 
 
