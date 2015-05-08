@@ -39,9 +39,14 @@ const char *ENDPOINT_REQREP = "inproc://sam_stat_digest";
 /// actor state, maintains all metrics
 typedef struct state_t {
 
+    zsock_t *pll;
+    zsock_t *rep;
+
     struct {
-        uint64_t accepted;
-    } sam;
+        struct {
+            uint64_t accepted;
+        } sam;
+    } metrics;
 
 } state_t;
 
@@ -53,8 +58,7 @@ struct sam_stat_handle_t {
 
 
 struct sam_stat_t {
-    zsock_t *pll;
-    zsock_t *rep;
+    zactor_t *actor;
 };
 
 
@@ -76,7 +80,7 @@ resolve (
 
         if (!strcmp (ref, "sam")) {
             if (!strcmp (tok, "accepted")) {
-                target = &state->sam.accepted;
+                target = &state->metrics.sam.accepted;
             }
         }
 
@@ -103,6 +107,8 @@ handle_metric (
     int difference;
 
     zsock_recv (pll, "si", &id, &difference);
+    sam_log_tracef ("handle metric request '%s'", id);
+
     if (resolve (state, id, difference)) {
         sam_log_errorf ("discarding stat request '%s'", id);
     }
@@ -133,7 +139,7 @@ handle_digest (
         "  sam:\n"
         "    accepted: %" PRIu64 "\n",
 
-        state->sam.accepted);
+        state->metrics.sam.accepted);
 
     sam_log_trace ("send () digest response");
     zsock_send (rep, "s", buf);
@@ -145,23 +151,38 @@ handle_digest (
 void
 actor (
     zsock_t *pipe,
-    void *arg)
+    void *arg UU)
 {
-    sam_stat_t *self = arg;
     zloop_t *loop = zloop_new ();
 
     state_t state;
     memset (&state, 0, sizeof (state_t));
 
-    sam_log_info ("ready to gather metrics");
-    zloop_reader (loop, self->pll, handle_metric, &state);
-    zloop_reader (loop, self->rep, handle_digest, &state);
 
+    // initialize sockets
+    state.pll = zsock_new_pull (ENDPOINT_PSHPLL);
+    assert (state.pll);
+    state.rep = zsock_new_rep (ENDPOINT_REQREP);
+    assert (state.rep);
+
+
+    // initialize reactor
+    zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
+    zloop_reader (loop, state.pll, handle_metric, &state);
+    zloop_reader (loop, state.rep, handle_digest, &state);
+
+
+    // start
     zsock_signal (pipe, 0);
+    sam_log_info ("ready to gather metrics");
     zloop_start (loop);
-    sam_log_info ("shutting down");
 
+
+    // clean up
+    sam_log_info ("shutting down");
     zloop_destroy (&loop);
+    zsock_destroy (&state.pll);
+    zsock_destroy (&state.rep);
 }
 
 
@@ -173,11 +194,8 @@ sam_stat_new ()
     sam_stat_t *self = malloc (sizeof (sam_stat_t));
     assert (self);
 
-    self->pll = zsock_new_pull (ENDPOINT_PSHPLL);
-    assert (self->pll);
-
-    self->rep = zsock_new_rep (ENDPOINT_REQREP);
-    assert (self->rep);
+    self->actor = zactor_new (actor, NULL);
+    sam_log_info ("created metric aggregator");
 
     return self;
 }
@@ -189,8 +207,7 @@ sam_stat_destroy (
 {
     assert (*self);
 
-    zsock_destroy (&(*self)->pll);
-    zsock_destroy (&(*self)->rep);
+    zactor_destroy (&(*self)->actor);
 
     free (*self);
     *self = NULL;
@@ -248,9 +265,11 @@ sam_stat_str_ (
     assert (handle);
     assert (handle->req);
 
+    sam_log_trace ("send () string repr request");
     zsock_send (handle->req, "z");
 
     char *str;
+    sam_log_trace ("recv () string repr");
     zsock_recv (handle->req, "s", &str);
     return str;
 }

@@ -505,6 +505,8 @@ sam_destroy (
 
     zactor_destroy (&(*self)->actor);
 
+    sam_stat_handle_destroy (&(*self)->stat);
+    sam_stat_destroy (&(*self)->stat_actor);
     sam_cfg_destroy (&(*self)->cfg);
 
     free (*self);
@@ -842,7 +844,7 @@ check_pub (
 //  --------------------------------------------------------------------------
 /// Returns a string containing all currently connected backends.
 static char *
-aggregate_backend_info (sam_t *self, sam_msg_t *msg)
+aggregate_backend_info (sam_t *self)
 {
     sam_log_trace ("send () ctl internally (be.active)");
     zsock_send (self->ctl_req, "s", "be.active");
@@ -853,19 +855,30 @@ aggregate_backend_info (sam_t *self, sam_msg_t *msg)
     sam_log_trace ("recv () ctl internally (be.active)");
     zsock_recv (self->ctl_req, "im", &backend_c, &backends);
 
+
     // aggregate backend information
     size_t buf_size = 256;
-    char buf [buf_size * backend_c];
-    char *buf_ptr = buf;
+    char *buf;
 
-    while (zmsg_size (backends)) {
-        char *str = zmsg_popstr (backends);
-        size_t str_len = strlen (str);
+    if (backend_c) {
+        buf = malloc (buf_size * backend_c * sizeof (char));
+        char *buf_ptr = buf;
 
-        snprintf (buf_ptr, buf_size, "- - - - - - - - -\n%s", str);
+        while (zmsg_size (backends)) {
+            char *str = zmsg_popstr (backends);
+            size_t str_len = strlen (str);
 
-        buf_ptr += str_len;
-        free (str);
+            snprintf (buf_ptr, buf_size, "- - - - - - - - -\n%s", str);
+
+            buf_ptr += str_len;
+            free (str);
+        }
+    }
+
+    else {
+        char *str = "No backends connected.";
+        buf = malloc (strlen (str) * sizeof (char));
+        memcpy (buf, str, strlen (str));
     }
 
 
@@ -889,38 +902,43 @@ aggregate_backend_info (sam_t *self, sam_msg_t *msg)
     str [head_len + buf_len] = '\0';
 
     // clean up
+    free (buf);
     zmsg_destroy (&backends);
-    sam_msg_destroy (&msg);
 
     return str;
 }
 
 
+//  --------------------------------------------------------------------------
+/// Build a string containing metrics and status information.
 static sam_ret_t *
-aggregate_status (sam_t *self, sam_msg_t *msg)
+aggregate_status (
+    sam_t *self)
 {
     char
-        *head = "\n\nStatus:\n\n",
+        *head = "Status:",
         *metrics = sam_stat_str (self->stat),
-        *backends = aggregate_backend_info (self, msg);
+        *backends = aggregate_backend_info (self);
 
     size_t len =
-        strlen (metrics) + strlen (backends) + strlen (head) + 1;
+        strlen (head)     + 2 +
+        strlen (backends) + 2 +
+        strlen (metrics)  + 2 +
+        1; // 0 byte
 
     sam_ret_t *ret = new_ret ();
     ret->msg = malloc (len);
     assert (ret->msg);
     ret->allocated = true;
 
-    memcpy (ret->msg, head, strlen (head));
-    memcpy (ret->msg + strlen (ret->msg), backends, strlen (backends));
-    memcpy (ret->msg + strlen (ret->msg), metrics, strlen (metrics));
+    snprintf (ret->msg, len, "%s\n\n%s\n\n%s", head, backends, metrics);
 
     if (metrics) {
         free (metrics);
     }
 
     free (backends);
+
     return ret;
 }
 
@@ -996,7 +1014,8 @@ sam_eval (
 
     // status
     else if (!strcmp (action, "status")) {
-        aggregate_status (self, msg);
+        sam_msg_destroy (&msg);
+        return aggregate_status (self);
     }
 
 
