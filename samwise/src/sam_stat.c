@@ -43,9 +43,8 @@ typedef struct state_t {
     zsock_t *rep;
 
     struct {
-        struct {
-            uint64_t accepted;
-        } sam;
+        zhash_t *sam;
+        zhash_t *samd;
     } metrics;
 
 } state_t;
@@ -63,6 +62,15 @@ struct sam_stat_t {
 
 
 
+static void
+free_metric (void **item)
+{
+    assert (*item);
+    free (*item);
+    *item = NULL;
+}
+
+
 static int
 resolve (
     state_t *state,
@@ -74,20 +82,31 @@ resolve (
 
     if (tok) {
 
-        char *ref = tok;
-        tok = strtok (NULL, delim);
-        uint64_t *target = NULL;
+        // retrieve map
+        zhash_t *map;
 
-        if (!strcmp (ref, "sam")) {
-            if (!strcmp (tok, "accepted")) {
-                target = &state->metrics.sam.accepted;
-            }
+        if (!strcmp (tok, "sam")) {
+            map = state->metrics.sam;
+        }
+        else if (!strcmp (tok, "samd")) {
+            map = state->metrics.samd;
+        }
+        else {
+            assert (false);
         }
 
-        if (target) {
-            *target += difference;
-            return 0;
+
+        // insert/update item
+        char *key = strtok (NULL, delim);
+        uint64_t *target = zhash_lookup (map, key);
+        if (!target) {
+            target = malloc (sizeof (uint64_t));
+            *target = 0;
+            zhash_insert (map, key, target);
         }
+
+        *target += difference;
+        return 0;
     }
 
     return -1;
@@ -130,19 +149,55 @@ handle_digest (
     sam_log_trace ("recv () digest request");
     zsock_recv (rep, "z");
 
-    size_t buf_size = 256;
-    char buf [buf_size];
+    size_t str_size = 2048;
+    char str [str_size];
+    char *str_ptr = str;
 
-    snprintf (
-        buf, 256,
-        "METRICS\n"
-        "  sam:\n"
-        "    accepted: %" PRIu64 "\n",
 
-        state->metrics.sam.accepted);
+    // gather metrics
+    zhash_t *map_refs [] = {
+        state->metrics.samd,
+        state->metrics.sam,
+        NULL
+    };
+
+    const char *map_names [] = {
+        "samd",
+        "sam",
+        NULL
+    };
+
+
+    // iterate maps
+    zhash_t **maps = map_refs;
+    const char **names = map_names;
+
+    while (*maps) {
+        sprintf (str_ptr, "\n%s:\n", *names);
+        str_ptr += strlen (str_ptr);
+
+        char buf [str_size];
+        memset (buf, 0, str_size);
+
+        // build string from all items
+        void *item = zhash_first (*maps);
+        while (item) {
+            const char *key = zhash_cursor (*maps);
+            uint64_t val = *((uint64_t *) item);
+
+            sprintf (str_ptr, "  %s: %" PRIu64 "\n", key, val);
+
+            str_ptr += strlen (str_ptr);
+            item = zhash_next (*maps);
+        }
+
+        maps += 1;
+        names += 1;
+    }
+
 
     sam_log_trace ("send () digest response");
-    zsock_send (rep, "s", buf);
+    zsock_send (rep, "s", str);
     return 0;
 }
 
@@ -166,6 +221,14 @@ actor (
     assert (state.rep);
 
 
+    // initialize store
+    state.metrics.sam = zhash_new ();
+    zhash_set_destructor (state.metrics.sam, free_metric);
+
+    state.metrics.samd = zhash_new ();
+    zhash_set_destructor (state.metrics.samd, free_metric);
+
+
     // initialize reactor
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
     zloop_reader (loop, state.pll, handle_metric, &state);
@@ -180,9 +243,13 @@ actor (
 
     // clean up
     sam_log_info ("shutting down");
+
     zloop_destroy (&loop);
     zsock_destroy (&state.pll);
     zsock_destroy (&state.rep);
+
+    zhash_destroy (&state.metrics.sam);
+    zhash_destroy (&state.metrics.samd);
 }
 
 

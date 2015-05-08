@@ -857,7 +857,7 @@ aggregate_backend_info (sam_t *self)
 
 
     // aggregate backend information
-    size_t buf_size = 256;
+    size_t buf_size = 512;
     char *buf;
 
     if (backend_c) {
@@ -868,7 +868,7 @@ aggregate_backend_info (sam_t *self)
             char *str = zmsg_popstr (backends);
             size_t str_len = strlen (str);
 
-            snprintf (buf_ptr, buf_size, "- - - - - - - - -\n%s", str);
+            snprintf (buf_ptr, buf_size, "\n%s", str);
 
             buf_ptr += str_len;
             free (str);
@@ -887,19 +887,18 @@ aggregate_backend_info (sam_t *self)
     snprintf (
         head,
         buf_size,
-        "BACKENDS\n%d backend(s) connected:\n\n",
+        "%d backend(s) connected:",
         backend_c);
 
     size_t
         head_len = strlen (head),
         buf_len = strlen (buf);
 
-    char *str = malloc ((head_len + buf_len + 1) * sizeof (char));
+    size_t str_size = (head_len + buf_len + 1) * sizeof (char);
+    char *str = malloc (str_size);
     assert (str);
 
-    memcpy (str, head, head_len);
-    memcpy (str + head_len, buf, buf_len);
-    str [head_len + buf_len] = '\0';
+    snprintf (str, str_size, "%s\n%s", head, buf);
 
     // clean up
     free (buf);
@@ -916,22 +915,21 @@ aggregate_status (
     sam_t *self)
 {
     char
-        *head = "Status:",
-        *metrics = sam_stat_str (self->stat),
+        *metrics  = sam_stat_str (self->stat),
         *backends = aggregate_backend_info (self);
 
-    size_t len =
-        strlen (head)     + 2 +
-        strlen (backends) + 2 +
-        strlen (metrics)  + 2 +
-        1; // 0 byte
+    size_t len = strlen (backends) + strlen (metrics) + 512;
 
     sam_ret_t *ret = new_ret ();
-    ret->msg = malloc (len);
+    ret->msg = malloc (len * sizeof (char));
     assert (ret->msg);
     ret->allocated = true;
 
-    snprintf (ret->msg, len, "%s\n\n%s\n\n%s", head, backends, metrics);
+    snprintf (
+        ret->msg, len,
+        "\nBACKENDS:\n%s\n"
+        "\nMETRICS:\n%s\n",
+        backends, metrics);
 
     if (metrics) {
         free (metrics);
@@ -968,7 +966,7 @@ sam_eval (
             return error (msg, "malformed publishing request");
         }
 
-        sam_stat (self->stat, "sam.accepted", 1);
+        sam_stat (self->stat, "sam.publishing requests", 1);
 
         // Create a copy of the message and pass that over to the
         // store. Crafting a copy is necessary because the actor

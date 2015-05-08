@@ -23,6 +23,13 @@
 #include "../include/samd.h"
 
 
+struct samd_t{
+    sam_t *sam;              ///< encapsulates a sam thread
+    zsock_t *client_rep;     ///< REPLY socket for client requests
+    sam_stat_handle_t *stat; ///< gathers metrics
+};
+
+
 //  --------------------------------------------------------------------------
 /// Helper function to wrap an error message in a sam_ret.
 static sam_ret_t *
@@ -54,6 +61,8 @@ handle_req (
     int version = -1;
 
     zsock_recv (client_rep, "im", &version, &zmsg);
+    sam_stat (self->stat, "samd.accepted requests", 1);
+
     if (version == -1) {
         ret = create_error ("malformed request");
         zmsg_destroy (&zmsg);
@@ -126,6 +135,8 @@ samd_new (
         return NULL;
     }
 
+    self->stat = sam_stat_handle_new ();
+
     sam_log_info ("created samd");
     return self;
 }
@@ -141,6 +152,7 @@ samd_destroy (
 
     zsock_destroy (&(*self)->client_rep);
     sam_destroy (&(*self)->sam);
+    sam_stat_handle_destroy (&(*self)->stat);
 
     free (*self);
     *self = NULL;

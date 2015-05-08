@@ -23,11 +23,7 @@
 #define __SAMD_H__
 
 
-/// samd instance object
-typedef struct samd_t {
-    sam_t *sam;            ///< encapsulates a sam thread
-    zsock_t *client_rep;   ///< REPLY socket for client requests
-} samd_t;
+typedef struct samd_t samd_t;
 
 
 //  --------------------------------------------------------------------------
