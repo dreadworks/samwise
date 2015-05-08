@@ -347,7 +347,7 @@ handle_reconnect (
     }
 
     // no tries left, shut down backend
-    else {
+    if (self->connection.tries == 0) {
         zsock_send (
             self->sock.sig, "is",
             SAM_BE_SIG_KILL, self->name);
