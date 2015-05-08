@@ -12,31 +12,24 @@ lib_LTLIBRARIES = src/libsam.la
 include_HEADERS = include/sam.h
 
 src_libsam_la_SOURCES =          \
-\
   include/sam_gen.h              \
   src/sam_gen.c                  \
-\
   include/sam_log.h              \
   src/sam_log.c                  \
-\
+  include/sam_stat.h             \
+  src/sam_stat.c                 \
   include/sam_msg.h              \
   src/sam_msg.c                  \
-\
   include/sam_cfg.h              \
   src/sam_cfg.c                  \
-\
   include/sam_db.h               \
   src/sam_db_bdb.c               \
-\
   include/sam_buf.h              \
   src/sam_buf.c                  \
-\
   include/sam_be_rmq.h           \
   src/sam_be_rmq.c               \
-\
   include/sam.h                  \
   include/sam_prelude.h          \
-\
   src/sam.c
 
 src_libsam_la_LDFLAGS = \

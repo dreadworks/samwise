@@ -67,6 +67,26 @@ typedef struct state_t {
 } state_t;
 
 
+/// sam instances
+struct sam_t {
+    int be_id_power;              ///< used to assign backend ids
+    sam_be_t be_type;             ///< backend type, used to init backends
+
+    zsock_t *frontend_pub;        ///< request socket for rpc calls
+    char *frontend_pub_endpoint;  ///< for sam_buf to be able to publish
+
+    zsock_t *frontend_rpc;        ///< request socket for rpc calls
+    zsock_t *ctl_req;             ///< request socket for control commands
+    char *backend_pull_endpoint;  ///< pull endpoint name for backends to bind
+
+    sam_buf_t *buf;               ///< message store
+    sam_cfg_t *cfg;               ///< configuration
+    sam_stat_t *stat_actor;       ///< gather metrics
+    sam_stat_handle_t *stat;      ///< handle to send metrics
+
+    zactor_t *actor;              ///< thread maintaining broker connections
+};
+
 
 //  --------------------------------------------------------------------------
 /// Convenience function to create a new return object.
@@ -411,6 +431,9 @@ sam_new (
     self->be_id_power = 0;
     self->buf = NULL;
     self->cfg = NULL;
+
+    self->stat_actor = sam_stat_new ();
+    self->stat = sam_stat_handle_new ();
 
 
     // publishing requests
@@ -818,7 +841,7 @@ check_pub (
 
 //  --------------------------------------------------------------------------
 /// Returns a string containing all currently connected backends.
-static sam_ret_t *
+static char *
 aggregate_backend_info (sam_t *self, sam_msg_t *msg)
 {
     sam_log_trace ("send () ctl internally (be.active)");
@@ -829,7 +852,6 @@ aggregate_backend_info (sam_t *self, sam_msg_t *msg)
 
     sam_log_trace ("recv () ctl internally (be.active)");
     zsock_recv (self->ctl_req, "im", &backend_c, &backends);
-
 
     // aggregate backend information
     size_t buf_size = 256;
@@ -848,31 +870,57 @@ aggregate_backend_info (sam_t *self, sam_msg_t *msg)
 
 
     // compose final string
-    sam_ret_t *ret = new_ret ();
     char head [buf_size];
     snprintf (
         head,
         buf_size,
-        "Status:\n%d backend(s) connected:\n\n",
+        "BACKENDS\n%d backend(s) connected:\n\n",
         backend_c);
 
     size_t
         head_len = strlen (head),
         buf_len = strlen (buf);
 
-    ret->msg = malloc ((head_len + buf_len + 1) * sizeof (char));
-    assert (ret->msg);
+    char *str = malloc ((head_len + buf_len + 1) * sizeof (char));
+    assert (str);
 
-    ret->allocated = true;
-
-    memcpy (ret->msg, head, head_len);
-    memcpy (ret->msg + head_len, buf, buf_len);
-    ret->msg [head_len + buf_len] = '\0';
+    memcpy (str, head, head_len);
+    memcpy (str + head_len, buf, buf_len);
+    str [head_len + buf_len] = '\0';
 
     // clean up
     zmsg_destroy (&backends);
     sam_msg_destroy (&msg);
 
+    return str;
+}
+
+
+static sam_ret_t *
+aggregate_status (sam_t *self, sam_msg_t *msg)
+{
+    char
+        *head = "\n\nStatus:\n\n",
+        *metrics = sam_stat_str (self->stat),
+        *backends = aggregate_backend_info (self, msg);
+
+    size_t len =
+        strlen (metrics) + strlen (backends) + strlen (head) + 1;
+
+    sam_ret_t *ret = new_ret ();
+    ret->msg = malloc (len);
+    assert (ret->msg);
+    ret->allocated = true;
+
+    memcpy (ret->msg, head, strlen (head));
+    memcpy (ret->msg + strlen (ret->msg), backends, strlen (backends));
+    memcpy (ret->msg + strlen (ret->msg), metrics, strlen (metrics));
+
+    if (metrics) {
+        free (metrics);
+    }
+
+    free (backends);
     return ret;
 }
 
@@ -901,6 +949,8 @@ sam_eval (
         if (rc) {
             return error (msg, "malformed publishing request");
         }
+
+        sam_stat (self->stat, "sam.accepted", 1);
 
         // Create a copy of the message and pass that over to the
         // store. Crafting a copy is necessary because the actor
@@ -946,7 +996,7 @@ sam_eval (
 
     // status
     else if (!strcmp (action, "status")) {
-        return aggregate_backend_info (self, msg);
+        aggregate_status (self, msg);
     }
 
 

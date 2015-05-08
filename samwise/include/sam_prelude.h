@@ -45,6 +45,9 @@
 #define SAM_RET_RESTART 0x10
 
 
+// enable stats
+#define SAM_STAT
+
 // don't define these to show all log levels
 // TODO offer an option for ./configure
 // #define LOG_THRESHOLD_TRACE   // show info + error
@@ -81,6 +84,7 @@ struct sam_backend_t {
 
 
 #include "sam_log.h"
+#include "sam_stat.h"
 #include "sam_gen.h"
 #include "sam_msg.h"
 #include "sam_cfg.h"

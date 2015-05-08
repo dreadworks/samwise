@@ -51,22 +51,7 @@ typedef struct sam_ret_t {
 } sam_ret_t;
 
 
-/// a sam instance
-typedef struct sam_t {
-    int be_id_power;              ///< used to assign backend ids
-    sam_be_t be_type;             ///< backend type, used to init backends
-
-    zsock_t *frontend_pub;        ///< request socket for rpc calls
-    char *frontend_pub_endpoint;  ///< for sam_buf to be able to publish
-
-    zsock_t *frontend_rpc;        ///< request socket for rpc calls
-    zsock_t *ctl_req;             ///< request socket for control commands
-    char *backend_pull_endpoint;  ///< pull endpoint name for backends to bind
-
-    sam_buf_t *buf;               ///< message store
-    sam_cfg_t *cfg;               ///< configuration
-    zactor_t *actor;              ///< thread maintaining broker connections
-} sam_t;
+typedef struct sam_t sam_t;
 
 
 //  --------------------------------------------------------------------------
