@@ -21,12 +21,6 @@
 #define __SAM_CFG_H__
 
 
-/// cfg instance, wraps a zconfig instance
-typedef struct sam_cfg_t {
-    zconfig_t *zcfg; ///< points to a loaded configuration file
-} sam_cfg_t;
-
-
 
 //  --------------------------------------------------------------------------
 /// @brief Create a new cfg instance

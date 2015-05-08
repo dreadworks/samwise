@@ -19,15 +19,18 @@
 */
 
 
-#include "../include/sam_prelude.h"
-#include "../include/samd.h"
+#include "../include/sam.h"
+#include "../include/sam_stat.h"
+#include "../include/sam_msg.h"
+#include "../include/sam_log.h"
+#include "../include/sam_cfg.h"
 
 
-struct samd_t{
+typedef struct samd_t {
     sam_t *sam;              ///< encapsulates a sam thread
     zsock_t *client_rep;     ///< REPLY socket for client requests
     sam_stat_handle_t *stat; ///< gathers metrics
-};
+} samd_t;
 
 
 //  --------------------------------------------------------------------------
@@ -97,6 +100,23 @@ handle_req (
 
 
 //  --------------------------------------------------------------------------
+/// Destroys the samd instance and free's all allocated memory.
+void
+samd_destroy (
+    samd_t **self)
+{
+    sam_log_info ("destroying samd");
+
+    zsock_destroy (&(*self)->client_rep);
+    sam_destroy (&(*self)->sam);
+    sam_stat_handle_destroy (&(*self)->stat);
+
+    free (*self);
+    *self = NULL;
+}
+
+
+//  --------------------------------------------------------------------------
 /// Creates a new samd instance and binds the public endpoints socket.
 samd_t *
 samd_new (
@@ -139,23 +159,6 @@ samd_new (
 
     sam_log_info ("created samd");
     return self;
-}
-
-
-//  --------------------------------------------------------------------------
-/// Destroys the samd instance and free's all allocated memory.
-void
-samd_destroy (
-    samd_t **self)
-{
-    sam_log_info ("destroying samd");
-
-    zsock_destroy (&(*self)->client_rep);
-    sam_destroy (&(*self)->sam);
-    sam_stat_handle_destroy (&(*self)->stat);
-
-    free (*self);
-    *self = NULL;
 }
 
 

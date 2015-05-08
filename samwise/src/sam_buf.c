@@ -86,6 +86,12 @@ typedef struct state_t {
 } state_t;
 
 
+/// buf instance wrapping the buffer
+struct sam_buf_t {
+    zsock_t *store_sock;   ///< for (internal) storage requests
+    zactor_t *actor;       ///< maintaining the event loop
+};
+
 
 /*
  *    RECORD DEFINITIONS

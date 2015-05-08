@@ -24,7 +24,6 @@
 
 
 #include "../include/sam_prelude.h"
-#include "../include/samd.h"
 #include "../include/sam_selftest.h"
 
 

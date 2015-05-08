@@ -48,9 +48,7 @@ bin_PROGRAMS = samd samctl sam_selftest
 #
 #  samd
 #
-samd_SOURCES =   \
-  include/samd.h \
-  src/samd.c
+samd_SOURCES = src/samd.c
 
 samd_LDADD = src/libsam.la
 samd_LDFLAGS = -static

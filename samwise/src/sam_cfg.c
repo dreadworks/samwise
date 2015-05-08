@@ -22,6 +22,11 @@
 #include "../include/sam_prelude.h"
 
 
+struct sam_cfg_t {
+    zconfig_t *zcfg; ///< points to a loaded configuration file
+};
+
+
 //  --------------------------------------------------------------------------
 /// Resolve a set of options. The picture, provided as the second
 /// argument, defines the number of expected arguments and their type.

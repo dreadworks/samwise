@@ -21,12 +21,7 @@
 #define __SAM_BUF_H__
 
 
-/// buf instance wrapping the buffer
-typedef struct sam_buf_t {
-    zsock_t *store_sock;   ///< for (internal) storage requests
-    zactor_t *actor;       ///< maintaining the event loop
-} sam_buf_t;
-
+typedef struct sam_buf_t sam_buf_t;
 
 
 //  --------------------------------------------------------------------------

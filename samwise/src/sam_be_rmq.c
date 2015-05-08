@@ -67,6 +67,41 @@ typedef struct store_item {
 } store_item;
 
 
+/// the be_rmq state
+struct sam_be_rmq_t {
+    char *name;        ///< identifier assigned by the user
+    uint64_t id;       ///< identifier used by sam_buf
+    zlist_t *store;    ///< maps message keys to sequence numbers
+
+
+    struct {                                ///< amqp connection
+        amqp_connection_state_t connection; ///< internal connection state
+        amqp_socket_t *socket;              ///< tcp socket holding the conn
+        int message_channel;                ///< channel for messages
+        int method_channel;                 ///< channel for rpc calls
+        unsigned int seq;                   ///< incremented number for acks
+    } amqp;
+
+
+    struct {
+        bool established;        ///< indicator needed for destroy ()
+        sam_be_rmq_opts_t opts;  ///< for re-connecting tries
+        int tries;
+    } connection;
+
+
+    struct {
+        zsock_t *sig;           ///< send signals to the be maintainer
+        zsock_t *pub;           ///< accepting publishing requests
+        zsock_t *rpc;           ///< accepting rpc requests
+        zsock_t *ack;           ///< pushing ack's as a generic backend
+        zmq_pollitem_t *amqp;   ///< socket maintaining broker connection
+    } sock;
+
+};
+
+
+
 //  --------------------------------------------------------------------------
 /// Return a string representation of the current backend
 /// state. Memory must be free'd by the caller.

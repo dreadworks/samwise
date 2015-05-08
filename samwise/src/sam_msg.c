@@ -21,6 +21,22 @@
 #include "../include/sam_prelude.h"
 
 
+/// a zmsg wrapper
+struct sam_msg_t {
+    int owner_refs;                ///< reference counting by _own ()
+    pthread_mutex_t own_lock;      ///< used in _own ()
+    pthread_mutex_t get_lock;      ///< used in _get ()
+
+    zlist_t *frames;               ///< payload of the message
+
+    struct refs {
+        zlist_t *s;                ///< for allocated strings
+        zlist_t *f;                ///< for allocated frames
+    } refs;
+
+};
+
+
 //  --------------------------------------------------------------------------
 /// Used by zlist_purge () and zlist_destroy () for char * list items
 static void

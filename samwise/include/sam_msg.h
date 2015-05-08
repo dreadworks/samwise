@@ -32,22 +32,6 @@ typedef enum {
 
 
 
-/// a zmsg wrapper
-typedef struct sam_msg_t {
-    int owner_refs;                ///< reference counting by _own ()
-    pthread_mutex_t own_lock;      ///< used in _own ()
-    pthread_mutex_t get_lock;      ///< used in _get ()
-
-    zlist_t *frames;               ///< payload of the message
-
-    struct refs {
-        zlist_t *s;                ///< for allocated strings
-        zlist_t *f;                ///< for allocated frames
-    } refs;
-
-} sam_msg_t;
-
-
 //  --------------------------------------------------------------------------
 /// @brief Creates a new sam_msg instance from an existing zmsg
 /// @return New sam_msg instance

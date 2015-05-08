@@ -35,6 +35,57 @@
                      SAM_VERSION_PATCH)
 
 
+
+//
+//   DEPENDENCIES
+//
+
+#ifdef __SAM_TEST
+#include <check.h>
+#endif
+
+#include <db.h>
+#include <amqp.h>
+#include <amqp_tcp_socket.h>
+
+#include <czmq.h>
+#if CZMQ_VERSION < 30000
+#  error "sam needs at least CZMQ 3.0.0"
+#endif
+
+
+//
+//   MACROS
+//
+#define UU __attribute__((unused))
+
+// global configuration
+#define SAM_PROTOCOL_VERSION 100
+#define SAM_RET_RESTART 0x10
+
+// enable stats
+#define SAM_STAT
+
+// don't define these to show all log levels
+// TODO offer an option for ./configure
+// #define LOG_THRESHOLD_TRACE   // show info + error
+// #define LOG_THRESHOLD_INFO    // only show error
+// #define LOG_THRESHOLD_ERROR   // disable logging
+
+
+
+// forward references
+typedef struct sam_t sam_t;
+typedef struct sam_cfg_t sam_cfg_t;
+typedef struct sam_msg_t sam_msg_t;
+
+
+/// backend types
+typedef enum {
+    SAM_BE_RMQ     ///< RabbitMQ message backend
+} sam_be_t;
+
+
 /// signals sent by messaging backends
 typedef enum {
     SAM_BE_SIG_CONNECTION_LOSS = 0x10, ///< if a backend was split
@@ -51,8 +102,6 @@ typedef struct sam_ret_t {
 } sam_ret_t;
 
 
-typedef struct sam_t sam_t;
-
 
 //  --------------------------------------------------------------------------
 /// @brief Creates a new sam instance
@@ -67,29 +116,6 @@ sam_new (sam_be_t be_type);
 void
 sam_destroy (
     sam_t **self);
-
-
-//  --------------------------------------------------------------------------
-/// @brief Create a new message backend
-/// @param self A sam instance
-/// @param be_type Type of the backend to create
-/// @return The calculated delay in ms or -1 in case of error
-sam_backend_t *
-sam_be_create (
-    sam_t *self,
-    const char *name,
-    void *opts);
-
-
-//  --------------------------------------------------------------------------
-/// @brief Remove a message backend
-/// @param self A sam instance
-/// @param be_type Type of the backend to create
-/// @return The calculated delay in ms or -1 in case of error
-int
-sam_be_remove (
-    sam_t *self,
-    const char *name);
 
 
 //  --------------------------------------------------------------------------
