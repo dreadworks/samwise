@@ -995,6 +995,8 @@ sam_eval (
             return error (msg, "malformed rpc request");
         }
 
+        sam_stat (self->stat, "sam.rpc requests", 1);
+
         sam_ret_t *ret;
         sam_log_trace ("send () rpc internally");
         zsock_send (self->frontend_rpc, "p", msg);
@@ -1006,12 +1008,14 @@ sam_eval (
 
     // ping
     else if (!strcmp (action, "ping")) {
+        sam_stat (self->stat, "sam.control requests", 1);
         goto suspend;
     }
 
 
     // status
     else if (!strcmp (action, "status")) {
+        sam_stat (self->stat, "sam.control requests", 1);
         sam_msg_destroy (&msg);
         return aggregate_status (self);
     }

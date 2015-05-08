@@ -74,7 +74,7 @@ static char *
 to_string (
     sam_backend_t *be)
 {
-    size_t buf_size = 256;
+    size_t buf_size = 512;
     char *str = malloc (buf_size * sizeof (char));
 
     sam_be_rmq_t *self = be->_self;
@@ -85,7 +85,7 @@ to_string (
               "  connected: %s (%d/%d tries every %" PRIu64 "ms)\n"
               "  heartbeat: every %d seconds\n"
               "  current sequence number: %d\n"
-              "  store size: %zu",
+              "  pending acks: %zu",
 
               self->name, self->id, opts->host, opts->port, opts->user,
               (self->connection.established)? "yep": "nope",

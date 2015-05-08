@@ -39,9 +39,10 @@ const char *ENDPOINT_REQREP = "inproc://sam_stat_digest";
 /// actor state, maintains all metrics
 typedef struct state_t {
 
-    zsock_t *pll;
-    zsock_t *rep;
+    zsock_t *pll;   ///< pull socket accepting metric requests
+    zsock_t *rep;   ///< reply socket for digest-requests
 
+    /// set of hashes for different modules
     struct {
         zhash_t *sam;
         zhash_t *samd;
@@ -50,18 +51,22 @@ typedef struct state_t {
 } state_t;
 
 
+/// opaque handles to update metrics concurrently
 struct sam_stat_handle_t {
-    zsock_t *psh;
-    zsock_t *req;
+    zsock_t *psh;   ///< push socket to send metric requests
+    zsock_t *req;   ///< request socket to obtain digests
 };
 
 
+/// aggregator instance
 struct sam_stat_t {
     zactor_t *actor;
 };
 
 
 
+//  --------------------------------------------------------------------------
+/// Free-function for the hash maps.
 static void
 free_metric (void **item)
 {
@@ -71,6 +76,9 @@ free_metric (void **item)
 }
 
 
+//  --------------------------------------------------------------------------
+/// Takes an id and tries to find the corresponding hashmap. Inserts
+/// or updates the provided value.
 static int
 resolve (
     state_t *state,
@@ -113,7 +121,8 @@ resolve (
 }
 
 
-
+//  --------------------------------------------------------------------------
+/// Callback function for activity on the pull socket.
 int
 handle_metric (
     zloop_t *loop UU,
@@ -137,7 +146,9 @@ handle_metric (
 }
 
 
-
+//  --------------------------------------------------------------------------
+/// Callback function for activity on the reply socket. Creates a
+/// string containinig all currently available metrics.
 int
 handle_digest (
     zloop_t *loop UU,
@@ -202,7 +213,9 @@ handle_digest (
 }
 
 
-
+//  --------------------------------------------------------------------------
+/// The stat actor function. Initializes all necessary sockets and
+/// starts the reactor.
 void
 actor (
     zsock_t *pipe,
@@ -254,7 +267,8 @@ actor (
 
 
 
-
+//  --------------------------------------------------------------------------
+/// Create a new stat thread.
 sam_stat_t *
 sam_stat_new ()
 {
@@ -268,6 +282,8 @@ sam_stat_new ()
 }
 
 
+//  --------------------------------------------------------------------------
+/// Destroy a stat thread.
 void
 sam_stat_destroy (
     sam_stat_t **self)
@@ -281,6 +297,8 @@ sam_stat_destroy (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Create a handle to communicate with a stat thread.
 sam_stat_handle_t *
 sam_stat_handle_new ()
 {
@@ -299,6 +317,8 @@ sam_stat_handle_new ()
 }
 
 
+//  --------------------------------------------------------------------------
+/// Destroy a stat handle.
 void
 sam_stat_handle_destroy (
     sam_stat_handle_t **handle)
@@ -312,6 +332,9 @@ sam_stat_handle_destroy (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Function to update metrics. Invoked by using the preprocessor
+/// macro defined in the header.
 void
 sam_stat_ (
     sam_stat_handle_t *handle,
@@ -325,6 +348,9 @@ sam_stat_ (
 }
 
 
+//  --------------------------------------------------------------------------
+/// Retrieve a string representation of the current metrics. Invoked
+/// by using the preprocessor macro defined in the header.
 char *
 sam_stat_str_ (
     sam_stat_handle_t *handle)
@@ -340,5 +366,3 @@ sam_stat_str_ (
     zsock_recv (handle->req, "s", &str);
     return str;
 }
-
-
