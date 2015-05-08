@@ -507,7 +507,10 @@ sam_destroy (
 
     sam_stat_handle_destroy (&(*self)->stat);
     sam_stat_destroy (&(*self)->stat_actor);
-    sam_cfg_destroy (&(*self)->cfg);
+
+    if ((*self)->cfg) {
+        sam_cfg_destroy (&(*self)->cfg);
+    }
 
     free (*self);
     *self = NULL;
@@ -674,6 +677,7 @@ sam_init (
     assert (*cfg);
 
     if (self->cfg) {
+        sam_log_error ("DESTROY");
         sam_cfg_destroy (&self->cfg);
     }
 
