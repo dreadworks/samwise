@@ -866,11 +866,9 @@ aggregate_backend_info (sam_t *self)
 
         while (zmsg_size (backends)) {
             char *str = zmsg_popstr (backends);
-            size_t str_len = strlen (str);
-
             snprintf (buf_ptr, buf_size, "\n%s", str);
 
-            buf_ptr += str_len;
+            buf_ptr += strlen (str) + 1;
             free (str);
         }
     }
@@ -894,7 +892,7 @@ aggregate_backend_info (sam_t *self)
         head_len = strlen (head),
         buf_len = strlen (buf);
 
-    size_t str_size = (head_len + buf_len + 1) * sizeof (char);
+    size_t str_size = (head_len + buf_len + buf_size) * sizeof (char);
     char *str = malloc (str_size);
     assert (str);
 

@@ -106,7 +106,7 @@ struct sam_be_rmq_t {
 /// Return a string representation of the current backend
 /// state. Memory must be free'd by the caller.
 static char *
-to_string (
+be_to_string (
     sam_backend_t *be)
 {
     size_t buf_size = 512;
@@ -127,7 +127,7 @@ to_string (
               self->connection.tries, opts->tries, opts->interval,
               opts->heartbeat,
               self->amqp.seq,
-              zlist_size (self->store));
+              (self->store)? zlist_size (self->store): (size_t) 0);
 
     return str;
 }
@@ -276,9 +276,9 @@ handle_amqp (
         // this must be handled
         if (frame.payload.method.id != AMQP_BASIC_ACK_METHOD) {
             sam_log_errorf (
-                "got something different than an ack: %d",
+                "got something different than an ack: 0x%x",
                 frame.payload.method.id);
-            assert (false);
+            return connection_loss (self, loop);
         }
 
         // handle acknowledgement
@@ -310,6 +310,8 @@ handle_reconnect (
     void *args)
 {
     sam_be_rmq_t *self = args;
+
+    sam_log_errorf ("handle reconnect for '%s', %d", self->name, self->connection.tries);
 
     // invoke callback immediately
     if (self->connection.tries) {
@@ -700,8 +702,11 @@ sam_be_rmq_new (
     memset (&self->amqp.connection, 0, sizeof (amqp_connection_state_t));
     self->amqp.message_channel = 1;
     self->amqp.method_channel = 2;
+    self->amqp.seq = 0;
 
     self->connection.established = false;
+    self->connection.tries = -1;
+
     return self;
 }
 
@@ -768,7 +773,11 @@ sam_be_rmq_connect (
 
     // save options for reconnects
     memcpy (&self->connection.opts, opts, sizeof (sam_be_rmq_opts_t));
-    self->connection.tries = opts->tries;
+
+    // may be the initial value and can be overwritten
+    if (self->connection.tries == -1) {
+        self->connection.tries = opts->tries;
+    }
 
 
     // for re-initialize rabbitmq-c
@@ -867,6 +876,7 @@ sam_be_rmq_connect (
 
     self->store = zlist_new ();
     zlist_set_destructor (self->store, free_store_item);
+    self->connection.tries = opts->tries;
 
     return 0;
 }
@@ -1083,7 +1093,7 @@ sam_be_rmq_start (
     assert (backend);
     backend->name = (*self)->name;
     backend->id = (*self)->id;
-    backend->str = to_string;
+    backend->str = be_to_string;
 
 
     // signals
