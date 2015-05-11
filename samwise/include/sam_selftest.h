@@ -17,6 +17,10 @@
 #ifndef __SAM_SELFTEST_H__
 #define __SAM_SELFTEST_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 //  --------------------------------------------------------------------------
 /// @brief Used to add a visual seperator between tests.
@@ -25,5 +29,9 @@ void
 sam_selftest_introduce (
     const char *name);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

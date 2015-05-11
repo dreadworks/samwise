@@ -20,6 +20,10 @@
 #ifndef __SAM_BUF_H__
 #define __SAM_BUF_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 typedef struct sam_buf_t sam_buf_t;
 
@@ -63,5 +67,9 @@ sam_buf_save (
 void *
 sam_buf_test ();
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

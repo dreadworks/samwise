@@ -91,20 +91,6 @@ if (condition) {
 }
 ```
 
-C++ is not going to be supported. It is not needed to wrap code in statements like
-
-```C
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-// ...
-
-#ifdef __cplusplus
-}
-#endif
-```
-
 ### Additional Conventions ###
 
 As far as possible, code and documentation should never exceed 80 characters per line. The code documentation gets rendered by doxygen with the java style syntax using the `@` prefix. Doxygen and CLASS -style comments are getting mixed.

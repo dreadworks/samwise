@@ -21,6 +21,10 @@
 #ifndef __SAM_H__
 #define __SAM_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 #define SAM_VERSION_MAJOR 0
 #define SAM_VERSION_MINOR 0
@@ -144,5 +148,9 @@ sam_eval (
 void *
 sam_test ();
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

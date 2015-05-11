@@ -28,6 +28,11 @@
 #include <assert.h>
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 #define UU __attribute__((unused))
 
 
@@ -80,5 +85,9 @@ void
 samwise_destroy (
     samwise_t **self);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
