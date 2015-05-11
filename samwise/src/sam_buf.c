@@ -169,7 +169,11 @@ del (
         else if (header->type == RECORD_TOMBSTONE) {
             prev_key = header->c.tombstone.prev;
         }
+        else if (header->type == RECORD_ACK) {
+            prev_key = 0;
+        }
         else {
+            sam_log_errorf ("unexpected record type: 0x%x", header->type);
             assert (false);
         }
 
@@ -251,6 +255,8 @@ resend_condition (
     state_t *state,
     record_t *header)
 {
+    assert (header);
+
     if (header->type == RECORD) {
         uint64_t eps = zclock_mono () - header->c.record.ts;
         return (state->threshold < eps)? 0: -1;
@@ -287,9 +293,10 @@ resend_message (
     uint64_t be_acks = header->c.record.be_acks;
     zframe_t *id_frame = zframe_new (&be_acks, sizeof (be_acks));
     int msg_id = sam_db_get_key (db);
+    int count = header->c.record.acks_remaining;
 
     sam_log_tracef ("resending msg '%d'", msg_id);
-    zsock_send (state->out, "ifp", msg_id, id_frame, msg);
+    zsock_send (state->out, "ifip", msg_id, id_frame, count, msg);
 
     zframe_destroy (&id_frame);
     return 0;
@@ -323,41 +330,13 @@ record_size (
 
 
 //  --------------------------------------------------------------------------
-/// Analyzes the publishing request and returns the number of
-/// acknowledgements needed to consider the distribution guarantee
-/// fulfilled.
-static int
-acks_remaining (
-    sam_msg_t *msg)
-{
-    char *distribution;
-    int rc = sam_msg_get (msg, "s", &distribution);
-    assert (!rc);
-
-    if (!strcmp (distribution, "round robin")) {
-        rc = 1;
-    }
-    else if (!strcmp (distribution, "redundant")) {
-        int ack_c = -1;
-        sam_msg_get (msg, "?i", &ack_c);
-        rc = ack_c;
-    }
-    else {
-        assert (false);
-    }
-
-    free (distribution);
-    return rc;
-}
-
-
-//  --------------------------------------------------------------------------
 /// Create a fresh database record based on a sam_msg enclosed
 /// publishing request.
 static int
 create_record_store (
     state_t *state,
-    sam_msg_t *msg)
+    sam_msg_t *msg,
+    int count)
 {
     size_t size, header_size;
     record_size (&size, &header_size, msg);
@@ -377,7 +356,7 @@ create_record_store (
     header->type = RECORD;
     header->c.record.prev = 0;
 
-    header->c.record.acks_remaining = acks_remaining (msg);
+    header->c.record.acks_remaining = count;
     header->c.record.be_acks = 0;
     header->c.record.ts = zclock_mono ();
     header->c.record.tries = state->tries;
@@ -402,7 +381,8 @@ create_record_store (
 static int
 update_record_store (
     state_t *state,
-    sam_msg_t *msg)
+    sam_msg_t *msg,
+    int count)
 {
     int rc = 0;
     size_t total_size, header_size;
@@ -417,7 +397,7 @@ update_record_store (
     sam_log_tracef (
         "ack already there, %d arrived already",
         header->c.record.acks_remaining * -1);
-    header->c.record.acks_remaining += acks_remaining (msg);
+    header->c.record.acks_remaining += count;
 
     // remove if there are no outstanding acks
     if (!header->c.record.acks_remaining) {
@@ -599,9 +579,10 @@ handle_storage_req (
     state_t *state = args;
     sam_db_t *db = state->db;
 
+    int count;
     sam_msg_t *msg;
     sam_log_trace ("recv () storage request");
-    zsock_recv (store_sock, "p", &msg);
+    zsock_recv (store_sock, "ip", &count, &msg);
 
     int msg_id = create_msg_id (state);
     assert (msg_id >= 0);
@@ -619,16 +600,16 @@ handle_storage_req (
     int rc = -1;
 
     // record already there (ack arrived early), update data (this is
-    // not possible with the current implementation, but I leave it if
-    // for the future if the whole system acts more asynchronously)
+    // not possible with the current implementation, but I leave it
+    // for the future where the whole system may act more asynchronously)
     if (ret == SAM_DB_OK) {
-        rc = update_record_store (state, msg);
+        rc = update_record_store (state, msg, count);
     }
 
     // record not yet there, create db entry
     else if (ret == SAM_DB_NOTFOUND) {
         // key was already set by get ()
-        rc = create_record_store (state, msg);
+        rc = create_record_store (state, msg, count);
     }
 
     sam_db_end (db, (rc)? true: false);
@@ -980,10 +961,11 @@ sam_buf_destroy (
 int
 sam_buf_save (
     sam_buf_t *self,
-    sam_msg_t *msg)
+    sam_msg_t *msg,
+    int count)
 {
     assert (self);
-    zsock_send (self->store_sock, "p", msg);
+    zsock_send (self->store_sock, "ip", count, msg);
 
     int msg_id;
     zsock_recv (self->store_sock, "i", &msg_id);

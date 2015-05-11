@@ -95,14 +95,16 @@ send_ack (uint64_t be_id, int key)
 //  --------------------------------------------------------------------------
 /// Finish composing the message and hand it over to sam_buf.
 static int
-save (zmsg_t *zmsg, const char *payload)
+save (const char *payload, int count)
 {
+    zmsg_t *zmsg = zmsg_new ();
+
     zmsg_addstr (zmsg, "test-x");
     zmsg_addstr (zmsg, "");
     zmsg_addstr (zmsg, payload);
 
     sam_msg_t *msg = sam_msg_new (&zmsg);
-    return sam_buf_save (buf, msg);
+    return sam_buf_save (buf, msg, count);
 }
 
 
@@ -137,21 +139,16 @@ eat ()
 static int
 save_roundrobin (const char *payload)
 {
-    zmsg_t *zmsg = zmsg_new ();
-    zmsg_addstr (zmsg, "round robin");
-    return save (zmsg, payload);
+    return save (payload, 1);
 }
 
 
 //  --------------------------------------------------------------------------
 /// Save a sam_msg_t to sam_buf with redundant distribution type.
 static int
-save_redundant (const char *n, const char *payload)
+save_redundant (const char *payload, int count)
 {
-    zmsg_t *zmsg = zmsg_new ();
-    zmsg_addstr (zmsg, "redundant");
-    zmsg_addstr (zmsg, n);
-    return save (zmsg, payload);
+    return save (payload, count);
 }
 
 
@@ -225,7 +222,7 @@ START_TEST(test_buf_save_redundant)
     sam_selftest_introduce ("test_buf_save_redundant");
 
     // save
-    int key = save_redundant ("3", "redundant");
+    int key = save_redundant ("redundant", 3);
     zclock_sleep (10);
 
     // ack1, ack2, ack4
@@ -253,7 +250,7 @@ START_TEST(test_buf_save_redundant_race)
     zclock_sleep (10);
 
     // save
-    int key = save_redundant ("2", "redundant race");
+    int key = save_redundant ("redundant race", 2);
     ck_assert_int_eq (key, 1);
     zclock_sleep (10);
 
@@ -272,7 +269,7 @@ START_TEST(test_buf_save_redundant_idempotency)
     sam_selftest_introduce ("test_buf_save_redundant_idempotency");
 
     // save
-    save_redundant ("2", "redundant idempotency");
+    save_redundant ("redundant idempotency", 2);
     zclock_sleep (10);
 
     // ack1
@@ -306,7 +303,7 @@ START_TEST(test_buf_save_redundant_race_idempotency)
     zclock_sleep (10);
 
     // save
-    save_redundant ("2", "redundant race idempotency");
+    save_redundant ("redundant race idempotency", 2);
     zclock_sleep (10);
 
     // ack 2

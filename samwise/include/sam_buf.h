@@ -49,11 +49,13 @@ sam_buf_destroy (
 /// @brief Hand message over to store, get a key as the receipt
 /// @param self A buf instance
 /// @param msg A publishing request wrapped by sam_msg_t
+/// @param count How many backends must acknowledge the message
 /// @return A unique id used to identify the message
 int
 sam_buf_save (
     sam_buf_t *self,
-    sam_msg_t *msg);
+    sam_msg_t *msg,
+    int count);
 
 
 //  --------------------------------------------------------------------------

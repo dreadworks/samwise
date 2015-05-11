@@ -127,7 +127,7 @@ to_string (
               self->connection.tries, opts->tries, opts->interval,
               opts->heartbeat,
               self->amqp.seq,
-              zlist_size (self->store));
+              (self->store)? zlist_size (self->store): 0);
 
     return str;
 }
@@ -327,12 +327,14 @@ handle_reconnect (
 
         // reconnect failed, set timer for next round
         if (rc) {
-            uint64_t iv = self->connection.opts.interval;
-            sam_log_infof (
-                "reconnecting '%s' failed, next try in %u",
-                self->name, iv);
+            if (self->connection.tries) {
+                uint64_t iv = self->connection.opts.interval;
+                sam_log_infof (
+                    "reconnecting '%s' failed, next try in %u",
+                    self->name, iv);
 
-            zloop_timer (loop, iv, 1, handle_reconnect, self);
+                zloop_timer (loop, iv, 1, handle_reconnect, self);
+            }
         }
 
 
@@ -345,7 +347,7 @@ handle_reconnect (
     }
 
     // no tries left, shut down backend
-    else {
+    if (!self->connection.tries) {
         zsock_send (
             self->sock.sig, "is",
             SAM_BE_SIG_KILL, self->name);
@@ -687,6 +689,7 @@ sam_be_rmq_new (
         "creating rabbitmq message backend (%s:%d)", name, id);
 
     sam_be_rmq_t *self = malloc (sizeof (sam_be_rmq_t));
+    memset (self, 0, sizeof (sam_be_rmq_t));
     assert (self);
 
     self->name = malloc (strlen (name) * sizeof (char) + 1);
@@ -702,6 +705,7 @@ sam_be_rmq_new (
     self->amqp.method_channel = 2;
 
     self->connection.established = false;
+    self->connection.tries = -2;
     return self;
 }
 
@@ -768,8 +772,10 @@ sam_be_rmq_connect (
 
     // save options for reconnects
     memcpy (&self->connection.opts, opts, sizeof (sam_be_rmq_opts_t));
-    self->connection.tries = opts->tries;
 
+    if (self->connection.tries == -2) {
+        self->connection.tries = opts->tries;
+    }
 
     // for re-initialize rabbitmq-c
     if (self->amqp.connection) {
