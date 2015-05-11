@@ -11,6 +11,7 @@ AM_INIT_AUTOMAKE([subdir-objects])
 AC_CONFIG_MACRO_DIR([m4])
 AM_PROG_CC_C_O
 AC_PROG_INSTALL
+LT_INIT
 
 # Checks for libraries.
 # FIXME: Replace `main' with a function in `-lczmq':

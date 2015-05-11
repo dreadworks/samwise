@@ -2,20 +2,23 @@
 ACLOCAL_AMFLAGS = -I m4
 AM_CFLAGS = -g -Werror -Wall -Wextra -pedantic -std=gnu99
 
-samwise_LDFLAGS = \
-  -lzmq           \
+
+lib_LTLIBRARIES = src/libsamwise.la
+include_HEADERS = include/samwise.h
+
+
+src_libsamwise_la_SOURCES =  \
+  include/samwise.h          \
+  src/samwise.c
+
+src_libsamwise_la_LDFLAGS = \
+  -lzmq                     \
   -lczmq
 
 
-#
-#  BINARIES
-#
-bin_PROGRAMS = samwise
+bin_PROGRAMS = samcli
 
 
-#
-#  samd
-#
-samwise_SOURCES =   \
-  include/samwise.h \
-  src/samwise.c
+samcli_SOURCES = src/samcli.c
+samcli_LDADD = src/libsamwise.la
+samcli_LDFLAGS = -static
