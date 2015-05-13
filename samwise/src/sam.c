@@ -871,7 +871,7 @@ aggregate_backend_info (sam_t *self)
 
         snprintf (buf_ptr, buf_size, "\n%s", str);
 
-        buf_ptr += str_len;
+        buf_ptr += str_len + 1;
         free (str);
     }
 
