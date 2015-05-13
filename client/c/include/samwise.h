@@ -39,8 +39,17 @@ extern "C" {
 typedef struct samwise_t samwise_t;
 
 
+typedef enum {
+    SAMWISE_ROUNDROBIN,
+    SAMWISE_REDUNDANT
+} samwise_disttype_t;
+
+
 /// publishing request options
 typedef struct samwise_pub_t {
+
+    samwise_disttype_t disttype;    ///< either round robin or redundant
+    int distcount;                  ///< for disttype=SAMWISE_REDUNDANT
 
     char *exchange;
     char *routing_key;
@@ -73,9 +82,11 @@ samwise_ping (
 
 //  --------------------------------------------------------------------------
 /// @brief Create a new samwise instance
+/// @param endpoint Public endpoint of a samd instance
 /// @return The newly created instance
 samwise_t *
-samwise_new ();
+samwise_new (
+    const char *endpoint);
 
 
 // --------------------------------------------------------------------------
