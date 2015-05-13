@@ -1,0 +1,6 @@
+Hoe.spec 'samwise' do
+  developer('Felix Hamann', 'nvrn@dreadworks.de')
+  self.readme_file = 'README.rdoc'
+  self.history_file = 'CHANGELOG.rdoc'
+  self.extra_rdoc_files = FileList['*.rdoc']
+end
