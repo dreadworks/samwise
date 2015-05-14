@@ -18,6 +18,10 @@
 #ifndef __SAM_BE_STAT_H__
 #define __SAM_BE_STAT_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 typedef struct sam_stat_t sam_stat_t;
 typedef struct sam_stat_handle_t sam_stat_handle_t;
@@ -88,5 +92,8 @@ sam_stat_str_ (
 #endif
 
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

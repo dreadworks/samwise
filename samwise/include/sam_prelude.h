@@ -21,6 +21,10 @@
 #ifndef __SAM_PRELUDE_H__
 #define __SAM_PRELUDE_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 typedef struct sam_backend_t sam_backend_t;
 
@@ -60,5 +64,9 @@ struct sam_backend_t {
     void *_self;        ///< internally used reference to the original state
 };
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

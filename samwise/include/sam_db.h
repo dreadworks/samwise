@@ -21,6 +21,10 @@
 #ifndef __SAM_DB_H__
 #define __SAM_DB_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 typedef struct sam_db_t sam_db_t;
 
@@ -169,5 +173,9 @@ sam_db_del (
 void *
 sam_db_test ();
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

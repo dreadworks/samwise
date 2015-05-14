@@ -22,6 +22,10 @@
 #ifndef __SAM_MSG_H__
 #define __SAM_MSG_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 // rules for expect ()'s variadic arguments
 typedef enum {
@@ -156,5 +160,9 @@ sam_msg_decode (
 void *
 sam_msg_test ();
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -22,6 +22,10 @@
 #ifndef __SAM_BE_RMQ_H__
 #define __SAM_BE_RMQ_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 typedef struct sam_be_rmq_t sam_be_rmq_t;
 
@@ -165,5 +169,9 @@ sam_be_rmq_stop (
 void *
 sam_be_rmq_test ();
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

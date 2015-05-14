@@ -19,6 +19,8 @@
 #define __SAM_GEN_H__
 
 
+
+
 //  --------------------------------------------------------------------------
 /// @brief Generic pipe handler for zactors reacting to interrupts and $TERM
 /// @return -1 in case of termination, 0 otherwise
@@ -34,5 +36,9 @@ sam_gen_handle_pipe (
 void *
 sam_gen_test ();
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

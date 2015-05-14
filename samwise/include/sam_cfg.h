@@ -17,9 +17,14 @@
 
 */
 
+
 #ifndef __SAM_CFG_H__
 #define __SAM_CFG_H__
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
 //  --------------------------------------------------------------------------
@@ -153,5 +158,9 @@ sam_cfg_be_backends (
 void *
 sam_cfg_test ();
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

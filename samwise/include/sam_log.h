@@ -22,6 +22,10 @@
 #ifndef _SAM_LOG_H_
 #define _SAM_LOG_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 /// The different severity levels for logging
 typedef enum {
@@ -125,5 +129,9 @@ sam_log_test ();
 
 #endif
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

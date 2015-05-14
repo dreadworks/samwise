@@ -42,6 +42,7 @@ create_error (
     sam_ret_t *ret = malloc (sizeof (sam_ret_t));
     ret->rc = -1;
     ret->msg = msg;
+    ret->allocated = false;
     return ret;
 }
 
@@ -88,7 +89,7 @@ handle_req (
         ret = sam_eval (self->sam, msg);
     }
 
-    sam_log_trace ("sending reply to client");
+    sam_log_tracef ("sending reply to client (%d)", ret->rc);
     zsock_send (client_rep, "is", ret->rc, ret->msg);
 
     if (ret->allocated) {

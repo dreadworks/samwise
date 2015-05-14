@@ -85,6 +85,8 @@ struct sam_t {
     sam_stat_handle_t *stat;      ///< handle to send metrics
 
     zactor_t *actor;              ///< thread maintaining broker connections
+
+    int TMP_COUNTER;
 };
 
 
@@ -126,6 +128,8 @@ remove_backend (
             sam_be_rmq_destroy (&rabbit);
             rc = 0;
         }
+
+        be = zlist_next (state->backends);
     }
 
     return rc;
@@ -153,7 +157,7 @@ handle_sig (
         return rc;
     }
 
-    sam_log_errorf ("got signal %d from '%s'!", code, be_name);
+    sam_log_errorf ("got signal 0x%x from '%s'!", code, be_name);
 
     if (code == SAM_BE_SIG_KILL) {
         rc = remove_backend (state, loop, be_name);
@@ -174,26 +178,16 @@ handle_frontend_pub (
 {
     state_t *state = args;
 
-    int key;
-    sam_msg_t *msg;
+    int key, n;
+    sam_msg_t *msg;       // only use thread safe methods!
     zframe_t *id_frame;
 
     sam_log_trace ("recv () frontend pub");
-    zsock_recv (pll, "ifp", &key, &id_frame, &msg);
+    zsock_recv (pll, "ifip", &key, &id_frame, &n, &msg);
 
     // get mask containing already ack'd backends
     uint64_t be_acks = *(uint64_t *) zframe_data (id_frame);
     zframe_destroy (&id_frame);
-
-    char *distribution;
-    int rc = sam_msg_pop (msg, "s", &distribution);
-    assert (!rc);
-
-    int n = 1;
-    if (!strcmp (distribution, "redundant")) {
-        rc = sam_msg_pop (msg, "i", &n);
-        assert (!rc);
-    }
 
     int backend_c = zlist_size (state->backends);
     if (!backend_c) {
@@ -202,10 +196,9 @@ handle_frontend_pub (
         return 0;
     }
 
-
     sam_log_tracef (
-        "publish %s(%d), %d broker(s) available; 0x%" PRIx64 " ack'd",
-        distribution, n, backend_c, be_acks);
+        "publish to %d brokers, %d broker(s) available; 0x%" PRIx64 " ack'd",
+        n, backend_c, be_acks);
 
 
     while (0 < n && 0 < backend_c) {
@@ -237,7 +230,7 @@ handle_frontend_pub (
     }
 
     sam_msg_destroy (&msg);
-    return rc;
+    return 0;
 }
 
 
@@ -481,6 +474,8 @@ sam_new (
     self->be_type = be_type;
 
     state->backends = zlist_new ();
+
+    self->TMP_COUNTER = 0;
     return self;
 }
 
@@ -709,6 +704,7 @@ error (
     sam_msg_destroy (&msg);
 
     sam_ret_t *ret = new_ret ();
+
     ret->rc = -1;
     ret->msg = error_msg;
 
@@ -859,30 +855,28 @@ aggregate_backend_info (sam_t *self)
     sam_log_trace ("recv () ctl internally (be.active)");
     zsock_recv (self->ctl_req, "im", &backend_c, &backends);
 
-
-    // aggregate backend information
     size_t buf_size = 512;
     char *buf;
 
-    if (backend_c) {
-        buf = malloc (buf_size * backend_c * sizeof (char));
-        char *buf_ptr = buf;
-
-        while (zmsg_size (backends)) {
-            char *str = zmsg_popstr (backends);
-            snprintf (buf_ptr, buf_size, "\n%s", str);
-
-            buf_ptr += strlen (str) + 1;
-            free (str);
-        }
+    if (!backend_c) {
+        buf = malloc (buf_size);
+        snprintf (buf, buf_size, "No backends connected");
+        return buf;
     }
 
-    else {
-        char *str = "No backends connected.";
-        buf = malloc (strlen (str) * sizeof (char));
-        memcpy (buf, str, strlen (str));
-    }
+    // aggregate backend information
+    buf = malloc (buf_size * backend_c * sizeof (char));
+    char *buf_ptr = buf;
 
+    while (zmsg_size (backends)) {
+        char *str = zmsg_popstr (backends);
+        size_t str_len = strlen (str);
+
+        snprintf (buf_ptr, buf_size, "\n%s", str);
+
+        buf_ptr += str_len + 1;
+        free (str);
+    }
 
     // compose final string
     char head [buf_size];
@@ -970,21 +964,34 @@ sam_eval (
 
         sam_stat (self->stat, "sam.publishing requests", 1);
 
-        // Create a copy of the message and pass that over to the
-        // store. Crafting a copy is necessary because the actor
-        // starts chewing up the message which is not thread safe. If
-        // the store is going to act completely synchronously, this
-        // operation may become obsolete...
-        sam_msg_t *dup = sam_msg_dup (msg);
-        int key = sam_buf_save (self->buf, dup);
 
-        // pass the message on for distribution, 0 backends ack'd already
+        // analyze distribution method and count
+        char *distribution;
+        int rc = sam_msg_pop (msg, "s", &distribution);
+        assert (!rc);
+
+        int n = 1;
+        if (!strcmp (distribution, "redundant")) {
+            rc = sam_msg_pop (msg, "i", &n);
+            assert (!rc);
+        }
+
+
+        // save to buffer
+        sam_msg_own (msg);
+        int key = sam_buf_save (self->buf, msg, n);
+
+
+        // pass the message on for distribution
+        // (0 backends ack'd already)
         uint64_t be_acks = 0;
         zframe_t *id_frame = zframe_new (&be_acks, sizeof (be_acks));
 
         sam_log_tracef ("send () message '%d' internally", key);
-        zsock_send (self->frontend_pub, "ifp", key, id_frame, msg);
+        zsock_send (self->frontend_pub, "ifip", key, id_frame, n, msg);
 
+
+        // clean up
         zframe_destroy (&id_frame);
         return new_ret ();
     }
