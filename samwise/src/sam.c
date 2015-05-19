@@ -869,7 +869,7 @@ aggregate_backend_info (sam_t *self)
 
     if (!backend_c) {
         buf = malloc (buf_size);
-        snprintf (buf, buf_size, "No backends connected");
+        snprintf (buf, buf_size, "No backends registered");
         return buf;
     }
 
@@ -894,7 +894,7 @@ aggregate_backend_info (sam_t *self)
     snprintf (
         head,
         buf_size,
-        "%d backend(s) connected:",
+        "%d backend(s) registered:",
         backend_c);
 
     size_t
