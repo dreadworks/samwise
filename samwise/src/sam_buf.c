@@ -83,6 +83,8 @@ typedef struct state_t {
     int tries;              ///< maximum number of retries for a message
     uint64_t interval;      ///< how often messages are being tried again
     uint64_t threshold;     ///< at which point messages are tried again
+
+    sam_stat_handle_t *stat;
 } state_t;
 
 
@@ -241,6 +243,8 @@ update_record_tries (
             "discarding message '%d'", sam_db_get_key (state->db));
 
         del (state);
+
+        sam_stat (state->stat, "buf.discarded messages", 1);
         return -1;
     }
 
@@ -249,7 +253,7 @@ update_record_tries (
 
 
 //  --------------------------------------------------------------------------
-/// Checks if the record is inside the bounds of messages to be resent.
+/// Checks if the record is inside the bounds of messages to be re-sent.
 static int
 resend_condition (
     state_t *state,
@@ -295,7 +299,7 @@ resend_message (
     int msg_id = sam_db_get_key (db);
     int count = header->c.record.acks_remaining;
 
-    sam_log_tracef ("resending msg '%d'", msg_id);
+    sam_log_tracef ("re-sending msg '%d'", msg_id);
     zsock_send (state->out, "ifip", msg_id, id_frame, count, msg);
 
     zframe_destroy (&id_frame);
@@ -610,10 +614,12 @@ handle_storage_req (
     else if (ret == SAM_DB_NOTFOUND) {
         // key was already set by get ()
         rc = create_record_store (state, msg, count);
+        sam_stat (state->stat, "buf.created records", 1);
     }
 
     sam_db_end (db, (rc)? true: false);
     sam_msg_destroy (&msg);
+
     return rc;
 }
 
@@ -650,20 +656,21 @@ handle_backend_req (
         be_id, msg_id);
 
     rc = handle_ack (state, be_id, msg_id);
+    sam_stat (state->stat, "buf.acknowledgments", 1);
     return rc;
 }
 
 
 
 //  --------------------------------------------------------------------------
-/// Checks in a fixed interval if messages need to be resent.
+/// Checks in a fixed interval if messages need to be re-sent.
 static int
 handle_resend (
     zloop_t *loop UU,
     int timer_id UU,
     void *args)
 {
-    sam_log_trace ("resend cycle triggered");
+    sam_log_trace ("re-send cycle triggered");
 
     state_t *state = args;
     sam_db_t *db = state->db;
@@ -736,7 +743,6 @@ handle_resend (
             break;
         }
 
-
         //  create tombstone
         //  resets cursor position
         if (insert_tombstone (state, prev_id, &cur_id)) {
@@ -744,6 +750,7 @@ handle_resend (
             break;
         }
 
+        sam_stat (state->stat, "buf.re-sent messages", 1);
         rc = sam_db_sibling (db, SAM_DB_NEXT);
     }
 
@@ -791,6 +798,8 @@ actor (
     zsock_destroy (&state->in);
     zsock_destroy (&state->out);
     zsock_destroy (&state->store_sock);
+
+    sam_stat_handle_destroy (&state->stat);
 
     free (state);
 }
@@ -921,6 +930,8 @@ sam_buf_new (
     if (sam_db_restore (state)) {
         goto abort;
     }
+
+    state->stat = sam_stat_handle_new ();
 
     // spawn actor
     self->actor = zactor_new (actor, state);

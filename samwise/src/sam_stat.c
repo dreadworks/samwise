@@ -46,6 +46,7 @@ typedef struct state_t {
     struct {
         zhash_t *sam;
         zhash_t *samd;
+        zhash_t *buf;
     } metrics;
 
 } state_t;
@@ -91,7 +92,7 @@ resolve (
     if (tok) {
 
         // retrieve map
-        zhash_t *map;
+        zhash_t *map = NULL;
 
         if (!strcmp (tok, "sam")) {
             map = state->metrics.sam;
@@ -99,10 +100,11 @@ resolve (
         else if (!strcmp (tok, "samd")) {
             map = state->metrics.samd;
         }
-        else {
-            assert (false);
+        else if (!strcmp (tok, "buf")) {
+            map = state->metrics.buf;
         }
 
+        assert (map);
 
         // insert/update item
         char *key = strtok (NULL, delim);
@@ -169,12 +171,14 @@ handle_digest (
     zhash_t *map_refs [] = {
         state->metrics.samd,
         state->metrics.sam,
+        state->metrics.buf,
         NULL
     };
 
     const char *map_names [] = {
         "samd",
         "sam",
+        "buffer",
         NULL
     };
 
@@ -241,6 +245,9 @@ actor (
     state.metrics.samd = zhash_new ();
     zhash_set_destructor (state.metrics.samd, free_metric);
 
+    state.metrics.buf = zhash_new ();
+    zhash_set_destructor (state.metrics.buf, free_metric);
+
 
     // initialize reactor
     zloop_reader (loop, pipe, sam_gen_handle_pipe, NULL);
@@ -263,6 +270,7 @@ actor (
 
     zhash_destroy (&state.metrics.sam);
     zhash_destroy (&state.metrics.samd);
+    zhash_destroy (&state.metrics.buf);
 }
 
 

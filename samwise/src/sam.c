@@ -193,6 +193,7 @@ handle_frontend_pub (
     int backend_c = zlist_size (state->backends);
     if (!backend_c) {
         sam_log_trace ("discarding message, no backends available");
+        sam_stat (state->stat, "sam.publishing requests (discarded)", 1);
         sam_msg_destroy (&msg);
         return 0;
     }
@@ -228,6 +229,7 @@ handle_frontend_pub (
         if (n && !backend_c) {
             sam_log_info (
                 "discarding redundant msg, not enough backends available");
+            sam_stat (state->stat, "sam.publishing requests (discarded)", 1);
         }
     }
 
