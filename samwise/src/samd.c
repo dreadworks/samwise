@@ -96,8 +96,9 @@ handle_req (
         free (ret->msg);
     }
 
+    rc = (ret->rc == SAM_RET_RESTART)? -1: 0;
     free (ret);
-    return (ret->rc == SAM_RET_RESTART)? -1: 0;
+    return rc;
 }
 
 
