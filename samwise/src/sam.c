@@ -64,6 +64,8 @@ typedef struct state_t {
     zsock_t *frontend_rpc;   ///< reply socket for rpc requests
     zsock_t *frontend_pub;   ///< pull socket for publishing requests
     zlist_t *backends;       ///< maintains backend handles
+
+    sam_stat_handle_t *stat;
 } state_t;
 
 
@@ -85,8 +87,6 @@ struct sam_t {
     sam_stat_handle_t *stat;      ///< handle to send metrics
 
     zactor_t *actor;              ///< thread maintaining broker connections
-
-    int TMP_COUNTER;
 };
 
 
@@ -177,6 +177,7 @@ handle_frontend_pub (
     void *args)
 {
     state_t *state = args;
+    sam_stat (state->stat, "sam.publishing requests (total)", 1);
 
     int key, n;
     sam_msg_t *msg;       // only use thread safe methods!
@@ -221,6 +222,7 @@ handle_frontend_pub (
                 key, backend->name);
 
             zsock_send (backend->sock_pub, "ip", key, msg);
+            sam_stat (state->stat, "sam.publishing requests (distributed)", 1);
         }
 
         if (n && !backend_c) {
@@ -382,6 +384,8 @@ actor (
     sam_log_trace ("destroying loop");
     zloop_destroy (&loop);
 
+    sam_stat_handle_destroy (&state->stat);
+
     zsock_destroy (&state->frontend_pub);
     zsock_destroy (&state->frontend_rpc);
 
@@ -427,7 +431,7 @@ sam_new (
 
     self->stat_actor = sam_stat_new ();
     self->stat = sam_stat_handle_new ();
-
+    state->stat = sam_stat_handle_new ();
 
     // publishing requests
     self->frontend_pub_endpoint = "inproc://sam-pub";
@@ -475,7 +479,6 @@ sam_new (
 
     state->backends = zlist_new ();
 
-    self->TMP_COUNTER = 0;
     return self;
 }
 
@@ -502,6 +505,7 @@ sam_destroy (
 
     sam_stat_handle_destroy (&(*self)->stat);
     sam_stat_destroy (&(*self)->stat_actor);
+
     sam_cfg_destroy (&(*self)->cfg);
 
     free (*self);
@@ -960,7 +964,7 @@ sam_eval (
             return error (msg, "malformed publishing request");
         }
 
-        sam_stat (self->stat, "sam.publishing requests", 1);
+        sam_stat (self->stat, "sam.publishing requests (clients)", 1);
 
 
         // analyze distribution method and count
