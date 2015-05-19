@@ -203,10 +203,7 @@ handle_frontend_pub (
         n, backend_c, be_acks);
 
 
-    while (0 < n && 0 < backend_c) {
-        n -= 1;
-        backend_c -= 1;
-
+    while (n && backend_c) {
         sam_backend_t *backend = zlist_next (state->backends);
 
         if (backend == NULL) {
@@ -223,14 +220,19 @@ handle_frontend_pub (
                 key, backend->name);
 
             zsock_send (backend->sock_pub, "ip", key, msg);
+
+            n -= 1;
             sam_stat (state->stat, "sam.publishing requests (distributed)", 1);
         }
 
+
+        backend_c -= 1;
         if (n && !backend_c) {
             sam_log_info (
                 "discarding redundant msg, not enough backends available");
-            sam_stat (state->stat, "sam.publishing requests (discarded)", 1);
+            sam_stat (state->stat, "sam.publishing requests (discarded)", n);
         }
+
     }
 
     sam_msg_destroy (&msg);
