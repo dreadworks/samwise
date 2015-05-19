@@ -148,6 +148,8 @@ samd_new (
     assert (self->client_rep);
     sam_log_tracef ("bound public endpoint '%s'", endpoint);
 
+    self->stat = sam_stat_handle_new ();
+
     rc = sam_init (self->sam, &cfg);
     if (rc) {
         if (cfg) {
@@ -157,8 +159,6 @@ samd_new (
         samd_destroy (&self);
         return NULL;
     }
-
-    self->stat = sam_stat_handle_new ();
 
     sam_log_info ("created samd");
     return self;
