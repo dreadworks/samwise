@@ -621,9 +621,14 @@ init_backends (
     names_ptr = names;
     opts_ptr = opts;
 
-    if (rc || !count) {
-        sam_log_error ("there are no backends to initialize");
+    if (rc) {
+        sam_log_error ("backends could not be loaded, "
+                       "check the configuration for errors");
         return -1;
+    }
+
+    if (!count) {
+        return 0;
     }
 
     while (count) {
@@ -634,7 +639,9 @@ init_backends (
             zsock_send (self->ctl_req, "sp", "be.add", be);
 
             rc = -1;
-            sam_log_tracef ("recv () for return code of 'be.add' for '%s'", name);
+            sam_log_tracef (
+                "recv () for return code of 'be.add' for '%s'", name);
+
             zsock_recv (self->ctl_req, "i", &rc);
             if (rc) {
                 sam_log_errorf (
