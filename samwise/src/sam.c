@@ -228,7 +228,7 @@ handle_frontend_pub (
 
         backend_c -= 1;
         if (n && !backend_c) {
-            sam_log_info (
+            sam_log_trace (
                 "discarding redundant msg, not enough backends available");
             sam_stat (state->stat, "sam.publishing requests (discarded)", n);
         }
@@ -510,7 +510,9 @@ sam_destroy (
     sam_stat_handle_destroy (&(*self)->stat);
     sam_stat_destroy (&(*self)->stat_actor);
 
-    sam_cfg_destroy (&(*self)->cfg);
+    if ((*self)->cfg) {
+        sam_cfg_destroy (&(*self)->cfg);
+    }
 
     free (*self);
     *self = NULL;
@@ -684,6 +686,7 @@ sam_init (
     assert (*cfg);
 
     if (self->cfg) {
+        sam_log_error ("DESTROY");
         sam_cfg_destroy (&self->cfg);
     }
 
@@ -875,7 +878,6 @@ aggregate_backend_info (sam_t *self)
         return buf;
     }
 
-
     // aggregate backend information
     buf = malloc (buf_size * backend_c * sizeof (char));
     char *buf_ptr = buf;
@@ -889,7 +891,6 @@ aggregate_backend_info (sam_t *self)
         buf_ptr += str_len + 1;
         free (str);
     }
-
 
     // compose final string
     char head [buf_size];

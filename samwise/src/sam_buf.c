@@ -239,7 +239,7 @@ update_record_tries (
     header->c.record.tries -= 1;
 
     if (!header->c.record.tries) {
-        sam_log_infof (
+        sam_log_tracef (
             "discarding message '%d'", sam_db_get_key (state->db));
 
         del (state);

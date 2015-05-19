@@ -83,6 +83,8 @@ handle_req (
     }
 
     else {
+        sam_stat (self->stat, "samd.valid requests", 1);
+
         sam_msg_t *msg = sam_msg_new (&zmsg);
         ret = sam_eval (self->sam, msg);
     }
@@ -128,40 +130,50 @@ samd_new (
     samd_t *self = malloc (sizeof (samd_t));
     assert (self);
 
+    self->stat = sam_stat_handle_new ();
+
     sam_cfg_t *cfg = sam_cfg_new (cfg_file);
     if (!cfg) {
-        return NULL;
+        goto abort;
+    }
+
+    char *endpoint;
+    int rc = sam_cfg_endpoint (cfg, &endpoint);
+    if (rc) {
+        goto abort;
     }
 
     sam_be_t be_type;
-    int rc = sam_cfg_be_type (cfg, &be_type);
+    rc = sam_cfg_be_type (cfg, &be_type);
     self->sam = sam_new (be_type);
     assert (self->sam);
 
-    char *endpoint;
-    rc = sam_cfg_endpoint (cfg, &endpoint);
-    if (rc) {
-        return NULL;
+    self->client_rep = zsock_new_rep (endpoint);
+    if (!self->client_rep) {
+        sam_log_errorf ("could not bind endpoint '%s'", endpoint);
+        goto abort;
     }
 
-    self->client_rep = zsock_new_rep (endpoint);
-    assert (self->client_rep);
-    sam_log_tracef ("bound public endpoint '%s'", endpoint);
 
-    self->stat = sam_stat_handle_new ();
+    sam_log_tracef ("bound public endpoint '%s'", endpoint);
 
     rc = sam_init (self->sam, &cfg);
     if (rc) {
-        if (cfg) {
-            sam_cfg_destroy (&cfg);
-        }
-
-        samd_destroy (&self);
-        return NULL;
+        goto abort;
     }
 
     sam_log_info ("created samd");
     return self;
+
+
+abort:
+    samd_destroy (&self);
+
+    if (cfg) {
+        sam_cfg_destroy (&cfg);
+    }
+
+    return NULL;
 }
 
 
