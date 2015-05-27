@@ -115,16 +115,15 @@ publish (
         char buf [64];
         snprintf (buf, 64, "message no %d", count);
 
-        samwise_pub_t pub = {
-            .disttype = args->disttype,
-            .distcount = args->d,
+        samwise_pub_t pub;
+        memset (&pub, 0, sizeof (samwise_pub_t));
 
-            .exchange = "amq.direct",
-            .routing_key = "",
+        pub.disttype = args->disttype;
+        pub.distcount = args->d;
 
-            .size = strlen (buf),
-            .msg = buf
-        };
+        pub.exchange = "amq.direct";
+        pub.size = strlen (buf);
+        pub.msg = buf;
 
         sprintf (buf, "publishing message %d", count);
         out (VERBOSE, state->args, buf);

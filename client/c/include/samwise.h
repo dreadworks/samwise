@@ -53,6 +53,29 @@ typedef struct samwise_pub_t {
 
     char *exchange;
     char *routing_key;
+    int mandatory;
+    int immediate;
+
+    struct {
+        char *content_type;
+        char *content_encoding;
+        char *delivery_mode;
+        char *priority;
+        char *correlation_id;
+        char *reply_to;
+        char *expiration;
+        char *message_id;
+        char *type;
+        char *user_id;
+        char *app_id;
+        char *cluster_id;
+    } options;
+
+    struct {
+        char **keys;
+        char **values;
+        size_t amount;
+    } headers;
 
     char *msg;
     size_t size;
