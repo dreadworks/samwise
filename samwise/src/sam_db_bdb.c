@@ -83,6 +83,21 @@ PRINT_DB_INFO (sam_db_t *self)
 */
 
 
+static int
+bt_compare_int (
+    DB *dbp UU,
+    const DBT *a,
+    const DBT *b,
+    size_t *size UU)
+{
+    int
+        ai = *(int *) a->data,
+        bi = *(int *) b->data;
+
+    return ai - bi;
+}
+
+
 //  --------------------------------------------------------------------------
 /// Generic error handler invoked by DB.
 static void
@@ -184,7 +199,9 @@ sam_db_new (
         return NULL;
     }
 
-   rc = self->dbp->open (
+    self->dbp->set_bt_compare (self->dbp, bt_compare_int);
+
+    rc = self->dbp->open (
         self->dbp,
         NULL,             // transaction pointer
         fname,            // on disk file
@@ -198,7 +215,6 @@ sam_db_new (
         sam_db_destroy (&self);
         return NULL;
     }
-
 
     stat_db_size (self);
     self->dbp->set_errcall (self->dbp, db_error_handler);

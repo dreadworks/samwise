@@ -90,15 +90,17 @@ handle_req (
     }
 
     sam_log_tracef ("sending reply to client (%d)", ret->rc);
-    zsock_send (client_rep, "is", ret->rc, ret->msg);
+
+    int rc = (ret->rc == SAM_RET_RESTART)? 0: ret->rc;
+    zsock_send (client_rep, "is", rc, ret->msg);
 
     if (ret->allocated) {
         free (ret->msg);
     }
 
-    int rc = ret->rc;
+    rc = (ret->rc == SAM_RET_RESTART)? -1: 0;
     free (ret);
-    return (rc == SAM_RET_RESTART)? -1: 0;
+    return rc;
 }
 
 
@@ -159,7 +161,6 @@ samd_new (
     if (rc) {
         goto abort;
     }
-
 
     sam_log_info ("created samd");
     return self;

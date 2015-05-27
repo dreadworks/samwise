@@ -73,6 +73,7 @@ typedef struct state_t {
     // data to be restored after restart
     int seq;                ///< used to assign unique message id's
     int last_stored;        ///< used to decide if it's a premature ack
+    int tombstone_zone;     ///< to skip tombstones upon re-send
 
     sam_db_t *db;           ///< storage engine
 
@@ -83,6 +84,8 @@ typedef struct state_t {
     int tries;              ///< maximum number of retries for a message
     uint64_t interval;      ///< how often messages are being tried again
     uint64_t threshold;     ///< at which point messages are tried again
+
+    sam_stat_handle_t *stat;
 } state_t;
 
 
@@ -157,8 +160,6 @@ del (
     sam_db_t *db = state->db;
 
     do {
-        sam_db_del (db);
-
         // determine previous tombstone - if any
         record_t *header;
         sam_db_get_val (db, NULL, (void **) &header);
@@ -176,6 +177,9 @@ del (
             sam_log_errorf ("unexpected record type: 0x%x", header->type);
             assert (false);
         }
+
+        sam_db_del (db);
+        sam_log_errorf ("deleting %d", curr_key);
 
         // prepare next round
         if (prev_key) {
@@ -220,6 +224,7 @@ insert_tombstone (
 
     // write new key
     sam_db_set_key (db, position);
+    state->tombstone_zone = *position;
 
     // write new data
     return sam_db_put (db, size, (void *) &tombstone);
@@ -237,10 +242,12 @@ update_record_tries (
     header->c.record.tries -= 1;
 
     if (!header->c.record.tries) {
-        sam_log_infof (
+        sam_log_tracef (
             "discarding message '%d'", sam_db_get_key (state->db));
 
         del (state);
+
+        sam_stat (state->stat, "buf.discarded messages", 1);
         return -1;
     }
 
@@ -249,7 +256,7 @@ update_record_tries (
 
 
 //  --------------------------------------------------------------------------
-/// Checks if the record is inside the bounds of messages to be resent.
+/// Checks if the record is inside the bounds of messages to be re-sent.
 static int
 resend_condition (
     state_t *state,
@@ -258,8 +265,8 @@ resend_condition (
     assert (header);
 
     if (header->type == RECORD) {
-        uint64_t eps = zclock_mono () - header->c.record.ts;
-        return (state->threshold < eps)? 0: -1;
+        int64_t eps = zclock_mono () - header->c.record.ts;
+        return ((int64_t) state->threshold < eps)? 0: -1;
     }
 
     return 0;
@@ -295,13 +302,12 @@ resend_message (
     int msg_id = sam_db_get_key (db);
     int count = header->c.record.acks_remaining;
 
-    sam_log_tracef ("resending msg '%d'", msg_id);
+    sam_log_tracef ("re-sending msg '%d'", msg_id);
     zsock_send (state->out, "ifip", msg_id, id_frame, count, msg);
 
     zframe_destroy (&id_frame);
     return 0;
 }
-
 
 
 //  --------------------------------------------------------------------------
@@ -610,10 +616,12 @@ handle_storage_req (
     else if (ret == SAM_DB_NOTFOUND) {
         // key was already set by get ()
         rc = create_record_store (state, msg, count);
+        sam_stat (state->stat, "buf.created records", 1);
     }
 
     sam_db_end (db, (rc)? true: false);
     sam_msg_destroy (&msg);
+
     return rc;
 }
 
@@ -650,34 +658,45 @@ handle_backend_req (
         be_id, msg_id);
 
     rc = handle_ack (state, be_id, msg_id);
+    sam_stat (state->stat, "buf.acknowledgments", 1);
     return rc;
 }
 
 
 
 //  --------------------------------------------------------------------------
-/// Checks in a fixed interval if messages need to be resent.
+/// Checks in a fixed interval if messages need to be re-sent.
 static int
 handle_resend (
     zloop_t *loop UU,
     int timer_id UU,
     void *args)
 {
-    sam_log_trace ("resend cycle triggered");
+    sam_log_trace ("re-send cycle triggered");
 
     state_t *state = args;
     sam_db_t *db = state->db;
 
     sam_db_begin (db);
-    sam_log_trace ("beginning transaction");
 
     int first_requeued_key = 0; // can never be zero
-    int rc = sam_db_sibling (db, SAM_DB_NEXT);
+    sam_db_ret_t rc = SAM_DB_NOTFOUND;
+
+
+    // skip tombstones if there are any
+    if (state->tombstone_zone) {
+        rc = sam_db_get (db, &state->tombstone_zone);
+    } else {
+        rc = sam_db_sibling (db, SAM_DB_NEXT);
+    }
+
+
     record_t *header;
 
     if (!rc) {
         sam_db_get_val (db, NULL, (void **) &header);
     }
+
 
     while (
         !rc &&                                        // there's another item
@@ -736,7 +755,6 @@ handle_resend (
             break;
         }
 
-
         //  create tombstone
         //  resets cursor position
         if (insert_tombstone (state, prev_id, &cur_id)) {
@@ -744,6 +762,7 @@ handle_resend (
             break;
         }
 
+        sam_stat (state->stat, "buf.re-sent messages", 1);
         rc = sam_db_sibling (db, SAM_DB_NEXT);
     }
 
@@ -792,6 +811,8 @@ actor (
     zsock_destroy (&state->out);
     zsock_destroy (&state->store_sock);
 
+    sam_stat_handle_destroy (&state->stat);
+
     free (state);
 }
 
@@ -806,6 +827,7 @@ sam_db_restore (
 {
     state->seq = 0;
     state->last_stored = 0;
+    state->tombstone_zone = 0;
 
     sam_db_t *db = state->db;
     if (sam_db_begin (db)) {
@@ -921,6 +943,8 @@ sam_buf_new (
     if (sam_db_restore (state)) {
         goto abort;
     }
+
+    state->stat = sam_stat_handle_new ();
 
     // spawn actor
     self->actor = zactor_new (actor, state);

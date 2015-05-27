@@ -485,6 +485,7 @@ read_backends_rmq (
             "interval",  &interval_str);
 
         if (rc) {
+            free (names);
             free (opts);
             return rc;
         }

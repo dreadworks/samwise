@@ -64,6 +64,8 @@ typedef struct state_t {
     zsock_t *frontend_rpc;   ///< reply socket for rpc requests
     zsock_t *frontend_pub;   ///< pull socket for publishing requests
     zlist_t *backends;       ///< maintains backend handles
+
+    sam_stat_handle_t *stat;
 } state_t;
 
 
@@ -85,8 +87,6 @@ struct sam_t {
     sam_stat_handle_t *stat;      ///< handle to send metrics
 
     zactor_t *actor;              ///< thread maintaining broker connections
-
-    int TMP_COUNTER;
 };
 
 
@@ -177,6 +177,7 @@ handle_frontend_pub (
     void *args)
 {
     state_t *state = args;
+    sam_stat (state->stat, "sam.publishing requests (total)", 1);
 
     int key, n;
     sam_msg_t *msg;       // only use thread safe methods!
@@ -192,6 +193,7 @@ handle_frontend_pub (
     int backend_c = zlist_size (state->backends);
     if (!backend_c) {
         sam_log_trace ("discarding message, no backends available");
+        sam_stat (state->stat, "sam.publishing requests (discarded)", 1);
         sam_msg_destroy (&msg);
         return 0;
     }
@@ -201,10 +203,7 @@ handle_frontend_pub (
         n, backend_c, be_acks);
 
 
-    while (0 < n && 0 < backend_c) {
-        n -= 1;
-        backend_c -= 1;
-
+    while (n && backend_c) {
         sam_backend_t *backend = zlist_next (state->backends);
 
         if (backend == NULL) {
@@ -221,12 +220,19 @@ handle_frontend_pub (
                 key, backend->name);
 
             zsock_send (backend->sock_pub, "ip", key, msg);
+
+            n -= 1;
+            sam_stat (state->stat, "sam.publishing requests (distributed)", 1);
         }
 
+
+        backend_c -= 1;
         if (n && !backend_c) {
-            sam_log_info (
+            sam_log_trace (
                 "discarding redundant msg, not enough backends available");
+            sam_stat (state->stat, "sam.publishing requests (discarded)", n);
         }
+
     }
 
     sam_msg_destroy (&msg);
@@ -382,6 +388,8 @@ actor (
     sam_log_trace ("destroying loop");
     zloop_destroy (&loop);
 
+    sam_stat_handle_destroy (&state->stat);
+
     zsock_destroy (&state->frontend_pub);
     zsock_destroy (&state->frontend_rpc);
 
@@ -427,7 +435,7 @@ sam_new (
 
     self->stat_actor = sam_stat_new ();
     self->stat = sam_stat_handle_new ();
-
+    state->stat = sam_stat_handle_new ();
 
     // publishing requests
     self->frontend_pub_endpoint = "inproc://sam-pub";
@@ -475,7 +483,6 @@ sam_new (
 
     state->backends = zlist_new ();
 
-    self->TMP_COUNTER = 0;
     return self;
 }
 
@@ -620,9 +627,14 @@ init_backends (
     names_ptr = names;
     opts_ptr = opts;
 
-    if (rc || !count) {
-        sam_log_error ("there are no backends to initialize");
+    if (rc) {
+        sam_log_error ("backends could not be loaded, "
+                       "check the configuration for errors");
         return -1;
+    }
+
+    if (!count) {
+        return 0;
     }
 
     while (count) {
@@ -633,7 +645,9 @@ init_backends (
             zsock_send (self->ctl_req, "sp", "be.add", be);
 
             rc = -1;
-            sam_log_tracef ("recv () for return code of 'be.add' for '%s'", name);
+            sam_log_tracef (
+                "recv () for return code of 'be.add' for '%s'", name);
+
             zsock_recv (self->ctl_req, "i", &rc);
             if (rc) {
                 sam_log_errorf (
@@ -860,7 +874,7 @@ aggregate_backend_info (sam_t *self)
 
     if (!backend_c) {
         buf = malloc (buf_size);
-        snprintf (buf, buf_size, "No backends connected");
+        snprintf (buf, buf_size, "No backends registered");
         return buf;
     }
 
@@ -883,7 +897,7 @@ aggregate_backend_info (sam_t *self)
     snprintf (
         head,
         buf_size,
-        "%d backend(s) connected:",
+        "%d backend(s) registered:",
         backend_c);
 
     size_t
@@ -962,7 +976,7 @@ sam_eval (
             return error (msg, "malformed publishing request");
         }
 
-        sam_stat (self->stat, "sam.publishing requests", 1);
+        sam_stat (self->stat, "sam.publishing requests (clients)", 1);
 
 
         // analyze distribution method and count
