@@ -1,0 +1,19 @@
+PATH
+  remote: .
+  specs:
+    samwise (0.1.0)
+      ffi
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    ffi (1.9.8)
+    rake (10.4.2)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  bundler (~> 1.9)
+  rake (~> 10.0)
+  samwise!
