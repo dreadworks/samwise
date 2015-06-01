@@ -1,10 +1,13 @@
 
 ##
-# Message to send via samwise client library
+# Message to send via libsamwise. Used by Samwise::Client#publish
 
 class Samwise::Message
 
+  # distribution strategies
   DIST_T = [:redundant, :roundrobin]
+
+  # offers access to the underlying FFI::Struct
   attr_reader :pub_t
 
 
@@ -39,6 +42,7 @@ class Samwise::Message
 
   ##
   # Layout of the samwise_pub_t struct
+
   class Pub_t < FFI::Struct
     layout :disttype,    :int,
            :distcount,   :int,
