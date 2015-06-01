@@ -2,6 +2,7 @@ require 'ffi'
 
 require 'samwise/version'
 require 'samwise/client'
+require 'samwise/message'
 
 
 ##
@@ -18,6 +19,6 @@ module Samwise
   attach_function :samwise_destroy, [:pointer], :void
 
   attach_function :samwise_ping, [:pointer], :int
-
+  attach_function :samwise_publish, [:pointer, :pointer], :int
 
 end

@@ -34,4 +34,14 @@ class Samwise::Client
     rc == 0? true: false
   end
 
+
+  ##
+  # Hands a message object over to libsamwise for publishing
+
+  def publish msg
+    rc = Samwise.samwise_publish @sam, msg.pub_t
+    rc == 0? true: false
+  end
+
+
 end
