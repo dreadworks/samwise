@@ -4,6 +4,8 @@ Samwise the stoutharted. A store and forward messaging service.
 
 ![Samwise Threads](../img/sam_threads.png)
 
+Please see the source code commentary for a thorough explanation of the different modules and the issue tracker for current bugs and planned features.
+
 
 ## Installation ##
 
