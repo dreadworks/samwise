@@ -2,6 +2,9 @@
 
 Samwise the stoutharted. A store and forward messaging service.
 
+![Samwise Threads](../img/sam_threads.png)
+
+
 ## Installation ##
 
 ```
@@ -38,6 +41,24 @@ To render the documentation the program `doxygen` is used. The rendered document
 Currently there are a number of shell script files inside the `samwise/tools` directory. As their suffix hints, they are written for the [fish shell](fishshell.com). You can safely run them like `. tools/script.fish argument1`. Please see below for a documentation of the various scripts.
 
 
+### Install dependencies locally - deps.fish ###
+
+This script automatically downloads all libraries samwise depends on and installs them into the projects root directory. It creates a folder `/usr` used as the prefix to build all dependencies. Additionally, to be able to compile and link against the local installations, all required environmental veriables are set.
+
+```bash
+. tools/deps.fish
+```
+
+
+### Create a TAGS file - tags.fish ###
+
+To efficiently jump to function definitions with emacs using `find-tag` and its friends, a TAGS file must be generated using the `etags` program. To build the symbol table and access the files containing the definitions and declarations, `tags.fish` clones all dependencies into `/.tags` and creates `/samwise/TAGS`.
+
+```bash
+. tools/tags.fish
+```
+
+
 ### Release a new version - release.fish ###
 
 This script updates all places where version numbers are used. Currently the touched files are `include/sam.h`, `Doxyfile` and `configure.ac`. A new `configure.scan` is created for this purpose. You can call it like this:
@@ -45,31 +66,10 @@ This script updates all places where version numbers are used. Currently the tou
 ```bash
 . tools/release.fish major minor patch [cflags]
 # where major, minor and patch are numbers
-# optional: cflags - additional compile flags
 
 # for example
-. tools/release.fish 1 0 3 "-g"
+. tools/release.fish 1 0 3
 
-```
-
-
-### Install dependencies locally - deps.fish ###
-
-This script automatically downloads all libraries samwise depends on and installs them into the projects root directory. It creates a folder `/usr` used as the prefix to build all dependencies. Additionally, to be able to compile and link against the local installations, all required environmental veriables are set. 
-
-```bash
-. tools/deps.fish [cflags]
-# for example
-. tools/deps.fish
-```
-
-
-### Create a TAGS file - tags.fish ###
-
-To efficiently jump to function definitions with emacs using `find-tag` and its friends, a TAGS file must be generated using the `etags` program. To build the symbol table and access the files containing the definitions and declarations, `tags.fish` clones all dependencies into `.tags` and creates `samwise/TAGS`.
-
-```bash
-. tools/tags.fish
 ```
 
 
@@ -87,62 +87,6 @@ I wholeheartedly disagree that omitting the curly braces for one-line if stateme
 ```C
 // always like this, please:
 if (condition) {
-    // ...
-}
-```
-
-### Additional Conventions ###
-
-As far as possible, code and documentation should never exceed 80 characters per line. The code documentation gets rendered by doxygen with the java style syntax using the `@` prefix. Doxygen and CLASS -style comments are getting mixed.
-
-Files should be documented like this:
-
-```C
-/*  =========================================================================
-
-    name - summary
-
-    license
-
-    =========================================================================
-*/
-/**
-
-   @brief brief description
-
-   thorough description
-
-*/
-
-// ...
-
-```
-
-The header file just contains a brief description of the function, the necessary parameters and the expected return value. A more thorough documentation of the specific implementation of that function can be found in the *.c file.
-
-For *.h files:
-
-```C
-//  --------------------------------------------------------------------------
-/// @brief   short description of the functions purpose
-/// @param   args some arguments
-/// @param   argc argc size of the argument vector
-/// @return  0 for success, -1 for error
-int
-sam_stuff (void *args, int argc);
-```
-
-For *.c files:
-
-```C
-//  --------------------------------------------------------------------------
-/// Brief description ending with the full stop.
-/// Detailed description after the first sentence. Should be used to precisely
-/// describe how the function works. Inline comments should be avoided as much
-/// as possible - the code should be self-explanatory.
-int
-sam_stuff (void *args, int argc)
-{
     // ...
 }
 ```
