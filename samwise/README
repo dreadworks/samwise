@@ -17,6 +17,88 @@ make
 This compiles `samd`, `sam_selftest` and `libsam.so`. The library `libsam` gets linked statically to the binaries. The dependencies are linked dynamically and you are responsible for their proper installation.
 
 
+### Send All Messages Daemon (samd) ###
+
+The main program. You need to provide a configuration file for proper execution. You can find examples of configuration files in the /samwise/cfg directory and its subdirectories. To control the verbosity of the logging you (currently and unfortunately) need to change the log threshold in `include/sam.h`.
+
+```
+./samd cfg/base.cfg
+
+```
+
+
+### Sam Control Interface (samctl) ###
+
+The control interface is used to communicate with a running samwise daemon instance.
+
+```
+
+~/C/s/s/samwise [master]
+ ▸ ./samctl --help
+Usage: samctl [OPTION...] COMMAND
+ ___ __ _ _ ____ __ _(_)___ ___   __ ___ _ _| |_ _ _ ___| |
+(_-</ _` | '  \ V  V / (_-</ -_) / _/ _ \ ' \  _| '_/ _ \ |
+/__/\__,_|_|_|_\_/\_/|_/__/\___| \__\___/_||_\__|_| \___/_|
+
+Currently the following commands are supported:
+  ping      Ping samwise
+  status    Get extensive status information about samd's state
+  stop      Order samd to kill itself
+  restart   Restart samd
+
+Additionally the following options can be provided:
+
+  -c, --config=CFG           Specify a configuration file (or use -e)
+  -e, --endpoint=ENDPOINT    Specify the endpoint (or use -c)
+  -q, --quiet                Suppress output
+  -v, --verbose              Verbose output
+  -?, --help                 Give this help list
+      --usage                Give a short usage message
+  -V, --version              Print program version
+
+Mandatory or optional arguments to long options are also mandatory or optional
+for any corresponding short options.
+
+Report bugs to http://github.com/dreadworks/samwise/issues.
+
+```
+
+
+For example, to get more information about the current state of the daemon, use the "status" command:
+
+
+```
+
+~/C/s/s/samwise [master]
+ ▸ ./samctl -c cfg/base.cfg status
+
+BACKENDS:
+1 backend(s) registered:
+
+broker-1 (id: 0x1) (localhost:5672 as 'guest'):
+  connected: yep (3/3 tries every 5000ms)
+  heartbeat: every 3 seconds
+  current sequence number: 2
+  pending acks: 0
+
+METRICS:
+
+samd:
+  valid requests: 1
+  accepted requests: 2
+
+sam:
+  publishing requests (total): 1
+  publishing requests (distributed): 1
+  publishing requests (clients): 1
+
+buffer:
+  acknowledgments: 1
+  created records: 1
+
+```
+
+
 ## Dependencies ##
 
 ### Building samwise ###
