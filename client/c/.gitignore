@@ -22,4 +22,5 @@ src/.dirstamp
 
 Makefile
 
+lib/
 samcli
