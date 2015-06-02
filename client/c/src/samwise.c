@@ -52,7 +52,7 @@ static zmsg_t *
 create_msg ()
 {
     zmsg_t *msg = zmsg_new ();
-    zmsg_addstr (msg, "100");
+    zmsg_addstr (msg, SAMWISE_PROTOCOL_VERSION);
     return msg;
 }
 

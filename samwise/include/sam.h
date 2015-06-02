@@ -64,7 +64,7 @@ extern "C" {
 #define UU __attribute__((unused))
 
 // global configuration
-#define SAM_PROTOCOL_VERSION 100
+#define SAM_PROTOCOL_VERSION 120
 #define SAM_RET_RESTART 0x10
 
 // enable stats

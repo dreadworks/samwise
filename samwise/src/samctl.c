@@ -22,9 +22,6 @@
 #include "../include/sam_prelude.h"
 
 
-#define SAM_PROTOCOL_VERSION 100
-
-
 typedef struct args_t args_t;
 typedef struct ctl_t ctl_t;
 typedef void (cmd_fn) (ctl_t *ctl, args_t *args);

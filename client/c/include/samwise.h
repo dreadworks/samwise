@@ -34,6 +34,7 @@ extern "C" {
 
 
 #define UU __attribute__((unused))
+#define SAMWISE_PROTOCOL_VERSION "120"
 
 
 typedef struct samwise_t samwise_t;
