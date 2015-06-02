@@ -179,7 +179,6 @@ del (
         }
 
         sam_db_del (db);
-        sam_log_errorf ("deleting %d", curr_key);
 
         // prepare next round
         if (prev_key) {
