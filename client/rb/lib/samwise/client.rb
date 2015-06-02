@@ -1,3 +1,5 @@
+##
+# This class offers the ffi binding to libsamwise
 
 class Samwise::Client
 
