@@ -544,7 +544,7 @@ START_TEST(test_cfg_be_backends_rmq)
     // broker-1
     ck_assert_str_eq (*names, "broker-1");
     ck_assert_str_eq (opts->host, "localhost");
-    ck_assert_int_eq (opts->port, 5672);
+    ck_assert_int_eq (opts->port, 15672);
     ck_assert_str_eq (opts->user, "guest");
     ck_assert_str_eq (opts->pass, "guest");
     ck_assert_int_eq (opts->heartbeat, 3);
@@ -558,7 +558,7 @@ START_TEST(test_cfg_be_backends_rmq)
     // broker-2
     ck_assert_str_eq (*names, "broker-2");
     ck_assert_str_eq (opts->host, "localhost");
-    ck_assert_int_eq (opts->port, 5673);
+    ck_assert_int_eq (opts->port, 15672);
     ck_assert_str_eq (opts->user, "guest");
     ck_assert_str_eq (opts->pass, "guest");
     ck_assert_int_eq (opts->heartbeat, 3);

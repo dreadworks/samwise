@@ -35,7 +35,7 @@ setup_connection ()
 
     sam_be_rmq_opts_t opts = {
         .host = "localhost",
-        .port = 5672,
+        .port = 15672,
         .user = "guest",
         .pass = "guest",
         .heartbeat = 1

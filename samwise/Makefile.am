@@ -88,3 +88,33 @@ sam_selftest_SOURCES =   \
 sam_selftest_LDADD = src/libsam.la
 sam_selftest_LDFLAGS = -static -lcheck
 sam_selftest_CFLAGS = -D__SAM_TEST $(AM_CFLAGS)
+
+
+
+#
+# custom targets
+#
+
+.PHONY: test
+
+
+nodename = "sam-test@$$HOSTNAME"
+test: sam_selftest
+	rm -rf db/test    # remove if existent for some reason
+
+	mkdir -p db/test
+	sudo env RABBITMQ_NODE_PORT=15672 RABBITMQ_NODENAME=${nodename} rabbitmq-server -detached
+
+	n=3; \
+	ret=2; \
+	while [ $$ret -ne 0 -a $$n -gt 0 ]; do \
+		echo "waiting for rabbitmq, $$n tries left"; \
+		sleep 1; \
+		n=$$(expr $$n - 1);	\
+		ret=$$(sudo rabbitmqctl status -n ${nodename} >/dev/null 2>&1; echo $$?); \
+	done; \
+	true
+
+	./sam_selftest
+	rm -rf db/test
+	sudo rabbitmqctl -n ${nodename} stop
