@@ -16,6 +16,32 @@ make
 
 This compiles `samd`, `sam_selftest` and `libsam.so`. The library `libsam` gets linked statically to the binaries. The dependencies are linked dynamically and you are responsible for their proper installation.
 
+## Running Tests ##
+
+There are custom make targets to run the tests. To run all tests (unit and integration) while automagically start other things like brokers run `make test_integrated` (`sudo` is going to be invoked). When running `make test`, make sure to have a RabbitMQ broker started on port `15672`. To just run all unit tests invoke `make test_unit`. Sometimes, when running all test suites, ZeroMQ related assertions fail. I suspect a problem with opening and closing a lot of ZeroMQ sockets.
+
+While developing some feature, it is often more useful to just run the specific modules' tests (or even just a testcase of the modules' test suite). To do so `sam_selftest` must be invoked directly.
+
+```
+
+~/C/s/s/samwise [master]
+ ▸ ./sam_selftest -h
+sam selftest
+usage: sam_selftest [-h] [--only SAM_MODULE [TESTCASE]]
+options:
+
+  -h: Print this message and exit
+
+  --only SAM_MODULE [TESTCASE]:
+      selective running of tests, where SAM_MODULE is one of
+      { sam_gen, sam_log, sam_msg, sam_cfg, sam_be_rmq, sam }
+      and TESTCASE one of the test cases defined in SAM_MODULE
+
+You can selectively run tests by setting the CK_RUN_SUITE and
+CK_RUN_CASE environment variables instead of providing --only
+
+```
+
 
 ### Send All Messages Daemon (samd) ###
 

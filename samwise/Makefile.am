@@ -95,14 +95,29 @@ sam_selftest_CFLAGS = -D__SAM_TEST $(AM_CFLAGS)
 # custom targets
 #
 
-.PHONY: test
+.PHONY: test test_setup
+
+
+test_setup:
+	rm -rf db/test
+	mkdir -p db/test
+
+
+test: sam_selftest test_setup
+	./sam_selftest
+
+
+test_unit: sam_selftest test_setup
+	./sam_selftest --only sam_log
+	./sam_selftest --only sam_gen
+	./sam_selftest --only sam_msg
+	./sam_selftest --only sam_cfg
+	./sam_selftest --only sam_db
+	./sam_selftest --only sam_buf
 
 
 nodename = "sam-test@$$HOSTNAME"
-test: sam_selftest
-	rm -rf db/test    # remove if existent for some reason
-
-	mkdir -p db/test
+test_integrated: sam_selftest test_setup
 	sudo env RABBITMQ_NODE_PORT=15672 RABBITMQ_NODENAME=${nodename} rabbitmq-server -detached
 
 	n=3; \
@@ -116,5 +131,4 @@ test: sam_selftest
 	true
 
 	./sam_selftest
-	rm -rf db/test
 	sudo rabbitmqctl -n ${nodename} stop
