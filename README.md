@@ -1,3 +1,5 @@
+[![Samwise CI Build Status](http://ci.ramlimit.de/job/samwise/badge/icon)](https://ci.ramlimit.de/job/samwise)
+
 # SAMWISE #
 
 Samwise is a store and forward messaging service for AMQP Messaging with RabbitMQ. It accepts messages via [ZMTP](http://zeromq.org) and implements both round robined and redundant publishing as distribution strategies. It was written as the basis for my thesis to acquire the bachelors degree for computer science. Please refer to the dedicated readme's for more information.
