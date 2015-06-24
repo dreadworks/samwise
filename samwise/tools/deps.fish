@@ -186,7 +186,10 @@ function __deps \
   and __deps_librabbitmq "$dir"
   and __deps_libdb "$dir"
   and __deps_check "$dir"
-  or echo "something went wrong, exiting."
+  or begin
+    echo "something went wrong, exiting."
+    return 2
+  end
 
 end
 
