@@ -149,7 +149,7 @@ end
 
 
 function __deps \
-  -a cflags
+  -a dir
   echo "resolving dependencies"
 
   if [ "tools" = (basename (pwd)) ]
@@ -157,9 +157,13 @@ function __deps \
     cd ..
   end
 
-  pushd ../
-  set -l dir (pwd)"/usr"
-  popd
+  if [ -z "$dir" ]
+    pushd ../
+    set dir (pwd)"/usr"
+    popd
+  end
+
+  echo "going to install to $dir"
 
   if [ -d "$dir" ]
     rm -rf "$dir"
@@ -187,4 +191,4 @@ function __deps \
 end
 
 
-__deps
+__deps $argv
