@@ -7,15 +7,20 @@
 #  generic download and autotools build
 #
 function __deps_build_generic \
-  -a dir name archive url
+  -a dir name url
 
   echo "building $name"
   mkdir .tmp
   pushd .tmp
 
-  wget $url
+  set -l archive tmp.tar.gz
+
+  wget $url -O $archive
   and tar xzf $archive
   and pushd $name
+  and if [ -f autogen.sh ]
+    ./autogen.sh
+  end
   and ./configure "--prefix=$dir"
   and make
   and make install
@@ -37,6 +42,7 @@ function __deps_build_generic \
 end
 
 
+
 #
 #  install zeromq
 #  http://zeromq.org
@@ -46,9 +52,8 @@ function __deps_libzmq \
 
   __deps_build_generic \
     $dir \
-    zeromq-4.0.5 \
-    zeromq-4.0.5.tar.gz \
-    http://download.zeromq.org/zeromq-4.0.5.tar.gz
+    zeromq4-x-4.0.5 \
+    https://github.com/zeromq/zeromq4-x/archive/v4.0.5.tar.gz
 
 end
 
@@ -63,8 +68,7 @@ function __deps_libczmq \
   __deps_build_generic \
     $dir \
     czmq-3.0.0 \
-    czmq-3.0.0-rc1.tar.gz \
-    http://download.zeromq.org/czmq-3.0.0-rc1.tar.gz
+    https://github.com/zeromq/czmq/archive/v3.0.0.tar.gz
 
 end
 
@@ -141,7 +145,6 @@ function __deps_check \
   __deps_build_generic \
     $dir \
     check-0.9.14 \
-    check-0.9.14.tar.gz \
     http://downloads.sourceforge.net/project/check/check/0.9.14/check-0.9.14.tar.gz
 
 end
